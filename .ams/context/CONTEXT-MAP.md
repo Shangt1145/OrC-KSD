@@ -12,3 +12,10 @@
 
 
 - [lua-diy](./lua-diy/CONTEXT.md) - Orc.Lua 动态 handler（社区 DIY）：Lua 脚本能力术语与状态/隔离语义
+
+
+- [game-environment](./game-environment/CONTEXT.md) - 游戏环境（KARDS 模仿）：对局/回合/资源术语与决策摘要
+
+- [game-environment](./game-environment/CONTEXT.md) - 游戏环境（KARDS 模仿）：对局骨架术语与决策摘要
+
+- [targeter](./targeter/CONTEXT.md) - Targeter 指示器（目标选择）：术语与决策摘要
