@@ -1,0 +1,804 @@
+{
+  "sha": "450429177f29fd9ce3039fb7fd4c56f0d1e28b8e",
+  "url": "https://api.github.com/repos/radical-beard/filament/git/trees/450429177f29fd9ce3039fb7fd4c56f0d1e28b8e",
+  "tree": [
+    {
+      "path": ".codex",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a494379c205da45b54c647f475eac3cef15e14e1",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/a494379c205da45b54c647f475eac3cef15e14e1"
+    },
+    {
+      "path": ".codex/skills",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "270f071e9fc4ec7954ca16c28677b0597c034d44",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/270f071e9fc4ec7954ca16c28677b0597c034d44"
+    },
+    {
+      "path": ".codex/skills/filament",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0303c723498c163131ca5a98817af9dcdb7b9157",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/0303c723498c163131ca5a98817af9dcdb7b9157"
+    },
+    {
+      "path": ".codex/skills/filament/SKILL.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e5947b0439eec9bb2befab077fc09c8ff768ad4",
+      "size": 1004,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/1e5947b0439eec9bb2befab077fc09c8ff768ad4"
+    },
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53ccec1c38d5dc4f9bc19d208922b97f286d71ac",
+      "size": 87,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/53ccec1c38d5dc4f9bc19d208922b97f286d71ac"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3709f35f5c3031852434aa4ea01ef714de4ae9a3",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/3709f35f5c3031852434aa4ea01ef714de4ae9a3"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2576f0ed2cd7e575372fad6a3d1c204cf246a229",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/2576f0ed2cd7e575372fad6a3d1c204cf246a229"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c40cf1455f03d43540447dbce9c81b898ac7a63",
+      "size": 566,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/2c40cf1455f03d43540447dbce9c81b898ac7a63"
+    },
+    {
+      "path": ".github/workflows/publish-nuget.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "71ce02526542884c1c5235d36651f3d94440aebf",
+      "size": 1934,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/71ce02526542884c1c5235d36651f3d94440aebf"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0622016349e91111e1449ea619cfb0e1fadeddbf",
+      "size": 266,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/0622016349e91111e1449ea619cfb0e1fadeddbf"
+    },
+    {
+      "path": ".mcp.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "58aee7393e262bfd3b3a060ac644f6a9521be093",
+      "size": 170,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/58aee7393e262bfd3b3a060ac644f6a9521be093"
+    },
+    {
+      "path": "AGENTS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "41bcc2c0544443fdd642a4fc9811a3dcc1c381dc",
+      "size": 1287,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/41bcc2c0544443fdd642a4fc9811a3dcc1c381dc"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "32c2dcdc9bdacd268286c6b0b404ef6d1b47501e",
+      "size": 437,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/32c2dcdc9bdacd268286c6b0b404ef6d1b47501e"
+    },
+    {
+      "path": "Directory.Build.props",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c85e7fa6934403be3f2cc6c59620b59d0404a822",
+      "size": 861,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/c85e7fa6934403be3f2cc6c59620b59d0404a822"
+    },
+    {
+      "path": "Filament.Abstractions",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "731ce5655cc1436bfac663722264ddb46f9fafe0",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/731ce5655cc1436bfac663722264ddb46f9fafe0"
+    },
+    {
+      "path": "Filament.Abstractions/Filament.Abstractions.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e1e5971e00d7c099a257d207902fbeed4a5ae9bd",
+      "size": 730,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/e1e5971e00d7c099a257d207902fbeed4a5ae9bd"
+    },
+    {
+      "path": "Filament.Abstractions/IsExternalInit.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+      "size": 320,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bdfe5bb0baaa800eb31e3a2e90d8804f9613554c"
+    },
+    {
+      "path": "Filament.Abstractions/LuaError.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93300e72cd3e61aaf228c2392947cc302a571b17",
+      "size": 3365,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/93300e72cd3e61aaf228c2392947cc302a571b17"
+    },
+    {
+      "path": "Filament.Abstractions/LuaRef.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b08ed1a103eaa6048bc2062769792552c9529b56",
+      "size": 998,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/b08ed1a103eaa6048bc2062769792552c9529b56"
+    },
+    {
+      "path": "Filament.Abstractions/Option.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c5a959a81834ba0dda984c35ae46a562d06d32a8",
+      "size": 1497,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/c5a959a81834ba0dda984c35ae46a562d06d32a8"
+    },
+    {
+      "path": "Filament.Abstractions/Result.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "12703ac4b4106469ca4ad7f46d427dd60c26c59d",
+      "size": 3134,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/12703ac4b4106469ca4ad7f46d427dd60c26c59d"
+    },
+    {
+      "path": "Filament.Abstractions/ScriptableAttributes.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "754e4a08ef92f5f5af09016a1cb0b151866417e3",
+      "size": 1525,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/754e4a08ef92f5f5af09016a1cb0b151866417e3"
+    },
+    {
+      "path": "Filament.Abstractions/Unit.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bb05588c8eb13be47e977a4005a7641900ee012e",
+      "size": 259,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bb05588c8eb13be47e977a4005a7641900ee012e"
+    },
+    {
+      "path": "Filament.Config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9ceff6f016a86e659e62125c2a24d89cad2aafbc",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/9ceff6f016a86e659e62125c2a24d89cad2aafbc"
+    },
+    {
+      "path": "Filament.Config/ConfigError.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7786f9cc7356e953f16d1d625587f95b63f31733",
+      "size": 307,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/7786f9cc7356e953f16d1d625587f95b63f31733"
+    },
+    {
+      "path": "Filament.Config/Filament.Config.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4242176c8d17e4a57ffd284f452e4008eaf68240",
+      "size": 800,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/4242176c8d17e4a57ffd284f452e4008eaf68240"
+    },
+    {
+      "path": "Filament.Config/IsExternalInit.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+      "size": 320,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bdfe5bb0baaa800eb31e3a2e90d8804f9613554c"
+    },
+    {
+      "path": "Filament.Config/PropReader.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "50f6936538cb39527b7cddb736708c1f34cf4923",
+      "size": 3042,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/50f6936538cb39527b7cddb736708c1f34cf4923"
+    },
+    {
+      "path": "Filament.Config/TomlWorldParser.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "834554f39c8a34ae4b35ac7b4ac7a4f2681e0566",
+      "size": 3210,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/834554f39c8a34ae4b35ac7b4ac7a4f2681e0566"
+    },
+    {
+      "path": "Filament.Config/WorldConfig.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "963516cf1346648b3d1b3582cf982c933b303d0b",
+      "size": 1423,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/963516cf1346648b3d1b3582cf982c933b303d0b"
+    },
+    {
+      "path": "Filament.Config/WorldDiff.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "33b96fcfaead924351959cda15079f67ba93ce64",
+      "size": 4419,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/33b96fcfaead924351959cda15079f67ba93ce64"
+    },
+    {
+      "path": "Filament.Core",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ba3c341903436524d3652448ec5a6b45423e1ce7",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/ba3c341903436524d3652448ec5a6b45423e1ce7"
+    },
+    {
+      "path": "Filament.Core/Filament.Core.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "de6e886c26514eea6a41e3f042355ae0978f5970",
+      "size": 1754,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/de6e886c26514eea6a41e3f042355ae0978f5970"
+    },
+    {
+      "path": "Filament.Core/IScriptableConverter.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0dc4a6e8be8b92fe730aee495ab408b820e45a4c",
+      "size": 622,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/0dc4a6e8be8b92fe730aee495ab408b820e45a4c"
+    },
+    {
+      "path": "Filament.Core/IsExternalInit.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+      "size": 320,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bdfe5bb0baaa800eb31e3a2e90d8804f9613554c"
+    },
+    {
+      "path": "Filament.Core/LuaModule.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a7d41d2bf1ab627c2abeba53cf9efbd78fc98463",
+      "size": 4105,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/a7d41d2bf1ab627c2abeba53cf9efbd78fc98463"
+    },
+    {
+      "path": "Filament.Core/LuaSandbox.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5aa9c0c0a13c69c3fae32887830e54870f9a9f7",
+      "size": 1529,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/e5aa9c0c0a13c69c3fae32887830e54870f9a9f7"
+    },
+    {
+      "path": "Filament.Core/RoleClipMap.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ae34b40d545bf915d9f720d45010df875e7de03c",
+      "size": 1169,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/ae34b40d545bf915d9f720d45010df875e7de03c"
+    },
+    {
+      "path": "Filament.Core/SandboxVerbs.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65367cd638312090e081871ad34c78327fb2a132",
+      "size": 1941,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/65367cd638312090e081871ad34c78327fb2a132"
+    },
+    {
+      "path": "Filament.Core/ScriptRegistry.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6ca4ff38d80f34083861260bcc1cca705930e8ef",
+      "size": 5652,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/6ca4ff38d80f34083861260bcc1cca705930e8ef"
+    },
+    {
+      "path": "Filament.Core/ScriptStatus.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5dab6230d94b970eeda0d0638d9e6f0528482b47",
+      "size": 604,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/5dab6230d94b970eeda0d0638d9e6f0528482b47"
+    },
+    {
+      "path": "Filament.Core/ScriptableMarshal.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "465c811ee89b46a54d96860ee4999d6488a56570",
+      "size": 5472,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/465c811ee89b46a54d96860ee4999d6488a56570"
+    },
+    {
+      "path": "Filament.Godot.Tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c2f9e9acf041224ae1f7b870fc9f4f80761829c3",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/c2f9e9acf041224ae1f7b870fc9f4f80761829c3"
+    },
+    {
+      "path": "Filament.Godot.Tests/Filament.Godot.Tests.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65ec8825fd2ad093fe4c548231f441f61668bb09",
+      "size": 1330,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/65ec8825fd2ad093fe4c548231f441f61668bb09"
+    },
+    {
+      "path": "Filament.Godot.Tests/GodotMarshalTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1b8e9a5ab0efa6f8d2aeec11d1d824bd8d440a2b",
+      "size": 2476,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/1b8e9a5ab0efa6f8d2aeec11d1d824bd8d440a2b"
+    },
+    {
+      "path": "Filament.Godot",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0832431dcfe113e840498ffc00473072f1930320",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/0832431dcfe113e840498ffc00473072f1930320"
+    },
+    {
+      "path": "Filament.Godot/Filament.Godot.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "30dfb55376798e732f5a24ac58cf61b29b076d25",
+      "size": 1239,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/30dfb55376798e732f5a24ac58cf61b29b076d25"
+    },
+    {
+      "path": "Filament.Godot/GodotMarshal.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "13d4a043852faf5afe149177fb139c67c78077af",
+      "size": 3091,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/13d4a043852faf5afe149177fb139c67c78077af"
+    },
+    {
+      "path": "Filament.Godot/ScriptRegistryNode.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ef4f293b193e0d157d10f6d672060ed97e6de30c",
+      "size": 1727,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/ef4f293b193e0d157d10f6d672060ed97e6de30c"
+    },
+    {
+      "path": "Filament.SourceGen",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5bb12bccc285c3fe1970b328867a4b2a8485faae",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/5bb12bccc285c3fe1970b328867a4b2a8485faae"
+    },
+    {
+      "path": "Filament.SourceGen/Filament.SourceGen.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a3769a4500d5ae41fc293582aa9f94960abba7df",
+      "size": 881,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/a3769a4500d5ae41fc293582aa9f94960abba7df"
+    },
+    {
+      "path": "Filament.SourceGen/IsExternalInit.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab19c53daa61a487c8b6f51ea761cb6fa028e708",
+      "size": 320,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/ab19c53daa61a487c8b6f51ea761cb6fa028e708"
+    },
+    {
+      "path": "Filament.SourceGen/ScriptableAnalyzer.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d73b437e1eedce6012be4df4b7f74641958f9fbb",
+      "size": 4128,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/d73b437e1eedce6012be4df4b7f74641958f9fbb"
+    },
+    {
+      "path": "Filament.SourceGen/ScriptableConverterGenerator.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aedbd4d12635cf4f87e3e4a8907745ea13828247",
+      "size": 12181,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/aedbd4d12635cf4f87e3e4a8907745ea13828247"
+    },
+    {
+      "path": "Filament.SourceGen/ScriptableDiagnostics.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e47799c377b2d227340ed1dca7aa4c2459d48cbc",
+      "size": 2086,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/e47799c377b2d227340ed1dca7aa4c2459d48cbc"
+    },
+    {
+      "path": "Filament.SourceGen/TypeAnalysis.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5d64097c64bb994c0edacf743fd8dbbb6a41536",
+      "size": 6682,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/b5d64097c64bb994c0edacf743fd8dbbb6a41536"
+    },
+    {
+      "path": "Filament.Tests",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2f09e94ad1e861953739bf7cd8243ac0845f4261",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/2f09e94ad1e861953739bf7cd8243ac0845f4261"
+    },
+    {
+      "path": "Filament.Tests/AnalyzerTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "64fc1ae1a852f1ff486fafd5f007e150fdc1ff16",
+      "size": 2635,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/64fc1ae1a852f1ff486fafd5f007e150fdc1ff16"
+    },
+    {
+      "path": "Filament.Tests/ConfigTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d91b1db774cded53594084ec1fd67ebce82413e1",
+      "size": 4162,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/d91b1db774cded53594084ec1fd67ebce82413e1"
+    },
+    {
+      "path": "Filament.Tests/DispatchTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2c1ccbc1aab732b635c8fad53db970bd31f21ad6",
+      "size": 2135,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/2c1ccbc1aab732b635c8fad53db970bd31f21ad6"
+    },
+    {
+      "path": "Filament.Tests/Filament.Tests.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1c67fcbb910a0d43253691386b1396cbfd378f76",
+      "size": 1641,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/1c67fcbb910a0d43253691386b1396cbfd378f76"
+    },
+    {
+      "path": "Filament.Tests/HotReloadTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "573c74f7251dfb6bae1cbe911e1439e1b0f145c1",
+      "size": 3435,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/573c74f7251dfb6bae1cbe911e1439e1b0f145c1"
+    },
+    {
+      "path": "Filament.Tests/MarshalTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75cab1df4d3d865902dfd4ab26cff00459b0dfdf",
+      "size": 5169,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/75cab1df4d3d865902dfd4ab26cff00459b0dfdf"
+    },
+    {
+      "path": "Filament.Tests/TestTypes.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "39980985c68629ce669172a593c28c747d7aaf61",
+      "size": 750,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/39980985c68629ce669172a593c28c747d7aaf61"
+    },
+    {
+      "path": "Filament.Tests/VerbFacadeTests.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6c663de124238b93f55f4756862342ef16ee5fb5",
+      "size": 2460,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/6c663de124238b93f55f4756862342ef16ee5fb5"
+    },
+    {
+      "path": "LICENSE.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "509db0e583277af6cb0a72e5991d384f4f599f57",
+      "size": 395,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/509db0e583277af6cb0a72e5991d384f4f599f57"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9143106939a55cd32066da07691284c06e1ca163",
+      "size": 4388,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/9143106939a55cd32066da07691284c06e1ca163"
+    },
+    {
+      "path": "demo",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d36e6f844893baeecb3e9775a25e4e740966f661",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/d36e6f844893baeecb3e9775a25e4e740966f661"
+    },
+    {
+      "path": "demo/Filament.Demo.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94d1d09c4612dbd410ecdbaf600648e70edec46d",
+      "size": 1175,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/94d1d09c4612dbd410ecdbaf600648e70edec46d"
+    },
+    {
+      "path": "demo/PolicyInput.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8a03a99cd3a17e11c7f664be23740a02498a3516",
+      "size": 208,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/8a03a99cd3a17e11c7f664be23740a02498a3516"
+    },
+    {
+      "path": "demo/Program.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f091af434704b38f5ef4168cd3243351f2a7f49c",
+      "size": 4724,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/f091af434704b38f5ef4168cd3243351f2a7f49c"
+    },
+    {
+      "path": "demo/lua",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "cbb04ecb9f6c12c17cbfb2020d9ac9f1e0c754ba",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/cbb04ecb9f6c12c17cbfb2020d9ac9f1e0c754ba"
+    },
+    {
+      "path": "demo/lua/policy.lua",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cec2be0310da3212d81a1c7e509b3a52718f17f9",
+      "size": 338,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/cec2be0310da3212d81a1c7e509b3a52718f17f9"
+    },
+    {
+      "path": "docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0685e93b3654886e9d7353bea104dabdc00f7065",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/0685e93b3654886e9d7353bea104dabdc00f7065"
+    },
+    {
+      "path": "docs/agent-setup.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9e6213222fb20ec601adacd8eaface6905fdf3d",
+      "size": 2372,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/d9e6213222fb20ec601adacd8eaface6905fdf3d"
+    },
+    {
+      "path": "docs/distribution.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "176d298a77a70b9d20781ce792a9948c4b880a89",
+      "size": 2859,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/176d298a77a70b9d20781ce792a9948c4b880a89"
+    },
+    {
+      "path": "docs/godot.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "284a3b6ed1b7da4c4b0a94c36400dc278b14f1e1",
+      "size": 785,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/284a3b6ed1b7da4c4b0a94c36400dc278b14f1e1"
+    },
+    {
+      "path": "docs/package-usage.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ed33972934892813388203a4721e44ae5a981ce5",
+      "size": 1177,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/ed33972934892813388203a4721e44ae5a981ce5"
+    },
+    {
+      "path": "docs/readiness.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "075390f2eeef5037830148c1ad5572dfd43d1536",
+      "size": 1146,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/075390f2eeef5037830148c1ad5572dfd43d1536"
+    },
+    {
+      "path": "docs/scripting.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b97aac1b79f2cd616e570e0174122068ca58dc36",
+      "size": 973,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/b97aac1b79f2cd616e570e0174122068ca58dc36"
+    },
+    {
+      "path": "filament.slnx",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1debdea00e37c15162690078d4466786dfa27919",
+      "size": 549,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/1debdea00e37c15162690078d4466786dfa27919"
+    },
+    {
+      "path": "filament.toml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "619ddf7e10450f38341608de8120358b0315337e",
+      "size": 164,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/619ddf7e10450f38341608de8120358b0315337e"
+    },
+    {
+      "path": "global.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "512142d2bea1add9d1cf54884a7fde22666bad51",
+      "size": 81,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/512142d2bea1add9d1cf54884a7fde22666bad51"
+    },
+    {
+      "path": "playtest",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fdc30cab82f4945b1ad6b8a72487627b0df056c3",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/fdc30cab82f4945b1ad6b8a72487627b0df056c3"
+    },
+    {
+      "path": "playtest/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "829f4c1d646dbc48ef7c0a42c4d31dc1b86a6508",
+      "size": 2501,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/829f4c1d646dbc48ef7c0a42c4d31dc1b86a6508"
+    },
+    {
+      "path": "playtest/preview.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "44b6d0ce39125cf910abc30d1e69bed750a48a0d",
+      "size": 2923,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/44b6d0ce39125cf910abc30d1e69bed750a48a0d"
+    },
+    {
+      "path": "playtest/selftest.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "91eb9832eb1600209f485dd7a18ae1ce3fe9a68a",
+      "size": 1760,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/91eb9832eb1600209f485dd7a18ae1ce3fe9a68a"
+    },
+    {
+      "path": "playtest/server.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28b3c3a2ac75e3da80bb26dd7334e66cad1bed23",
+      "size": 6503,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/28b3c3a2ac75e3da80bb26dd7334e66cad1bed23"
+    },
+    {
+      "path": "playtest/survey.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6065194f579271044188461442b2fed3cc1cd647",
+      "size": 14314,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/6065194f579271044188461442b2fed3cc1cd647"
+    },
+    {
+      "path": "scripts",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "65a93a64dbc903b61217bdebe551759ce9059d48",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/65a93a64dbc903b61217bdebe551759ce9059d48"
+    },
+    {
+      "path": "scripts/agent-smoke.ps1",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6da24a6ed6367c57d01f89e0c9c06c644a6c59d7",
+      "size": 1865,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/6da24a6ed6367c57d01f89e0c9c06c644a6c59d7"
+    },
+    {
+      "path": "scripts/agent-smoke.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "bbd110a2d1422484e5900ada0019ac6965e3f213",
+      "size": 777,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bbd110a2d1422484e5900ada0019ac6965e3f213"
+    },
+    {
+      "path": "scripts/demo-smoke.ps1",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c2e3484e8183fe88898d9bc5a11badb6c10ef997",
+      "size": 718,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/c2e3484e8183fe88898d9bc5a11badb6c10ef997"
+    },
+    {
+      "path": "scripts/demo-smoke.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "8f99d02510eb517eaede9d8a1c03ce53e35ff969",
+      "size": 423,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/8f99d02510eb517eaede9d8a1c03ce53e35ff969"
+    },
+    {
+      "path": "scripts/package-smoke.ps1",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6d923e5dca1a68beac511504647ac10ba2964956",
+      "size": 5344,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/6d923e5dca1a68beac511504647ac10ba2964956"
+    },
+    {
+      "path": "scripts/package-smoke.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "d20d89961ff2b81a7848195cacbb25d5babf4bf0",
+      "size": 3438,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/d20d89961ff2b81a7848195cacbb25d5babf4bf0"
+    },
+    {
+      "path": "scripts/verify.ps1",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3d6faa3713331dbddc3eb19fd16bad303f5e0182",
+      "size": 343,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/3d6faa3713331dbddc3eb19fd16bad303f5e0182"
+    },
+    {
+      "path": "scripts/verify.sh",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "bc6e671e56ef023c2388c9591074e76f8013dff7",
+      "size": 230,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bc6e671e56ef023c2388c9591074e76f8013dff7"
+    },
+    {
+      "path": "tools",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a284ff8abccd251439c98ac8a26a9d034de411b6",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/a284ff8abccd251439c98ac8a26a9d034de411b6"
+    },
+    {
+      "path": "tools/Filament.Verify",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b5349897d5285d0ba5fab542e6074b1aff6372b7",
+      "url": "https://api.github.com/repos/radical-beard/filament/git/trees/b5349897d5285d0ba5fab542e6074b1aff6372b7"
+    },
+    {
+      "path": "tools/Filament.Verify/Filament.Verify.csproj",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "15fe4f13668ddf0916bc2684485c2be37d72059e",
+      "size": 313,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/15fe4f13668ddf0916bc2684485c2be37d72059e"
+    },
+    {
+      "path": "tools/Filament.Verify/Program.cs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c232a55bef8cb029d5d0f6d63196781d32effb3b",
+      "size": 11920,
+      "url": "https://api.github.com/repos/radical-beard/filament/git/blobs/c232a55bef8cb029d5d0f6d63196781d32effb3b"
+    }
+  ],
+  "truncated": false
+}

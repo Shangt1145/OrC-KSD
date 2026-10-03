@@ -90,3 +90,72 @@ public class NonVirtualView
     [Mutate]
     public int Amount { get; set; }
 }
+
+/// <summary>S2 专门 band 方案示例（作者声明；成员可显式指定值）。
+/// 别名说明：同值不同名视作同一区段（排序键相同）。</summary>
+public enum DamageBands
+{
+    Prevent = 100,
+    AliasPrevent = 100, // 别名示例：与 Prevent 同值
+    Reduce = 300,
+    Finalize = 500,
+}
+
+/// <summary>S2 band 边界用例方案（负值 / 超限 / 上限）。</summary>
+public enum BoundaryBands
+{
+    Normal = 0,
+    Negative = -1,
+    TooLarge = 1000001,
+    Max = 1000000,
+}
+
+/// <summary>S2 伤害示例视图：含手写静态 Translate（转接书写约定）。</summary>
+[ContextView]
+public class DamageView
+{
+    [Read]
+    public virtual Ref<Entity> Source { get; set; }
+
+    [Read]
+    public virtual Ref<Entity> Target { get; set; }
+
+    [Mutate]
+    public virtual int Amount { get; set; }
+
+    [Optional]
+    [Read]
+    public virtual int Shield { get; set; }
+
+    /// <summary>
+    /// 手写转接（书写约定：作者视图类上的静态方法；框架不建立强制契约、不隐式调用；转接不依赖视图实例状态）。
+    /// 引用类参数以同一 Ref 实例入（不拷贝包装、不拷贝目标对象）；值类参数以快照入（直接透传赋值，无包装 API）。
+    /// 引擎引用可用于转接期访问引擎域内容（本示例不向数据注入额外项）。
+    /// </summary>
+    public static void Translate(
+        LogicEngine engine,
+        Ref<Entity> source,
+        int amount,
+        Ref<Entity> target,
+        int shield,
+        Dictionary<string, object?> data)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(data);
+
+        data["Source"] = source;
+        data["Amount"] = amount;
+        data["Target"] = target;
+        data["Shield"] = shield;
+    }
+}
+
+/// <summary>S2 引用键改写用例视图：Ref 键可被 [Mutate] 属性改写。</summary>
+[ContextView]
+public class LinkView
+{
+    [Mutate]
+    public virtual Ref<Entity> Link { get; set; }
+}

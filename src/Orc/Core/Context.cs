@@ -1,8 +1,8 @@
 namespace Orc.Core;
 
 /// <summary>
-/// 执行上下文（S1 精简版）：一次结算的数据载体。
-/// 仅含数据（Data）与最小读取 API；停止 / 中断 / 链标识等语义待 S2 对齐后再定。
+/// 执行上下文：一次执行（顶层或嵌套）的数据载体与状态面。
+/// 含数据（Data）、最小读取 API 与停止/中断（Stop/Interrupt）语义；链标识不落地（链的可视表达由事件流树结构承担）。
 /// </summary>
 public sealed class Context
 {
@@ -26,4 +26,30 @@ public sealed class Context
     public object? Get(string key) => Data.TryGetValue(key, out var value)
         ? value
         : throw new KeyNotFoundException($"上下文数据中不存在键 '{key}'。");
+
+    private ExecutionFrame? _frame;
+
+    /// <summary>
+    /// 本级停止标志（Stop）：停止当前触发器剩余事件；不影响父层与子执行。
+    /// 与执行的事件边界检查共用同一状态源；未关联执行会话的上下文恒为 false。
+    /// </summary>
+    public bool Stopped => _frame?.Stopped ?? false;
+
+    /// <summary>
+    /// 链中断标志（Interrupt）：动作链取消，沿嵌套链传播（起点层及全部祖先层在各自下一事件边界停止）。
+    /// 与执行的事件边界检查共用同一状态源；未关联执行会话的上下文恒为 false。
+    /// </summary>
+    public bool Interrupted => _frame?.Interrupted ?? false;
+
+    /// <summary>请求停止本级剩余事件（仅本级；已触发的子执行照常完成）。</summary>
+    public void Stop() => _frame?.RequestStop();
+
+    /// <summary>
+    /// 请求中断动作链（链级）：所在层及全部祖先层在各自下一事件边界停止；已中断状态下新发起的执行空转。
+    /// 中断行为写入事件流（Interrupt 取级高于 Stop）。
+    /// </summary>
+    public void Interrupt() => _frame?.RequestInterrupt();
+
+    /// <summary>关联执行会话（框架内部流程调用；状态查询与检查点共用该帧的状态）。</summary>
+    internal void AttachFrame(ExecutionFrame frame) => _frame = frame;
 }

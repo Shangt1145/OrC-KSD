@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.1 so a net8 Godot game (and Filament.Godot) can consume it.
+         All files use explicit usings, so ImplicitUsings stays off. -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Filament</RootNamespace>
+    <PackageId>RadicalBeard.Filament.Core</PackageId>
+    <Description>Engine-free Filament Lua sandbox, hot reload, marshalling, and script dispatch.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pure-managed Lua interpreter (no native deps) — the locked runtime. -->
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Filament.Abstractions\Filament.Abstractions.csproj" />
+    <!-- Generators run at compile time only; the assembly is not linked in. -->
+    <ProjectReference Include="..\Filament.SourceGen\Filament.SourceGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Filament.Tests" />
+  </ItemGroup>
+
+  <Target Name="AddSourceGeneratorAnalyzerToPackage" BeforeTargets="_GetPackageFiles">
+    <MSBuild Projects="..\Filament.SourceGen\Filament.SourceGen.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+    <ItemGroup>
+      <None Include="..\Filament.SourceGen\bin\$(Configuration)\netstandard2.0\Filament.SourceGen.dll"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs/"
+            Visible="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

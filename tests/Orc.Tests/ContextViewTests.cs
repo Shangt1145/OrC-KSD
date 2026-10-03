@@ -6,7 +6,7 @@ namespace Orc.Tests;
 /// <summary>验收点②权限（矩阵闸门 / 缺省回退 / 传播）与③绑定与改写（必填校验 / 读写 / 声明校验 / Seal）。</summary>
 public class ContextViewTests
 {
-    private static Context NewMatrixContext(Entity? extra = null)
+    private static Dictionary<string, object?> NewMatrixData(Entity? extra = null)
     {
         var target = new Entity("Target");
         var data = new Dictionary<string, object?>
@@ -21,8 +21,10 @@ public class ContextViewTests
             data["Extra"] = extra.Ref;
         }
 
-        return new Context(data);
+        return data;
     }
+
+    private static Context NewMatrixContext(Entity? extra = null) => new(NewMatrixData(extra));
 
     [Fact]
     public void Read_Property_Readable_Write_Denied()
@@ -166,16 +168,23 @@ public class ContextViewTests
     }
 
     [Fact]
-    public async Task Trigger_RunAsync_Propagates_PermissionDenied()
+    public async Task Trigger_Isolates_PermissionDenied_From_Events()
     {
-        var ctx = NewMatrixContext();
-        var trigger = new Trigger<MatrixView>(view =>
+        var engine = new LogicEngine();
+        var trigger = new Trigger<MatrixView>(name: "权限联动", events: new[]
         {
-            view.ReadOnlyAmount = 5; // [Read] 写 → 当刻拒绝
-            return Task.CompletedTask;
+            new TriggerEvent<MatrixView>("越权", (view, ctx, ct) =>
+            {
+                view.ReadOnlyAmount = 5; // [Read] 写 → 当刻拒绝（PermissionDeniedException）
+                return Task.CompletedTask;
+            }),
         });
 
-        // 异常经执行入口原样传播
-        await Assert.ThrowsAsync<PermissionDeniedException>(() => trigger.RunAsync(ctx));
+        // S2 语义（受控变更）：业务类异常（含越权）被隔离——记录并继续，执行正常返回流
+        var stream = await trigger.InvokeAsync(engine, NewMatrixData());
+
+        var record = stream.Entries.Single(e => e.Keywords.Contains("exception:PermissionDeniedException"));
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Equal("权限联动/越权", record.Source);
     }
 }

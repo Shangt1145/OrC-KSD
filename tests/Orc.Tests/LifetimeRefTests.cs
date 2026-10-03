@@ -87,24 +87,29 @@ public class LifetimeRefTests
     }
 
     [Fact]
-    public async Task Trigger_RunAsync_Propagates_StaleReferenceException()
+    public async Task Trigger_Isolates_StaleReferenceException_From_Events()
     {
         var entity = new Entity("E");
-        var ctx = new Context(new Dictionary<string, object?>
+        var engine = new LogicEngine();
+        var trigger = new Trigger<ShieldView>(name: "失效联动", events: new[]
+        {
+            new TriggerEvent<ShieldView>("读引用", (view, ctx, ct) =>
+            {
+                _ = view.Target; // 读取失效引用 → 当刻抛（StaleReferenceException）
+                return Task.CompletedTask;
+            }),
+        });
+
+        entity.Destroy();
+
+        // S2 语义（受控变更）：失效异常被隔离——记录并继续，执行正常返回流
+        var stream = await trigger.InvokeAsync(engine, new Dictionary<string, object?>
         {
             ["Target"] = entity.Ref,
             ["Source"] = entity.Ref,
             ["Amount"] = 1,
         });
-        var trigger = new Trigger<ShieldView>(view =>
-        {
-            _ = view.Target; // 读取失效引用 → 当刻抛
-            return Task.CompletedTask;
-        });
 
-        entity.Destroy();
-
-        // 异常经执行入口原样传播
-        await Assert.ThrowsAsync<StaleReferenceException>(() => trigger.RunAsync(ctx));
+        Assert.Contains(stream.Entries, e => e.Keywords.Contains("exception:StaleReferenceException"));
     }
 }

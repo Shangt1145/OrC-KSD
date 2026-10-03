@@ -6,3 +6,4 @@
 | 30496464-c5a9-4710-912b-4a0a2e9c5b68 | S1 核心运行时——需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\30496464-c5a9-4710-912b-4a0a2e9c5b68\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 252c4143-d365-45e6-8191-bb7890fec637 | S2 触发器与事件 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\252c4143-d365-45e6-8191-bb7890fec637\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 5f9717c8-9b57-4d46-b46e-3617ccdb70a9 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\5f9717c8-9b57-4d46-b46e-3617ccdb70a9\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 8b03d08d-9932-45bd-ab9b-3e97a4cc8eb7 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\8b03d08d-9932-45bd-ab9b-3e97a4cc8eb7\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |

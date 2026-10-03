@@ -1,0 +1,130 @@
+[
+  {
+    "name": "Filament.Abstractions.csproj",
+    "path": "Filament.Abstractions/Filament.Abstractions.csproj",
+    "sha": "e1e5971e00d7c099a257d207902fbeed4a5ae9bd",
+    "size": 730,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Filament.Abstractions.csproj?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Filament.Abstractions.csproj",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/e1e5971e00d7c099a257d207902fbeed4a5ae9bd",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/Filament.Abstractions.csproj",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Filament.Abstractions.csproj?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/e1e5971e00d7c099a257d207902fbeed4a5ae9bd",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Filament.Abstractions.csproj"
+    }
+  },
+  {
+    "name": "IsExternalInit.cs",
+    "path": "Filament.Abstractions/IsExternalInit.cs",
+    "sha": "bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+    "size": 320,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/IsExternalInit.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/IsExternalInit.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/IsExternalInit.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/IsExternalInit.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/bdfe5bb0baaa800eb31e3a2e90d8804f9613554c",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/IsExternalInit.cs"
+    }
+  },
+  {
+    "name": "LuaError.cs",
+    "path": "Filament.Abstractions/LuaError.cs",
+    "sha": "93300e72cd3e61aaf228c2392947cc302a571b17",
+    "size": 3365,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/LuaError.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/LuaError.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/93300e72cd3e61aaf228c2392947cc302a571b17",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/LuaError.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/LuaError.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/93300e72cd3e61aaf228c2392947cc302a571b17",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/LuaError.cs"
+    }
+  },
+  {
+    "name": "LuaRef.cs",
+    "path": "Filament.Abstractions/LuaRef.cs",
+    "sha": "b08ed1a103eaa6048bc2062769792552c9529b56",
+    "size": 998,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/LuaRef.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/LuaRef.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/b08ed1a103eaa6048bc2062769792552c9529b56",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/LuaRef.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/LuaRef.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/b08ed1a103eaa6048bc2062769792552c9529b56",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/LuaRef.cs"
+    }
+  },
+  {
+    "name": "Option.cs",
+    "path": "Filament.Abstractions/Option.cs",
+    "sha": "c5a959a81834ba0dda984c35ae46a562d06d32a8",
+    "size": 1497,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Option.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Option.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/c5a959a81834ba0dda984c35ae46a562d06d32a8",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/Option.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Option.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/c5a959a81834ba0dda984c35ae46a562d06d32a8",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Option.cs"
+    }
+  },
+  {
+    "name": "Result.cs",
+    "path": "Filament.Abstractions/Result.cs",
+    "sha": "12703ac4b4106469ca4ad7f46d427dd60c26c59d",
+    "size": 3134,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Result.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Result.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/12703ac4b4106469ca4ad7f46d427dd60c26c59d",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/Result.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Result.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/12703ac4b4106469ca4ad7f46d427dd60c26c59d",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Result.cs"
+    }
+  },
+  {
+    "name": "ScriptableAttributes.cs",
+    "path": "Filament.Abstractions/ScriptableAttributes.cs",
+    "sha": "754e4a08ef92f5f5af09016a1cb0b151866417e3",
+    "size": 1525,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/ScriptableAttributes.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/ScriptableAttributes.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/754e4a08ef92f5f5af09016a1cb0b151866417e3",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/ScriptableAttributes.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/ScriptableAttributes.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/754e4a08ef92f5f5af09016a1cb0b151866417e3",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/ScriptableAttributes.cs"
+    }
+  },
+  {
+    "name": "Unit.cs",
+    "path": "Filament.Abstractions/Unit.cs",
+    "sha": "bb05588c8eb13be47e977a4005a7641900ee012e",
+    "size": 259,
+    "url": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Unit.cs?ref=main",
+    "html_url": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Unit.cs",
+    "git_url": "https://api.github.com/repos/radical-beard/filament/git/blobs/bb05588c8eb13be47e977a4005a7641900ee012e",
+    "download_url": "https://raw.githubusercontent.com/radical-beard/filament/main/Filament.Abstractions/Unit.cs",
+    "type": "file",
+    "_links": {
+      "self": "https://api.github.com/repos/radical-beard/filament/contents/Filament.Abstractions/Unit.cs?ref=main",
+      "git": "https://api.github.com/repos/radical-beard/filament/git/blobs/bb05588c8eb13be47e977a4005a7641900ee012e",
+      "html": "https://github.com/radical-beard/filament/blob/main/Filament.Abstractions/Unit.cs"
+    }
+  }
+]

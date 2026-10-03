@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Authors>Filament contributors</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/radical-beard/filament</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/radical-beard/filament</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+    <PackageTags>godot;lua;game-development;scripting;hot-reload</PackageTags>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md"
+          Pack="true"
+          PackagePath="" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE.md"
+          Pack="true"
+          PackagePath="" />
+  </ItemGroup>
+</Project>

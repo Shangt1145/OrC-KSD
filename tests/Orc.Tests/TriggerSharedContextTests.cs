@@ -3,60 +3,92 @@ using Xunit;
 
 namespace Orc.Tests;
 
-/// <summary>验收点④：共享性（同一触发器的多次执行共享同一 Data 载体）+ 最小触发器壳约束证据 + 防御与传播。</summary>
+/// <summary>
+/// S1→S2 迁移：原「共享性（跨执行共享 Data 载体）」语义按 S2 形态重表述为
+/// 「同一执行会话内视图与全部事件共用同一 ctx 载体（Bind 直连、不拷贝）」；跨执行改为每次执行新建 ctx。
+/// 保留既有验收语义覆盖（共享 / 绑定失败 / 防御）；文件保留、内容适配。
+/// </summary>
 public class TriggerSharedContextTests
 {
-    [Fact]
-    public async Task Same_Context_Shared_Across_Runs_Of_Same_Trigger()
-    {
-        var ctx = new Context(); // 空载体：ctx 全事件/跨执行共享同一载体
-        var marker = new object();
-        var run = 0;
-        CounterView? firstView = null;
-        CounterView? secondView = null;
+    private static Task Nop(CounterView view, Context ctx, CancellationToken ct) => Task.CompletedTask;
 
-        var trigger = new Trigger<CounterView>(view =>
+    [Fact]
+    public async Task Same_Context_Carrier_Shared_Within_One_Execution()
+    {
+        var engine = new LogicEngine();
+        var marker = new object();
+        Context? first = null;
+        Context? second = null;
+
+        var trigger = new Trigger<CounterView>(events: new[]
         {
-            run++;
-            if (run == 1)
+            new TriggerEvent<CounterView>("第一次", (view, ctx, ct) =>
             {
-                firstView = view;
+                first = ctx;
                 Assert.Equal(0, view.Count); // [Optional] 缺省 → default
                 view.Count = 1;              // 写入（创建新键）
                 view.Payload = marker;
-            }
-            else
+                return Task.CompletedTask;
+            }),
+            new TriggerEvent<CounterView>("第二次", (view, ctx, ct) =>
             {
-                secondView = view;
-                Assert.Equal(1, view.Count);       // 跨执行可见：第一次执行的改写（共享而非拷贝）
+                second = ctx;
+                Assert.Equal(1, view.Count);       // 同一执行会话内：改写对全部事件可见（直连、不拷贝）
                 Assert.Same(marker, view.Payload); // 同一对象引用，未经拷贝/序列化
                 view.Count = 2;
-            }
-
-            return Task.CompletedTask;
+                return Task.CompletedTask;
+            }),
         });
 
-        await trigger.RunAsync(ctx);
-        Assert.Equal(1, (int)ctx.Get("Count")!); // 视图改写经 Context 载体可见
+        await trigger.InvokeAsync(engine, new Dictionary<string, object?>());
 
-        await trigger.RunAsync(ctx);
-        Assert.Equal(2, (int)ctx.Get("Count")!); // 第二次执行继续基于同一载体
+        Assert.Same(first, second);                  // 视图与全部事件共用同一 ctx 载体
+        Assert.Equal(2, (int)second!.Get("Count")!); // 视图改写经 Context 载体可见
+        Assert.Same(marker, second.Get("Payload"));
+    }
 
-        Assert.True(ctx.TryGet("Payload", out var payload));
-        Assert.Same(marker, payload);
+    [Fact]
+    public async Task Each_Execution_Uses_Fresh_Context_And_View()
+    {
+        var engine = new LogicEngine();
+        Context? c1 = null;
+        Context? c2 = null;
+        CounterView? v1 = null;
+        CounterView? v2 = null;
 
-        Assert.NotNull(firstView);
-        Assert.NotNull(secondView);
-        // 两次执行均经同一视图类型（泛型参数 TView 编译期固定）绑定
-        Assert.IsAssignableFrom<CounterView>(firstView);
-        Assert.IsAssignableFrom<CounterView>(secondView);
-        // 每次执行会话新建视图实例（不复用）
-        Assert.NotSame(firstView, secondView);
+        var trigger = new Trigger<CounterView>(events: new[]
+        {
+            new TriggerEvent<CounterView>("计数", (view, ctx, ct) =>
+            {
+                if (c1 is null)
+                {
+                    c1 = ctx;
+                    v1 = view;
+                }
+                else
+                {
+                    c2 = ctx;
+                    v2 = view;
+                }
+
+                view.Count += 1;
+                return Task.CompletedTask;
+            }),
+        });
+
+        await trigger.InvokeAsync(engine, new Dictionary<string, object?> { ["Count"] = 10 });
+        await trigger.InvokeAsync(engine, new Dictionary<string, object?> { ["Count"] = 10 });
+
+        Assert.NotSame(c1, c2);                   // 每次执行新建 ctx（跨执行不共享载体）
+        Assert.NotSame(v1, v2);                   // 每次执行会话新建视图实例（不复用）
+        Assert.Equal(11, (int)c1!.Get("Count")!); // 各自从各自入料出发，互不串扰
+        Assert.Equal(11, (int)c2!.Get("Count")!);
     }
 
     [Fact]
     public void Context_Copies_External_Dictionary_On_Construction()
     {
+        // S1 原用例保留：Context 构造「入料拷贝一次」语义不变
         var external = new Dictionary<string, object?> { ["Count"] = 1 };
         var ctx = new Context(external);
 
@@ -72,42 +104,66 @@ public class TriggerSharedContextTests
     }
 
     [Fact]
-    public async Task RunAsync_Null_Context_Rejected()
+    public async Task InvokeAsync_Null_Engine_Rejected()
     {
-        var trigger = new Trigger<CounterView>(_ => Task.CompletedTask);
+        var trigger = new Trigger<CounterView>(events: new[] { new TriggerEvent<CounterView>("x", Nop) });
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() => trigger.RunAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => trigger.InvokeAsync(null!));
     }
 
     [Fact]
-    public void Trigger_Null_Handler_Rejected()
+    public void Register_Null_Handler_Rejected()
     {
-        Assert.Throws<ArgumentNullException>(() => { _ = new Trigger<CounterView>(null!); });
+        var trigger = new Trigger<CounterView>();
+
+        Assert.Throws<ArgumentNullException>(() => trigger.Register("x", null!));
     }
 
     [Fact]
-    public async Task Binding_Failure_Skips_Handler_And_Propagates()
+    public void Event_Collection_Null_Item_Rejected_And_Duplicate_Names_Allowed()
     {
+        Assert.Throws<ArgumentNullException>(
+            () => new Trigger<CounterView>(events: new TriggerEvent<CounterView>[] { null! }));
+
+        var trigger = new Trigger<CounterView>();
+        trigger.Register("同名", Nop);
+        trigger.Register("同名", Nop); // 事件名允许重复：不承担唯一键职责
+    }
+
+    [Fact]
+    public async Task Binding_Failure_Skips_Events_And_Propagates_Without_Isolation_Record()
+    {
+        var engine = new LogicEngine();
         var executed = false;
-        var trigger = new Trigger<ShieldView>(view =>
+        var trigger = new Trigger<ShieldView>(events: new[]
         {
-            executed = true;
-            return Task.CompletedTask;
+            new TriggerEvent<ShieldView>("x", (v, c, t) => { executed = true; return Task.CompletedTask; }),
         });
 
-        // 空上下文：Target / Source / Amount 均缺失 → 绑定失败
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => trigger.RunAsync(new Context()));
+        // 空数据：Target / Source / Amount 均缺失 → 绑定失败（执行前）→ 原样传播
+        await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => trigger.InvokeAsync(engine, new Dictionary<string, object?>()));
 
-        Assert.False(executed); // 不产出视图、不执行执行委托
+        Assert.False(executed); // 不产出视图、不执行事件
+
+        // 绑定失败不写隔离记录（不伪造记录类别）：
+        Assert.DoesNotContain(
+            engine.RootStream.Entries,
+            e => e.Keywords.Any(k => k.StartsWith("exception:", StringComparison.Ordinal)));
+        Assert.DoesNotContain(engine.RootStream.Entries, e => e.Level == LogLevel.Error);
     }
 
     [Fact]
-    public async Task Handler_Exception_Propagates_Unchanged()
+    public async Task Empty_Trigger_Produces_And_Mounts_Empty_Stream()
     {
-        var trigger = new Trigger<CounterView>(_ => throw new InvalidOperationException("boom"));
+        var engine = new LogicEngine();
+        var trigger = new Trigger<CounterView>(name: "空");
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => trigger.RunAsync(new Context()));
+        var stream = await trigger.InvokeAsync(engine, new Dictionary<string, object?>());
 
-        Assert.Equal("boom", ex.Message);
+        Assert.NotNull(stream);
+        Assert.Same(engine.RootStream, stream.Parent);
+        Assert.Contains(stream, engine.RootStream.Children);
+        Assert.Empty(stream.Entries); // 无事件、无写入
     }
 }
