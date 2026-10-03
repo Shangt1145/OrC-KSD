@@ -1,0 +1,6 @@
+# 另一主力开发 agent 的程序目录：含明文 API Key 的 AI 服务配置与 68MB 可执行文件
+/ams/
+
+# agent 工具链：默认全部忽略，仅放行 context（agent 产出的文档成果）
+/.ams/*
+!/.ams/context/
