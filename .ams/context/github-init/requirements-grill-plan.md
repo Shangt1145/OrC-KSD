@@ -4,7 +4,11 @@
 
 ## 未决问题
 
-### Q11: 提交范围是否扩展至源码（需求变更）In Progress
+### Q11: 提交范围是否扩展至源码（需求变更）Completed
+- 决策：a —— 范围扩展至源码与工程文件；`.gitignore` 追加 `**/bin/`、`**/obj/`、`.vs/`、`TestResults/`、`*.user`、`*.suo`。
+- 结果：提交 `190986f`（32 个文件：28 新增 + 4 修改），254 个 `bin/obj` 编译产物被忽略，推送验证通过。
+
+### Q11-原始记录
 - 触发：用户要求「push 一次」，但工作区新增内容超出原 R1 范围。
 - 实测：未跟踪文件 282 个，其中 **254 个是 `bin/`、`obj/` 编译产物（9.34MB）**；其余 28 个为 `OrcEngine.sln`、`OrcEngine.slnx`、`src/Orc/Core/*.cs`(10)、`src/Orc/Orc.csproj`、`tests/Orc.Tests/*.cs`(4)、`tests/Orc.Tests/Orc.Tests.csproj`、`.ams/context/CONTEXT.md` 与 `card-engine/`、`orc-engine/` 下 CONTEXT.md(3)、`.ams-docs/2de7063f-.../`(7 个需求/实现/grill 文档)。
 - 敏感扫描：新增文本文件中未命中 `sk-*`/`apiKey`/`password`/`Bearer`。

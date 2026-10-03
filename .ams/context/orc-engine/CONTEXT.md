@@ -13,7 +13,7 @@ _Avoid_: 包装器、规则
 _Avoid_: 视图模型、ViewModel
 
 **Context（ctx）**：
-一次结算的数据载体；S1 为纯数据载体（仅 Data），停止/中断/链标识等语义留待 S2 对齐。
+一次结算的数据载体；S2 增加 Stop/Interrupt 停止语义（链标识判定不落地）。
 _Avoid_: 执行环境、运行上下文
 
 **Data（数据载体）**：
