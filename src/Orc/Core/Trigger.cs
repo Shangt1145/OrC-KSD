@@ -1,20 +1,21 @@
 namespace Orc.Core;
 
-/// <summary>触发器种类：主动（默认）／被动（S2 仅标识、无行为差异；被动挂载机制留后续阶段）。</summary>
+/// <summary>触发器种类：主动（默认）／被动（S3 起：声明 hooks 后经总线挂载、响应更新激活；主动不可挂载）。</summary>
 public enum TriggerKind
 {
-    /// <summary>主动触发器（默认；由编排/动作直接调用）。</summary>
+    /// <summary>主动触发器（默认；由编排/动作直接调用；不参与挂载）。</summary>
     Active,
 
-    /// <summary>被动触发器（需显式声明；S2 阶段仅作标识，供效果分类）。</summary>
+    /// <summary>被动触发器（需显式声明；S3 起声明 hooks 后经总线挂载，被更新激活）。</summary>
     Passive,
 }
 
 /// <summary>
-/// 触发器（S2 完整形态）：一个触发器固定绑定一个视图类型（泛型编译期承载「一个触发器一个 ContextView」约束）。
+/// 触发器（S3 形态）：一个触发器固定绑定一个视图类型（泛型编译期承载「一个触发器一个 ContextView」约束）。
 /// 内部维护 band 方案（构造期声明：缺省＝内置默认枚举；显式＝专门枚举）与事件注册表；
 /// 事件排序键＝band 值×1000＋band 内优先级＋注册序兜底（仅排列同一触发器内的事件）。
-/// 注册表为唯一可变面——除事件注册外无跨调用可变状态。
+/// S3 追加：hook 声明（构造期；非空即被动语义）、挂载优先级与所有者（均构造期声明；三者仅内部使用、公共面不暴露）。
+/// 注册表与挂载状态（MountedBus）为可变面——除事件注册与总线挂载（Mount/UnmountOwner）外无跨调用可变状态。
 /// 开放继承（额外注入 handler 途径的基座）：执行与流产出只经公共执行入口；注册/校验只经公共注册面；
 /// 子类不得引入新的跨调用可变状态面。
 /// 触发入口三形态（同一 InvokeAsync 重载族）：①统一入口（本类提供）；②具名重载（作者在具体触发器/子类/调用侧书写，
@@ -28,20 +29,29 @@ public class Trigger<TView> where TView : class
 
     private readonly List<EventEntry> _events = new();
     private readonly Type? _bandType;
+    private readonly string[] _hooks;
+    private readonly int _mountPriority;
+    private readonly object? _owner;
     private long _seq;
 
     /// <summary>
-    /// 以初始化形态构造触发器（名称〔可选〕、Kind〔默认主动〕、band 方案〔默认缺省〕、初始事件集合〔可选〕）。
+    /// 以初始化形态构造触发器（名称〔可选〕、Kind〔默认主动〕、band 方案〔默认缺省〕、初始事件集合〔可选〕、
+    /// hooks 声明〔S3；可选〕、挂载优先级〔S3；默认 0＝Normal〕、所有者〔S3；可选〕）。
     /// 初始事件集合与注册 API 为等价通道（逐项走相同装配校验）。
+    /// hooks 声明时机仅构造期（无运行期注册 API）：非空即被动语义；每项须非空、非纯空白、不重复（声明顺序保留）。
     /// </summary>
     /// <exception cref="ArgumentNullException">events 集合包含 null 元素。</exception>
-    /// <exception cref="ArgumentException">band 方案非法（非枚举）；初始事件与 band 方案不匹配。</exception>
+    /// <exception cref="ArgumentException">band 方案非法（非枚举）；初始事件与 band 方案不匹配；
+    /// hooks 非法（含 null/空白/重复项），或主动触发器（Kind=Active）声明非空 hooks。</exception>
     /// <exception cref="ArgumentOutOfRangeException">初始事件的 band 值/优先级越界。</exception>
     public Trigger(
         string? name = null,
         TriggerKind kind = TriggerKind.Active,
         Type? bandType = null,
-        IEnumerable<TriggerEvent<TView>>? events = null)
+        IEnumerable<TriggerEvent<TView>>? events = null,
+        IEnumerable<string>? hooks = null,
+        int priority = 0,
+        object? owner = null)
     {
         Name = name;
         Kind = kind;
@@ -53,6 +63,9 @@ public class Trigger<TView> where TView : class
         }
 
         _bandType = bandType;
+        _hooks = ValidateAndCopyHooks(hooks, kind);
+        _mountPriority = priority;
+        _owner = owner;
 
         if (events is not null)
         {
@@ -68,11 +81,61 @@ public class Trigger<TView> where TView : class
         }
     }
 
+    /// <summary>S3 hooks 校验与拷贝（构造期一致性校验）：每项非空、非纯空白、不重复；主动+非空＝拒绝。</summary>
+    private static string[] ValidateAndCopyHooks(IEnumerable<string>? hooks, TriggerKind kind)
+    {
+        if (hooks is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var list = new List<string>();
+        foreach (var hook in hooks)
+        {
+            if (hook is null)
+            {
+                throw new ArgumentException("hooks 不能包含 null 元素。", nameof(hooks));
+            }
+
+            if (string.IsNullOrWhiteSpace(hook))
+            {
+                throw new ArgumentException("hook 不能为空或纯空白字符串。", nameof(hooks));
+            }
+
+            if (list.Contains(hook))
+            {
+                throw new ArgumentException($"hooks 列表包含重复项 '{hook}'（同一列表中不允许重复）。", nameof(hooks));
+            }
+
+            list.Add(hook);
+        }
+
+        if (list.Count > 0 && kind == TriggerKind.Active)
+        {
+            throw new ArgumentException(
+                "主动触发器（Kind=Active）不能声明 hooks（矛盾声明：主动触发器不参与挂载）。", nameof(hooks));
+        }
+
+        return list.ToArray();
+    }
+
     /// <summary>触发器名称（可选；用于事件流 source 与调试；未命名时 source 以视图类型名退化标识）。</summary>
     public string? Name { get; }
 
-    /// <summary>触发器种类（运行期可读；S2 无行为差异）。</summary>
+    /// <summary>触发器种类（运行期可读；S3 起与「挂载条件」关联——仅 Passive 且 hooks 非空可挂载）。</summary>
     public TriggerKind Kind { get; }
+
+    /// <summary>hook 声明（构造期；声明顺序保留；S3 挂载机制内部使用、公共面不暴露）。</summary>
+    internal IReadOnlyList<string> Hooks => _hooks;
+
+    /// <summary>挂载优先级声明（构造期；任意 int；S3 挂载机制内部使用、公共面不暴露）。</summary>
+    internal int MountPriority => _mountPriority;
+
+    /// <summary>所有者声明（构造期；可选、可为 null；S3 卸载机制内部使用、公共面不暴露）。</summary>
+    internal object? Owner => _owner;
+
+    /// <summary>当前挂载的总线（null＝未挂载；实例级状态；仅由总线 Mount/UnmountOwner 读写）。</summary>
+    internal Bus? MountedBus { get; set; }
 
     /// <summary>注册一个不带 band 的事件（落默认区段；仅默认 band 方案可用）。</summary>
     /// <exception cref="ArgumentNullException">handler 为 null。</exception>
@@ -273,8 +336,8 @@ public class Trigger<TView> where TView : class
         return snapshot;
     }
 
-    /// <summary>source/调试用显示名：名称（非空白）或视图类型名（未命名退化）。</summary>
-    private string DisplayName => string.IsNullOrWhiteSpace(Name) ? typeof(TView).Name : Name!;
+    /// <summary>source/调试/总线读面用显示名：名称（非空白）或视图类型名（未命名退化）。</summary>
+    internal string DisplayName => string.IsNullOrWhiteSpace(Name) ? typeof(TView).Name : Name!;
 
     private sealed class EventEntry
     {

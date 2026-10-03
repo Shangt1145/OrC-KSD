@@ -1,6 +1,6 @@
 namespace Orc.Core;
 
-/// <summary>事件流条目类别：log（普通记录）/ attach（子流挂载）/ update（更新载荷；写入 API 就绪，实际接线留后续阶段）。</summary>
+/// <summary>事件流条目类别：log（普通记录）/ attach（子流挂载）/ update（更新载荷；S3 起由总线 Emit 写入）。</summary>
 public enum LogEntryKind
 {
     Log,

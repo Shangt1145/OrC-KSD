@@ -24,7 +24,7 @@ public class Entity
     /// <summary>销毁实体（幂等）：置生命周期为失效。</summary>
     /// <remarks>
     /// 只杀不管卸载：Destroy 后 Name / Life / Ref 本身的访问仍允许（观察点为 Life.IsAlive / Ref.IsAlive 为 false、Ref.Value 抛 Stale）。
-    /// 总线卸载通知链路（bus.UnmountOwner）留待 S3，本阶段不实现。
+    /// Destroy 本身不触发总线卸载（bus.UnmountOwner 为显式 API；实际调用编排留 S4）。
     /// </remarks>
     public void Destroy() => Life.Kill();
 }

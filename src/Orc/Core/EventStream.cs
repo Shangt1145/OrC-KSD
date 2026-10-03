@@ -39,7 +39,7 @@ public sealed class EventStream
         IReadOnlyDictionary<string, object?>? data = null)
         => Write(LogEntryKind.Log, level, source, message, keywords, data);
 
-    /// <summary>写入一条 update 条目（写入 API 就绪；实际接线在后续阶段）。返回写入的条目。</summary>
+    /// <summary>写入一条 update 条目（S3 起由总线 Emit 接线使用）。返回写入的条目。</summary>
     /// <exception cref="ArgumentNullException">source 或 message 为 null。</exception>
     public LogEntry WriteUpdate(
         string source,
