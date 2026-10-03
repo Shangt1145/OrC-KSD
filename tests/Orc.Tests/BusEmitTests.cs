@@ -5,7 +5,7 @@ namespace Orc.Tests;
 
 /// <summary>
 /// 验收点①②（广播侧）：部署更新→被动激活（含载荷传递）；同更新多订阅者顺序（参考优先级+注册序）；
-/// 失败记录+继续（含绑定失败、不双重记录）；取消语义（入口已取消/广播中取消）；快照语义；中断空转。
+/// 失败记录+继续（含绑定失败——契约强化后记录由触发器本流兜底写入、经冒泡可见；不双重记录）；取消语义（入口已取消/广播中取消）；快照语义；中断空转。
 /// </summary>
 public class BusEmitTests
 {
@@ -199,17 +199,33 @@ public class BusEmitTests
 
         await engine.Emit("u", new Dictionary<string, object?> { ["Amount"] = 1 }); // 无 Card
 
-        Assert.Equal(new[] { "C" }, trace); // B/未命名未执行；C 继续
+        Assert.Equal(new[] { "C" }, trace); // B/未命名未执行；C 继续（广播继续）
 
         var root = engine.RootStream;
         var errors = root.Entries.Where(e => e.Level == LogLevel.Error).ToArray();
         Assert.Equal(2, errors.Length); // 各恰一条（互不重复）
 
-        var bRecord = errors.Single(e => e.Source == "B"); // source＝订阅者标识（纯展示名，无事件上下文）
+        var bRecord = errors.Single(e => e.Source == "B"); // source＝触发器展示名（纯展示名，无事件上下文）
         Assert.Contains("exception:KeyNotFoundException", bRecord.Keywords);
 
         var uRecord = errors.Single(e => e.Source == "BusPayloadView"); // 未命名退化标识
         Assert.Contains("exception:KeyNotFoundException", uRecord.Keywords);
+
+        // ---- 受控变更增补（触发器验证·契约强化）：新协议断言 ----
+        // ① 记录改由触发器本流写入（契约兜底）、经冒泡于 root 可见——观察锚点保持：
+        //    root 本地不含 Error（该场景不再经总线捕获路径记录；“恰 2 条、不重复”由上方 errors 断言承担）。
+        Assert.DoesNotContain(root.LocalEntries, e => e.Level == LogLevel.Error);
+
+        // ② 失败子流带失败标记（契约兜底失败）：B 与未命名各恰一个；记录归属各自本流（LocalEntries）。
+        var failureStreams = root.Children.Where(s => s.Outcome == ExecutionOutcome.ContractFailure).ToArray();
+        Assert.Equal(2, failureStreams.Length);
+
+        var bStream = failureStreams.Single(s => s.LocalEntries.Any(e => e.Source == "B" && e.Level == LogLevel.Error));
+        Assert.Contains(bStream.LocalEntries, e => e.Source == "B" && e.Keywords.Contains("exception:KeyNotFoundException"));
+
+        var unnamedStream = failureStreams.Single(
+            s => s.LocalEntries.Any(e => e.Source == "BusPayloadView" && e.Level == LogLevel.Error));
+        Assert.Contains(unnamedStream.LocalEntries, e => e.Source == "BusPayloadView" && e.Keywords.Contains("exception:KeyNotFoundException"));
     }
 
     // ---------- 取消语义 ----------

@@ -18,6 +18,8 @@ public enum TriggerKind
 /// 注册表与挂载状态（MountedBus）为可变面——除事件注册与总线挂载（Mount/UnmountOwner）外无跨调用可变状态。
 /// 开放继承（额外注入 handler 途径的基座）：执行与流产出只经公共执行入口；注册/校验只经公共注册面；
 /// 子类不得引入新的跨调用可变状态面。
+/// 合法性验证（加性扩展）：可选覆写 <see cref="Validate"/>（基类默认恒合法）；每次执行固定先调用（空转豁免）。
+/// 不合法＝仅本次取消（不绑视图、不执行事件、留痕、不传染嵌套链）；验证通过后的结构性错误（含绑定失败）＝契约兜底（记录＋失败标记＋安全结束）。
 /// 触发入口三形态（同一 InvokeAsync 重载族）：①统一入口（本类提供）；②具名重载（作者在具体触发器/子类/调用侧书写，
 /// 经手写 Translate 汇入①）；③字典透传（调用方就绪字典直接调用①，零加工）。框架不隐式调用 Translate。
 /// </summary>
@@ -184,15 +186,33 @@ public class Trigger<TView> where TView : class
     }
 
     /// <summary>
+    /// 合法性验证（公开暴露面；可选覆写）：接收本次触发数据中的原始引用列表
+    /// （data 第一层引用类值；按引用相等去重；保持插入序；无引用＝空列表），返回本次触发是否合法（true＝合法）。
+    /// 基类默认恒合法（true）。
+    /// 调用时点：每次 <see cref="InvokeAsync"/> 内部固定先调用（空转检查之后、ctx/视图绑定之前）；
+    /// 外部亦可在触发前直接调用（同一方法、无缓存/无短路——每次完整调用；内外判定源唯一）。
+    /// 契约：只读、无副作用（不得改写游戏状态；覆写不得引入跨调用可变状态）；应保持轻量（每次触发均被调用）。
+    /// 返回 false＝本次触发被拒绝：仅本次取消（不绑视图、不执行事件；写 validation:rejected 留痕、流标记
+    /// <see cref="ExecutionOutcome.ValidationRejected"/>、不传染嵌套链）。
+    /// 抛出异常（取消类除外）＝按契约兜底处理（捕获＋记录＋流标记 <see cref="ExecutionOutcome.ContractFailure"/>＋安全结束，不外传）。
+    /// </summary>
+    /// <param name="refs">原始引用列表（data 第一层引用类值、按引用相等去重、保持插入序；无引用＝空列表）。</param>
+    public virtual bool Validate(IReadOnlyList<Ref<Entity>> refs) => true;
+
+    /// <summary>
     /// 统一入口（框架提供；规范收敛点）：以就绪数据创建本次执行 ctx（沿用「入料拷贝一次」语义；data 为 null 视作空载体）
+    /// → 合法性验证（每次固定先调用：空转检查之后、ctx/视图绑定之前；输入＝本次触发数据第一层引用收集）
     /// → 绑定新建视图会话 → 按排序键顺序执行事件链 → 返回事件流。本身不触发转接（不隐式调用 Translate）。
     /// 嵌套调用自动感知执行栈：子流自动挂载到触发者流（无触发者时挂载到传入引擎的总流）；
-    /// 已中断状态下的链上新执行空转（不执行任何事件、不进行视图绑定、正常返回空流）。
-    /// 绑定阶段失败（契约/配置错误）原样传播；事件内业务异常被隔离记录并继续；取消类异常穿透上抛（最外层拿不到流）。
+    /// 已中断状态下的链上新执行空转（不执行任何事件、不进行视图绑定、不调用验证、正常返回空流）。
+    /// 验证拒绝（<see cref="Validate"/> 返回 false）＝仅本次取消：不绑视图、不执行事件；写留痕（validation:rejected）并标记
+    /// <see cref="ExecutionOutcome.ValidationRejected"/>；不传染嵌套链（区别于 Interrupt 的链级停止）。
+    /// 验证通过后的执行错误（含绑定失败：必填缺失、视图声明非法等；及验证自身异常）被捕获处理：
+    /// 记录（Error 级；source＝触发器展示名；keywords 含 exception:{类型名}）＋安全结束（返回流；流标记
+    /// <see cref="ExecutionOutcome.ContractFailure"/>），不外传；取消类异常穿透上抛（最外层拿不到流）。
+    /// 事件内业务异常被隔离记录并继续（结局仍为 <see cref="ExecutionOutcome.Normal"/>——记录与标记分离）。
     /// </summary>
     /// <exception cref="ArgumentNullException">engine 为 null。</exception>
-    /// <exception cref="KeyNotFoundException">视图必填数据缺失（绑定失败）。</exception>
-    /// <exception cref="ArgumentException">视图声明非法（绑定失败）。</exception>
     /// <exception cref="OperationCanceledException">取消类异常穿透上抛（不隔离）。</exception>
     public async Task<EventStream> InvokeAsync(
         LogicEngine engine, IDictionary<string, object?>? data = null, CancellationToken ct = default)
@@ -212,9 +232,25 @@ public class Trigger<TView> where TView : class
         {
             if (ExecutionFrame.IsChainInterrupted(parent))
             {
-                return stream; // 空转：不执行任何事件、不进行视图绑定
+                return stream; // 空转：不执行任何事件、不进行视图绑定、不调用验证
             }
 
+            // 验证（空转检查之后、ctx/视图绑定之前）：输入＝本次触发数据第一层引用收集（去重、插入序；无引用＝空列表）。
+            if (!Validate(CollectReferences(data)))
+            {
+                // 不合法：仅本次取消——不绑视图、不执行事件；写留痕、标记、返回流（不传染嵌套链）。
+                stream.Write(
+                    LogEntryKind.Log,
+                    LogLevel.Warning,
+                    label,
+                    "触发被验证拒绝（Validate 返回 false）：本次取消（不绑定视图、不执行事件）。",
+                    new[] { "validation:rejected" },
+                    data: null);
+                stream.Outcome = ExecutionOutcome.ValidationRejected;
+                return stream;
+            }
+
+            // 验证通过 ⇒ 执行：绑定新建视图会话 → 执行事件链；结构性错误由下方契约兜底捕获。
             var ctx = new Context(data);
             ctx.AttachFrame(frame);
             frame.AttachContext(ctx);
@@ -231,10 +267,64 @@ public class Trigger<TView> where TView : class
 
             return stream;
         }
+        catch (OperationCanceledException)
+        {
+            throw; // 取消类异常不隔离、穿透上抛（含验证/绑定/执行阶段）
+        }
+        catch (Exception ex)
+        {
+            // 契约兜底：验证/绑定/执行阶段的结构性错误（绑定失败、视图声明非法、验证自身异常等）
+            // ——记录（与既有隔离记录同构）＋失败标记＋安全结束（返回流、不外传）。
+            WriteContractFailure(stream, label, ex);
+            stream.Outcome = ExecutionOutcome.ContractFailure;
+            return stream;
+        }
         finally
         {
             ExecutionFrame.Current = parent;
         }
+    }
+
+    /// <summary>
+    /// 从本次触发数据（data 载体）收集原始引用（验证输入；收集规则）：
+    /// 仅 data 第一层值（不递归进入嵌套字典/列表——引用需平铺放置为显式契约）；
+    /// 凡引用类对象（实现 <see cref="IRefInfo"/> 的类型）一律收集、不限目标类型（库内唯一引用实例化点＝<see cref="Entity.Ref"/>，实例类型为基类视角的 Ref&lt;Entity&gt;）；
+    /// 按引用相等去重；保持 data 插入序；无引用＝空列表。
+    /// </summary>
+    private static List<Ref<Entity>> CollectReferences(IDictionary<string, object?>? data)
+    {
+        var refs = new List<Ref<Entity>>();
+        if (data is null)
+        {
+            return refs;
+        }
+
+        foreach (var value in data.Values)
+        {
+            if (value is Ref<Entity> reference && !refs.Contains(reference, ReferenceEqualityComparer.Instance))
+            {
+                refs.Add(reference);
+            }
+        }
+
+        return refs;
+    }
+
+    /// <summary>契约兜底记录（与事件隔离记录同构）：Error 级；source＝触发器展示名（纯展示名、无事件上下文）；
+    /// keywords 含 exception:{类型名}；data 含 exceptionType/message。</summary>
+    private static void WriteContractFailure(EventStream stream, string label, Exception ex)
+    {
+        stream.Write(
+            LogEntryKind.Log,
+            LogLevel.Error,
+            label,
+            ex.Message,
+            new[] { $"exception:{ex.GetType().Name}" },
+            new Dictionary<string, object?>
+            {
+                ["exceptionType"] = ex.GetType().FullName,
+                ["message"] = ex.Message,
+            });
     }
 
     private async Task RunEventsAsync(TView view, Context ctx, ExecutionFrame frame, CancellationToken ct)

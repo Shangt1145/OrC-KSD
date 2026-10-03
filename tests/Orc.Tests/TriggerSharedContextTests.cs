@@ -7,6 +7,7 @@ namespace Orc.Tests;
 /// S1→S2 迁移：原「共享性（跨执行共享 Data 载体）」语义按 S2 形态重表述为
 /// 「同一执行会话内视图与全部事件共用同一 ctx 载体（Bind 直连、不拷贝）」；跨执行改为每次执行新建 ctx。
 /// 保留既有验收语义覆盖（共享 / 绑定失败 / 防御）；文件保留、内容适配。
+/// 受控变更（触发器验证·契约强化）：绑定失败由「原样传播」迁移为「捕获处理＋失败标记＋安全结束」。
 /// </summary>
 public class TriggerSharedContextTests
 {
@@ -136,8 +137,10 @@ public class TriggerSharedContextTests
     }
 
     [Fact]
-    public async Task Binding_Failure_Skips_Events_And_Propagates_Without_Isolation_Record()
+    public async Task Binding_Failure_Is_Captured_Recorded_And_Ends_Safely_With_Failure_Mark()
     {
+        // 受控变更（触发器验证·契约强化）：原「绑定失败原样传播、不写记录」→
+        // 新「绑定失败被捕获处理：记录（与隔离记录同构）＋失败标记＋安全结束（返回流）」。
         var engine = new LogicEngine();
         var executed = false;
         var trigger = new Trigger<ShieldView>(events: new[]
@@ -145,17 +148,22 @@ public class TriggerSharedContextTests
             new TriggerEvent<ShieldView>("x", (v, c, t) => { executed = true; return Task.CompletedTask; }),
         });
 
-        // 空数据：Target / Source / Amount 均缺失 → 绑定失败（执行前）→ 原样传播
-        await Assert.ThrowsAsync<KeyNotFoundException>(
-            () => trigger.InvokeAsync(engine, new Dictionary<string, object?>()));
+        // 空数据：Target / Source / Amount 均缺失 → 绑定失败（执行前）→ 捕获处理、安全结束（不外传）
+        var stream = await trigger.InvokeAsync(engine, new Dictionary<string, object?>());
 
-        Assert.False(executed); // 不产出视图、不执行事件
+        Assert.False(executed);                        // 不产出视图、不执行事件
+        Assert.Same(engine.RootStream, stream.Parent); // 返回流（正常挂载）
 
-        // 绑定失败不写隔离记录（不伪造记录类别）：
-        Assert.DoesNotContain(
-            engine.RootStream.Entries,
-            e => e.Keywords.Any(k => k.StartsWith("exception:", StringComparison.Ordinal)));
-        Assert.DoesNotContain(engine.RootStream.Entries, e => e.Level == LogLevel.Error);
+        // 契约兜底记录（与隔离记录同构）：Error 级；source＝触发器展示名（未命名 → 视图类型名退化）；
+        // keywords 含 exception:{类型名}；data 含 exceptionType / message。
+        var record = Assert.Single(stream.Entries, e => e.Level == LogLevel.Error);
+        Assert.Equal(LogEntryKind.Log, record.Kind);
+        Assert.Contains("exception:KeyNotFoundException", record.Keywords);
+        Assert.Equal("ShieldView", record.Source);
+        Assert.Equal(typeof(KeyNotFoundException).FullName, record.Data["exceptionType"]);
+
+        // 失败标记：契约兜底失败
+        Assert.Equal(ExecutionOutcome.ContractFailure, stream.Outcome);
     }
 
     [Fact]

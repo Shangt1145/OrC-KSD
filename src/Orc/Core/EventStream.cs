@@ -1,6 +1,22 @@
 namespace Orc.Core;
 
 /// <summary>
+/// 一次执行的结局标记（失败标记三态；加性枚举）。
+/// 与记录（流条目）分离：记录承担可观察性、本标记承担结构性结局表达。
+/// </summary>
+public enum ExecutionOutcome
+{
+    /// <summary>正常：正常完成（含空转与事件级容错路径）。</summary>
+    Normal = 0,
+
+    /// <summary>验证拒绝：触发被合法性验证（<c>Trigger&lt;TView&gt;.Validate</c>）拒绝——仅本次取消（不绑视图、不执行事件）。</summary>
+    ValidationRejected = 1,
+
+    /// <summary>契约兜底失败：验证通过后执行链路的结构性错误（绑定失败、验证自身异常等）被捕获、安全结束。</summary>
+    ContractFailure = 2,
+}
+
+/// <summary>
 /// 事件流（S5 形态）：一次执行（或引擎总流）的因果记录载体，树形结构。
 /// 读面：唯一 ID、父流引用、条目可枚举（本地写入＋后代冒泡，顺序＝写入时序）、本地条目可枚举（仅本流自身写入；树形 JSON 导出的数据源）、子流可枚举（挂载时序）。
 /// 写面：WriteLog / WriteUpdate 公共就绪（attach 由框架在挂载时内部写入）。
@@ -23,6 +39,15 @@ public sealed class EventStream
 
     /// <summary>父流引用；顶层流被挂载后其父为总流；总流为根（null）。</summary>
     public EventStream? Parent { get; private set; }
+
+    /// <summary>
+    /// 本次执行的结局标记（加性属性；默认 <see cref="ExecutionOutcome.Normal"/>＝正常完成）。
+    /// 三态：Normal＝正常完成（含空转与事件级容错路径）；ValidationRejected＝触发被验证拒绝（仅本次取消）；
+    /// ContractFailure＝验证通过后结构性错误被契约兜底（安全结束）。
+    /// 只随本流自身：不因嵌套子流的结局改变本流标记（记录照常冒泡、标记不传播）；
+    /// 由框架在执行入口（<c>Trigger&lt;TView&gt;.InvokeAsync</c>）写入。
+    /// </summary>
+    public ExecutionOutcome Outcome { get; internal set; }
 
     /// <summary>条目枚举（含本地写入与后代冒泡）。</summary>
     public IReadOnlyList<LogEntry> Entries => _entries;
