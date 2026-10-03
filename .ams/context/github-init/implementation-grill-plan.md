@@ -1,25 +1,22 @@
 # Implementation Grill Plan — GitHub 仓库初始化与进度同步
 
-> 本轮 grill 聚焦：实现步骤的可行性、安全校验点与交互阻塞点。
+> 本轮 grill 聚焦：初始化已完成后遗留的代理与流程决策。
 
 ## 未决问题
 
-### I1: 原理说明的落地形式 In Progress（对应 Q9）
-- 选项 a：仅在对话中讲解（推荐，不增加仓库文件）。
-- 选项 b：同时写成 `docs/Git-同步流程说明.md`，供协作者直接查阅。
+### I4: 是否把代理固化到 git 配置 In Progress
+- 背景：本机 git 不走 Windows 系统代理；本次推送靠临时参数 `-c http.proxy=http://127.0.0.1:20955` 完成。
+- 选项 a：固化且仅针对 GitHub —— `git config --global http.https://github.com.proxy http://127.0.0.1:20955`（推荐；其他仓库不受影响，可随时 unset）。
+- 选项 b：全局固化 —— 影响所有 HTTPS git 仓库。
+- 选项 c：保持现状，每次手动带参数（代理软件更换或端口变化时最不容易踩坑，但日常麻烦）。
 
-### I2: 首次提交信息文案 In Progress
-- 候选 a：`chore: 初始化仓库，纳入工作区文档与 agent 上下文文档`（推荐）。
-- 候选 b：`Initial commit`。
+## 已决问题
 
-### I3: 推送的执行时机 Pending
-- 阻塞：collaborator 权限未确认到位。
-- 选项 a：完成 S1–S5 后立即尝试 `git push`，接受可能 403 失败并保留本地提交（推荐，可提前完成 GCM 授权流程）。
-- 选项 b：等用户确认 Shangt1145 已添加后再执行，避免一次失败推送。
+### I1: 原理说明落地形式 Completed
+- 决策：a —— 仅在对话中讲解，不新增仓库文档。
 
-## 已确认的实现约束
+### I2: 首次提交信息 Completed
+- 决策：`chore: 初始化仓库，纳入工作区文档与 agent 上下文文档`。
 
-- `.gitignore` 采用「`/ams/` + `/.ams/*` + `!/.ams/context/`」三条规则。
-- 本地分支 `main` 与远程 `default_branch` 对齐。
-- 暂存采用显式路径，不使用 `git add -A`。
-- 远程地址 `https://github.com/Shangt1145/OrC-KSD.git`，认证走 GCM。
+### I3: 推送执行时机 Completed
+- 决策：a —— S1–S5 完成后立即尝试推送；实际经历两次失败（代理、权限）后排障成功。
