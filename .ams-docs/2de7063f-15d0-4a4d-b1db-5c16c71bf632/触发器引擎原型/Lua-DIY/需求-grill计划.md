@@ -1,27 +1,25 @@
-# 需求 Grill 计划 — 社区 DIY（Filament.Core + Lua）
+# 需求 Grill 计划 — 社区 DIY（Lua 动态 handler）
 
-> 需求（2026-10-03 用户提出）：集成 Filament.Core，支持"动态 handler + Lua 脚本"，实现**面向社区 DIY** 的能力。
-> 当前：信息收集完成（联网研究）；需求 grill 第 1 轮。
+> 需求（2026-10-03 用户提出）：集成 Lua 脚本能力，支持"动态 handler"，实现面向社区 DIY 的能力。
+> 状态：**需求 grill 完成**；实现委托已发（e8802a93）。
 
 ## 研究结论摘要（2026-10-03，详见 研究-Filament.Core.md）
 
-- **对象确证**：radical-beard/filament（NuGet：**RadicalBeard.Filament.Core v0.1.0**）——基于 MoonSharp 2.0.0 加固封装的"引擎无关"Lua 行为脚本框架：硬沙箱（Preset_HardSandbox）+ `filament.<ns>.<verb>` 动词白名单 + 热重载（last-good 回退）+ [Scriptable] 源生成编组 + Result/LuaError 无异常模型。
-- **可行性**：✅ netstandard2.1，可在**纯 .NET 8 类库**使用（Godot 依赖隔离于独立包 Filament.Godot；官方有非 Godot 控制台 demo）。
-- **风险**：⚠ **许可证为 all-rights-reserved 占位（尚未授权）**；项目极早期（0.1.0 单版本、0 star、无公开案例、2026-06-02 后无提交）。
-- **缺口**：无"Lua 函数→C# 委托"开箱 API（官方为「模块+方法名」字符串 dispatch；委托形态需少量自研）。
-- 研究过程产物：`outputs/web-research/`。
+- 对象确证：radical-beard/filament（RadicalBeard.Filament.Core v0.1.0）——基于 MoonSharp 2.0.0 的引擎无关 Lua 行为脚本框架。
+- 可行性：✅ 纯 .NET 8 可用；风险：⚠ 许可证未授权占位 + 项目极早期 → **不直接集成**。
 
-## Unresolved Questions
+## 已定决策（全部）
 
-### Q1: 集成路径与许可 {In Progress}
-- 选项：a 直接集成（若用户即作者/有直接授权）；b 参考其行为规格自研（MoonSharp 薄层，无授权风险）；c 等许可变更后再评估
-- 第 1 轮已问
+- **Q1 集成路径**：MoonSharp 直接依赖 + 仅参考 Filament 设计自建框架（不集成 Filament.Core）。
+- **范围**：当前只独立实现和测试**动态 handler 本体**；**加载逻辑后置**（文件/目录/热重载不做）。
+- **Q2 队列时机 = a**：立即启动（独立任务，与 S3~S5 写入区域无交集）。
+- **Q3 API 形态 = a**：通用动态形态——Lua 函数接收"参数表"、返回结果值/表；C# 侧 `Invoke(参数包) → Result<结果>`。
+- **Q4 模块形态**：`src/Orc.Lua/`（独立程序集，不引用 Orc 核心）+ `tests/Orc.Lua.Tests/`。
+- **Q5 参考落地项**：硬沙箱 + 动词白名单（如 `orc.*`）+ 结构化错误模型。
 
-### Q2: 时机与范围 {Pending}
-- 该能力属原型之后的演进，还是影响现计划（S2~S5 队列）
+## 后置项（记录，后续演进）
 
-### Q3: 与"csx/gds 脚本接口 + 继承模式"的关系 {Pending}
-- 取代 / 并列 / 分层（开发者脚本 vs 社区脚本）
-
-### Q4: 动态 handler 边界与安全 {Pending}
-- Lua 可定义到哪一层（事件 handler / 触发器 / 效果）；社区脚本安全边界；热重载语义（是否需要）
+- 脚本加载逻辑与热重载（文件/目录监控、last-good 回退）；
+- 引擎适配器（Lua handler ↔ Orc 事件签名 `(view, ctx, ct)` 的桥接）；
+- 强类型编组协议；[Scriptable] 式编组工具化；
+- 社区分发/安全策略（签名、权限分级等，若需要）。
