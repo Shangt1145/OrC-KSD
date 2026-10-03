@@ -19,12 +19,15 @@ public class TriggerSharedContextTests
         var marker = new object();
         Context? first = null;
         Context? second = null;
+        CounterView? firstView = null;
+        CounterView? secondView = null;
 
         var trigger = new Trigger<CounterView>(events: new[]
         {
             new TriggerEvent<CounterView>("第一次", (view, ctx, ct) =>
             {
                 first = ctx;
+                firstView = view;
                 Assert.Equal(0, view.Count); // [Optional] 缺省 → default
                 view.Count = 1;              // 写入（创建新键）
                 view.Payload = marker;
@@ -33,6 +36,7 @@ public class TriggerSharedContextTests
             new TriggerEvent<CounterView>("第二次", (view, ctx, ct) =>
             {
                 second = ctx;
+                secondView = view;
                 Assert.Equal(1, view.Count);       // 同一执行会话内：改写对全部事件可见（直连、不拷贝）
                 Assert.Same(marker, view.Payload); // 同一对象引用，未经拷贝/序列化
                 view.Count = 2;
@@ -43,6 +47,7 @@ public class TriggerSharedContextTests
         await trigger.InvokeAsync(engine, new Dictionary<string, object?>());
 
         Assert.Same(first, second);                  // 视图与全部事件共用同一 ctx 载体
+        Assert.Same(firstView, secondView);          // 一次执行（整条事件链）＝一个视图实例（与 ctx 同构）
         Assert.Equal(2, (int)second!.Get("Count")!); // 视图改写经 Context 载体可见
         Assert.Same(marker, second.Get("Payload"));
     }
@@ -165,5 +170,17 @@ public class TriggerSharedContextTests
         Assert.Same(engine.RootStream, stream.Parent);
         Assert.Contains(stream, engine.RootStream.Children);
         Assert.Empty(stream.Entries); // 无事件、无写入
+    }
+
+    [Fact]
+    public void Context_Stop_And_Interrupt_Outside_Execution_Session_Are_NoOps()
+    {
+        var ctx = new Context(); // 未关联执行会话（框架执行路径之外）
+
+        ctx.Stop();
+        ctx.Interrupt();
+
+        Assert.False(ctx.Stopped);
+        Assert.False(ctx.Interrupted);
     }
 }

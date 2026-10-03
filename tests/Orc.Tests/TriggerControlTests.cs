@@ -126,6 +126,41 @@ public class TriggerControlTests
     }
 
     [Fact]
+    public async Task Interrupt_From_Deeper_Running_Sub_Layer_Stops_Sub_Layers_Too()
+    {
+        var engine = new LogicEngine();
+        var order = new List<string>();
+        Context? ctxC = null;
+
+        var d = new Trigger<CounterView>(name: "D", events: new[]
+        {
+            new TriggerEvent<CounterView>("d1", (v, c, tt) =>
+            {
+                ctxC!.Interrupt(); // 起点＝C；D 为 C 之下正在运行的子层——各层含子层，同样停止
+                order.Add("d1-after");
+                return Task.CompletedTask;
+            }),
+            new TriggerEvent<CounterView>("d2", (v, c, tt) => { order.Add("d2"); return Task.CompletedTask; }),
+        });
+        var c = new Trigger<CounterView>(name: "C", events: new[]
+        {
+            new TriggerEvent<CounterView>("c1", async (v, cc, tt) =>
+            {
+                ctxC = cc;
+                await d.InvokeAsync(engine, new Dictionary<string, object?>());
+                order.Add("c1-after");
+            }),
+            new TriggerEvent<CounterView>("c2", (v, cc, tt) => { order.Add("c2"); return Task.CompletedTask; }),
+        });
+
+        var streamC = await c.InvokeAsync(engine, new Dictionary<string, object?>());
+
+        Assert.Equal(new[] { "d1-after", "c1-after" }, order); // in-flight 完成；D 与 C 剩余事件均在事件边界停止
+        Assert.True(ctxC!.Interrupted);                        // 链上各层（含起点之下的运行中子层）状态可查
+        Assert.NotNull(streamC);
+    }
+
+    [Fact]
     public async Task Sub_Execution_Started_After_Interrupt_Idles_With_Empty_Stream_Mounted()
     {
         var engine = new LogicEngine();

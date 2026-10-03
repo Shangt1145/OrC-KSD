@@ -4,6 +4,12 @@
 
 ## 未决问题
 
+### Q12: `outputs/` 是否入库 Completed
+- 触发：提交 `4b0292c` 因使用 `git add -A` 意外带入 `outputs/web-research/`（35 文件 / 1.3MB，含 667KB 的 GitHub API 原始响应与 58KB 网页快照）。
+- 决策：a —— **排除整个 `outputs/`**；`.gitignore` 增加 `/outputs/`，并从索引移除已跟踪文件（`git rm -r --cached outputs`，本地文件保留）。结论性内容应写入 `docs/` 或 `.ams-docs/`。
+- 附带强化（用户要求）：每次推送前**逐项审查待提交清单**，排除没必要/不能上传的文件；出现未预期路径先汇报再决定。
+- 原则确立：**产出入库，过程不入库**。
+
 ### Q11: 提交范围是否扩展至源码（需求变更）Completed
 - 决策：a —— 范围扩展至源码与工程文件；`.gitignore` 追加 `**/bin/`、`**/obj/`、`.vs/`、`TestResults/`、`*.user`、`*.suo`。
 - 结果：提交 `190986f`（32 个文件：28 新增 + 4 修改），254 个 `bin/obj` 编译产物被忽略，推送验证通过。

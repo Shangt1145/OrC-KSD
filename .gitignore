@@ -5,6 +5,9 @@
 /.ams/*
 !/.ams/context/
 
+# agent 的过程性输出（原始网页/接口抓取快照等）：随时可重新生成，结论应写入 docs/ 或 .ams-docs/
+/outputs/
+
 # .NET 构建产物：编译中间结果与 IDE 本地状态，不属于产出
 **/bin/
 **/obj/
