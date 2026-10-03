@@ -5,6 +5,9 @@ namespace Orc.Core;
 /// </summary>
 public class Entity
 {
+    /// <summary>实体标识符（S5 加性）：创建时分配的全局唯一标识；稳定不变（销毁后仍可读），供外部关联/消费（快照 JSON 的 entityId 来源）。</summary>
+    public Guid Id { get; } = Guid.NewGuid();
+
     /// <summary>实体名（非 null）。</summary>
     public string Name { get; }
 

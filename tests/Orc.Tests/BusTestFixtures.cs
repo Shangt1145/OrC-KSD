@@ -25,7 +25,7 @@ internal static class BusTestHelpers
 {
     /// <summary>构建被动触发器：单"记录"事件（执行时把 name 追加进 trace；视图用全可选视图，任意载荷可绑定）。</summary>
     internal static Trigger<CounterView> RecordingPassive(
-        string name, string[] hooks, List<string> trace, int priority = 0, object? owner = null)
+        string name, string[] hooks, List<string> trace, int priority = UpdatePriorities.Normal, object? owner = null)
     {
         return new Trigger<CounterView>(
             name,

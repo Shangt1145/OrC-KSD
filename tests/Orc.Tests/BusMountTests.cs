@@ -20,8 +20,8 @@ public class BusMountTests
         Assert.Equal("effect.removed", Updates.EffectRemoved);
 
         Assert.Equal(100, UpdatePriorities.High);
-        Assert.Equal(0, UpdatePriorities.Normal);
-        Assert.Equal(-100, UpdatePriorities.Low);
+        Assert.Equal(200, UpdatePriorities.Normal);
+        Assert.Equal(300, UpdatePriorities.Low);
     }
 
     // ---------- Mount 拒绝集 ----------
@@ -247,7 +247,7 @@ public class BusMountTests
         engine.Bus.Mount(BusTestHelpers.RecordingPassive("C", new[] { "u" }, trace));
 
         var snapshot = engine.Bus.GetSubscribers("u");
-        Assert.Equal(new[] { "B", "A", "C" }, snapshot); // 优先级降序→注册序升序
+        Assert.Equal(new[] { "B", "A", "C" }, snapshot); // 优先级升序→注册序升序
 
         await engine.Emit("u");
         Assert.Equal(new[] { "B", "A", "C" }, trace); // 读面顺序＝执行序

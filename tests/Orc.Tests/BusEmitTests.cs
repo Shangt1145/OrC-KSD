@@ -86,18 +86,32 @@ public class BusEmitTests
     // ---------- 验收②：多订阅者顺序（参考优先级+注册序） ----------
 
     [Fact]
-    public async Task Emit_Orders_By_Mount_Priority_Descending_Then_Registration_Ascending()
+    public async Task Emit_Orders_By_Mount_Priority_Ascending_Then_Registration_Ascending()
     {
         var engine = new LogicEngine();
         var trace = new List<string>();
         engine.Bus.Mount(BusTestHelpers.RecordingPassive("低", new[] { "u" }, trace, priority: UpdatePriorities.Low));
         engine.Bus.Mount(BusTestHelpers.RecordingPassive("高1", new[] { "u" }, trace, priority: UpdatePriorities.High));
-        engine.Bus.Mount(BusTestHelpers.RecordingPassive("中", new[] { "u" }, trace)); // 默认 Normal=0
+        engine.Bus.Mount(BusTestHelpers.RecordingPassive("中", new[] { "u" }, trace)); // 默认 Normal
         engine.Bus.Mount(BusTestHelpers.RecordingPassive("高2", new[] { "u" }, trace, priority: UpdatePriorities.High));
 
         await engine.Emit("u");
 
-        Assert.Equal(new[] { "高1", "高2", "中", "低" }, trace); // 数值大者先；同优先级先挂先执行
+        Assert.Equal(new[] { "高1", "高2", "中", "低" }, trace); // 数值小者先（High → Normal → Low）；同优先级先挂先执行
+    }
+
+    [Fact]
+    public async Task Emit_Executes_Lower_Priority_Values_First()
+    {
+        // 方向锁定：升序（数值小者先）——数值大者后执行；执行序与挂载序相反，证明由优先级主导（而非注册序）
+        var engine = new LogicEngine();
+        var trace = new List<string>();
+        engine.Bus.Mount(BusTestHelpers.RecordingPassive("数值大", new[] { "u" }, trace, priority: 900));
+        engine.Bus.Mount(BusTestHelpers.RecordingPassive("数值小", new[] { "u" }, trace, priority: 100));
+
+        await engine.Emit("u");
+
+        Assert.Equal(new[] { "数值小", "数值大" }, trace);
     }
 
     [Fact]
@@ -121,11 +135,11 @@ public class BusEmitTests
         var engine = new LogicEngine();
         var trace = new List<string>();
         engine.Bus.Mount(BusTestHelpers.RecordingPassive("自定义", new[] { "u" }, trace, priority: 55));
-        engine.Bus.Mount(BusTestHelpers.RecordingPassive("最低", new[] { "u" }, trace, priority: int.MinValue));
-        engine.Bus.Mount(BusTestHelpers.RecordingPassive("最高", new[] { "u" }, trace, priority: int.MaxValue));
+        engine.Bus.Mount(BusTestHelpers.RecordingPassive("极小", new[] { "u" }, trace, priority: int.MinValue));
+        engine.Bus.Mount(BusTestHelpers.RecordingPassive("极大", new[] { "u" }, trace, priority: int.MaxValue));
 
         await engine.Emit("u");
-        Assert.Equal(new[] { "最高", "自定义", "最低" }, trace);
+        Assert.Equal(new[] { "极小", "自定义", "极大" }, trace); // 数值小者先；任意 int（含极小/极大）均可排序
     }
 
     // ---------- 失败记录+继续 ----------

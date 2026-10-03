@@ -122,7 +122,7 @@ public sealed class Bus
 
     /// <summary>
     /// 更新广播：把更新写为目标流的一条 update 条目（发射时捕获一次、整轮固定；先写条目、后广播），
-    /// 随后按「挂载优先级降序（数值大者先）→注册序升序（先挂先执行）」顺序 await 各订阅者（快照：执行期间的挂载/卸载变化不影响本轮）。
+    /// 随后按「挂载优先级升序（数值小者先）→注册序升序（先挂先执行）」顺序 await 各订阅者（快照：执行期间的挂载/卸载变化不影响本轮）。
     /// 订阅者以 payload 为执行数据（键值原样；payload=null 视为空载荷）经统一入口激活；
     /// 订阅者执行流挂载到「发射时的当前执行者流（无则总流）」。
     /// 订阅者传播出的取消类异常 → 停止后续订阅者、原样向上穿透；其余异常 → 记录进发射者流（Error 级；source＝订阅者标识）并继续。
@@ -146,6 +146,9 @@ public sealed class Bus
 
         // 更新条目：source="bus"；message＝更新类型字面值；keywords＝恰单元素 [updateType]；data＝载荷键值（null → 空字典）；level=Info
         capturedStream.WriteUpdate("bus", updateType, LogLevel.Info, new[] { updateType }, payload);
+
+        // S5：外部通道通知（桥 → 订阅回调；各通道异常隔离、取消类穿透；先于订阅者广播）
+        await _engine.NotifyExternalObservers(updateType, payload, capturedStream, ct);
 
         foreach (var subscription in snapshot)
         {
@@ -208,7 +211,7 @@ public sealed class Bus
         stream.WriteLog("bus", message, LogLevel.Info, keywords);
     }
 
-    /// <summary>取该更新的订阅者快照（复制的稳定数组；排序＝挂载优先级降序→注册序升序）。</summary>
+    /// <summary>取该更新的订阅者快照（复制的稳定数组；排序＝挂载优先级升序→注册序升序）。</summary>
     private Subscription[] SnapshotFor(string updateType)
     {
         if (!_subscriptions.TryGetValue(updateType, out var list) || list.Count == 0)
@@ -219,7 +222,7 @@ public sealed class Bus
         var snapshot = list.ToArray();
         Array.Sort(snapshot, static (a, b) =>
         {
-            var byPriority = b.Priority.CompareTo(a.Priority); // 数值大者先（降序）
+            var byPriority = a.Priority.CompareTo(b.Priority); // 数值小者先（升序）
             return byPriority != 0 ? byPriority : a.Seq.CompareTo(b.Seq); // 同优先级：先挂先执行（升序）
         });
         return snapshot;
@@ -253,7 +256,7 @@ public sealed class Bus
         /// <summary>触发器标识（展示名；读面/留痕/错误记录共用语义）。</summary>
         internal string DisplayName { get; }
 
-        /// <summary>挂载优先级（构造期声明；降序执行）。</summary>
+        /// <summary>挂载优先级（构造期声明；升序执行——数值小者先）。</summary>
         internal int Priority { get; }
 
         /// <summary>所有者（ReferenceEquals 匹配）。</summary>

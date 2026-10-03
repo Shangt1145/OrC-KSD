@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Lua</AssemblyName>
+    <RootNamespace>Orc.Lua</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 纯托管 Lua 解释器（零原生依赖）；动态 handler 组件的底层执行引擎 -->
+    <PackageReference Include="MoonSharp" Version="2.0.0" />
+  </ItemGroup>
+
+</Project>

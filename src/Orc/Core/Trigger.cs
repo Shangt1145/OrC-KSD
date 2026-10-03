@@ -36,7 +36,7 @@ public class Trigger<TView> where TView : class
 
     /// <summary>
     /// 以初始化形态构造触发器（名称〔可选〕、Kind〔默认主动〕、band 方案〔默认缺省〕、初始事件集合〔可选〕、
-    /// hooks 声明〔S3；可选〕、挂载优先级〔S3；默认 0＝Normal〕、所有者〔S3；可选〕）。
+    /// hooks 声明〔S3；可选〕、挂载优先级〔S3；默认 Normal〕、所有者〔S3；可选〕）。
     /// 初始事件集合与注册 API 为等价通道（逐项走相同装配校验）。
     /// hooks 声明时机仅构造期（无运行期注册 API）：非空即被动语义；每项须非空、非纯空白、不重复（声明顺序保留）。
     /// </summary>
@@ -50,7 +50,7 @@ public class Trigger<TView> where TView : class
         Type? bandType = null,
         IEnumerable<TriggerEvent<TView>>? events = null,
         IEnumerable<string>? hooks = null,
-        int priority = 0,
+        int priority = UpdatePriorities.Normal,
         object? owner = null)
     {
         Name = name;
@@ -137,21 +137,50 @@ public class Trigger<TView> where TView : class
     /// <summary>当前挂载的总线（null＝未挂载；实例级状态；仅由总线 Mount/UnmountOwner 读写）。</summary>
     internal Bus? MountedBus { get; set; }
 
-    /// <summary>注册一个不带 band 的事件（落默认区段；仅默认 band 方案可用）。</summary>
+    /// <summary>注册一个不带 band 的事件（落默认区段；仅默认 band 方案可用）。返回注册句柄（S4 加性扩展；可用于 <see cref="Unregister"/> 撤销）。</summary>
     /// <exception cref="ArgumentNullException">handler 为 null。</exception>
     /// <exception cref="ArgumentException">事件名为空；默认方案下 band 校验不适用项。</exception>
     /// <exception cref="ArgumentOutOfRangeException">优先级越界（须满足 0 ≤ 优先级 &lt; 1000）。</exception>
-    public void Register(string name, Func<TView, Context, CancellationToken, Task> handler, int priority = 0)
-        => AddEvent(name, handler, band: null, priority);
+    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, int priority = 0)
+    {
+        var entry = AddEvent(name, handler, band: null, priority);
+        return new TriggerRegistration(this, entry.Seq, name);
+    }
 
-    /// <summary>注册一个带 band 的事件（band 成员须与触发器声明的方案一致；专门方案下必须显式携带）。</summary>
+    /// <summary>注册一个带 band 的事件（band 成员须与触发器声明的方案一致；专门方案下必须显式携带）。返回注册句柄（S4 加性扩展；可用于 <see cref="Unregister"/> 撤销）。</summary>
     /// <exception cref="ArgumentNullException">handler 或 band 为 null。</exception>
     /// <exception cref="ArgumentException">事件名为空；band 成员与已声明方案不一致（二选一保护）。</exception>
     /// <exception cref="ArgumentOutOfRangeException">band 值或优先级越界（band 须为自然数且 ≤ 1,000,000）。</exception>
-    public void Register(string name, Func<TView, Context, CancellationToken, Task> handler, Enum band, int priority = 0)
+    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, Enum band, int priority = 0)
     {
         ArgumentNullException.ThrowIfNull(band);
-        AddEvent(name, handler, band, priority);
+        var entry = AddEvent(name, handler, band, priority);
+        return new TriggerRegistration(this, entry.Seq, name);
+    }
+
+    /// <summary>
+    /// 撤销一条注册（S4 加性扩展：注册项移除能力；对 S2 注册面的受控补充）。
+    /// 语义：句柄指向本触发器且对应注册项仍存在 → 移除并返回 true；重复撤销（条目已移除）/句柄不属于本触发器 → 幂等无操作、返回 false、不抛错。
+    /// 快照语义：执行期间的撤销不影响本轮已开始的迭代（与注册侧一致）；被撤销条目不再参与后续执行。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">registration 为 null。</exception>
+    public bool Unregister(TriggerRegistration registration)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+
+        if (!ReferenceEquals(registration.TriggerRef, this))
+        {
+            return false; // 非本触发器句柄：幂等无操作
+        }
+
+        var index = _events.FindIndex(e => e.Seq == registration.Seq);
+        if (index < 0)
+        {
+            return false; // 已撤销/不存在：幂等无操作
+        }
+
+        _events.RemoveAt(index);
+        return true;
     }
 
     /// <summary>
@@ -245,7 +274,7 @@ public class Trigger<TView> where TView : class
         }
     }
 
-    private void AddEvent(string name, Func<TView, Context, CancellationToken, Task> handler, Enum? band, int priority)
+    private EventEntry AddEvent(string name, Func<TView, Context, CancellationToken, Task> handler, Enum? band, int priority)
     {
         ArgumentNullException.ThrowIfNull(handler);
 
@@ -261,7 +290,9 @@ public class Trigger<TView> where TView : class
         }
 
         var bandValue = ResolveBandValue(band);
-        _events.Add(new EventEntry(name, handler, bandValue, priority, _seq++));
+        var entry = new EventEntry(name, handler, bandValue, priority, _seq++);
+        _events.Add(entry);
+        return entry;
     }
 
     /// <summary>band 成员解析与二选一保护校验（默认方案／专门方案的判定矩阵）。</summary>
@@ -368,6 +399,30 @@ public class Trigger<TView> where TView : class
         /// <summary>排序键＝band 值×1000＋band 内优先级。</summary>
         internal long SortKey => (long)BandValue * PriorityUpperBound + Priority;
     }
+}
+
+/// <summary>
+/// 注册句柄（S4 加性扩展）：<see cref="Trigger{TView}.Register(string, Func{TView, Context, CancellationToken, Task}, int)"/> 的返回值，
+/// 标识触发器内的一条注册项，可用作 <see cref="Trigger{TView}.Unregister"/> 的撤销依据。
+/// 仅由注册面创建；不含可变状态。
+/// </summary>
+public sealed class TriggerRegistration
+{
+    internal TriggerRegistration(object triggerRef, long seq, string name)
+    {
+        TriggerRef = triggerRef;
+        Seq = seq;
+        Name = name;
+    }
+
+    /// <summary>注册项的事件名（可读标识；不承担唯一键职责——同名事件可存在多条，撤销以句柄为准）。</summary>
+    public string Name { get; }
+
+    /// <summary>所属触发器引用（撤销时按引用相等匹配；内部使用）。</summary>
+    internal object TriggerRef { get; }
+
+    /// <summary>注册序（触发器内唯一，作为注册项身份；内部使用）。</summary>
+    internal long Seq { get; }
 }
 
 /// <summary>
