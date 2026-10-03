@@ -4,7 +4,16 @@
 
 ## 未决问题
 
-### Q10: 用户对 `Shangt1145/OrC-KSD` 的写权限 In Progress
+### Q11: 提交范围是否扩展至源码（需求变更）In Progress
+- 触发：用户要求「push 一次」，但工作区新增内容超出原 R1 范围。
+- 实测：未跟踪文件 282 个，其中 **254 个是 `bin/`、`obj/` 编译产物（9.34MB）**；其余 28 个为 `OrcEngine.sln`、`OrcEngine.slnx`、`src/Orc/Core/*.cs`(10)、`src/Orc/Orc.csproj`、`tests/Orc.Tests/*.cs`(4)、`tests/Orc.Tests/Orc.Tests.csproj`、`.ams/context/CONTEXT.md` 与 `card-engine/`、`orc-engine/` 下 CONTEXT.md(3)、`.ams-docs/2de7063f-.../`(7 个需求/实现/grill 文档)。
+- 敏感扫描：新增文本文件中未命中 `sk-*`/`apiKey`/`password`/`Bearer`。
+- 冲突点：原 R1 未包含 `src/`、`tests/`、解决方案文件，属提交范围变更。
+- 选项 a：扩展至源码与工程文件，并新增 .NET 忽略规则（`bin/`、`obj/`、`.vs/`、`*.user`）——推荐。
+- 选项 b：只提交文档，源码留在本地。
+- 选项 c：全部提交（含编译产物）——不建议。
+
+### Q10: 用户对 `Shangt1145/OrC-KSD` 的写权限 Completed
 - 实测事实（GitHub 公开 API）：`owner.login = Shangt1145`（id 227738197）、`private = false`、`visibility = public`、`description = 114514`、`created_at = 2026-10-03T07:25:31Z`、`size = 0`、`default_branch = main`、`has_issues = true`、`has_pull_requests = true`、`allow_forking = true`。
 - 用户陈述：「这个仓库是 Shangt1145 开的，不是我开的」。
 - 冲突：原计划以用户身份向该仓库推送，但非所有者默认对该仓库**无写权限**；`git push` 将以 403 失败。

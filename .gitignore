@@ -4,3 +4,11 @@
 # agent 工具链：默认全部忽略，仅放行 context（agent 产出的文档成果）
 /.ams/*
 !/.ams/context/
+
+# .NET 构建产物：编译中间结果与 IDE 本地状态，不属于产出
+**/bin/
+**/obj/
+.vs/
+TestResults/
+*.user
+*.suo
