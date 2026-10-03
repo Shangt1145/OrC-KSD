@@ -45,7 +45,7 @@ _Avoid_: 转换错误、序列化错误
 _Avoid_: 未找到、不存在
 
 **禁用面 / 保留面**：
-禁用面＝被硬沙箱封锁的主体集合（io、os、package、debug、require、loadstring、loadfile、dofile、print、collectgarbage、raw 系〔rawget/rawset/rawlen/rawequal〕、元表操作〔setmetatable/getmetatable〕等），访问即失败（沙箱限制），R5/R13 清单为最低要求（可增不可减）；保留面＝必须可用的基础集合（string、math、table、next、select、unpack 与基础函数 pairs/ipairs/type/tostring/tonumber/pcall/error/assert），未列项默认最小暴露（保留须汇报）。
+禁用面＝被硬沙箱封锁的主体集合（io、os、package、debug、require、loadstring、loadfile、dofile、print、collectgarbage、raw 系〔rawget/rawset/rawlen/rawequal〕、元表操作〔setmetatable/getmetatable〕等），访问即失败（沙箱限制），R5/R13 清单为最低要求（可增不可减）；保留面＝必须可用的基础集合（string、math、table、next、select、unpack 与基础函数 pairs/ipairs/type/tostring/tonumber/pcall/error/assert）；**清单外**（如 coroutine/utf8/bit32）＝默认自然缺失（nil；实现可保留〔可用〕或封锁升级〔沙箱限制〕，均须汇报）。
 _Avoid_: 黑名单、灰名单
 
 **单线程假设**：
@@ -79,3 +79,5 @@ _Avoid_: 有状态、缓存
 - **验收覆盖矩阵收口**（2026-10-03 · Orc.Lua 委托 grill 第 10 轮确认）：下限＝六类错误各≥1＋三阶段全覆盖＋委托 6 项逐条可指认；本轮新增列入：失败后可用性（再次调用＋不回滚）、不可用单元复现、快照正反例、多实例独立、显式 null 抛、禁用面写；非行为性（跨线程/深嵌套/循环引用/位置/性能）不要求；测试组织自由、名称级映射对外。
 
 - **访问控制外延与边角核查**（2026-10-03 · Orc.Lua 委托 grill 第 11 轮确认）：raw 系与元表操作并入禁用面（不提供、沙箱限制；"等"覆盖一切绕过路径；枚举面不得获取未授权能力）；保留面补 next/select/unpack；raw 写路径含于"能力不可篡改"（不可达）；空源合法（≠null）；回调返回 null→nil（复用 R6 双向面）；域始终存在、读域合法、域下未注册＝白名单拒绝。
+
+- **清单外语义与断言边界**（2026-10-03 · Orc.Lua 委托 grill 第 12 轮确认）：清单外名字＝默认自然缺失（nil；保留/封锁升级两方向允许且须汇报）；"不得静默"仅适用管控名；三档×操作表（保留面写＝自由、清单外写＝默认自由）；验收仅"清单内必失败＋保留面必可用"；枚举面仅原则＋汇报；消息断言＝非空、不绑文案。
