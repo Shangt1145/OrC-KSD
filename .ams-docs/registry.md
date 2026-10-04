@@ -18,4 +18,6 @@
 | 触发器验证与Targeter | 需求 — 触发器验证与 Targeter（架构改进） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器验证与Targeter\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | ffac8cc5-d756-4161-945c-21d8d7390dfa | 触发器合法性验证 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\ffac8cc5-d756-4161-945c-21d8d7390dfa\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 7de2bdc3-25a1-4f5d-ba81-0ad7073fb0b8 | Targeter 指示器 — 需求阐明记录（类/功能流程级） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\7de2bdc3-25a1-4f5d-ba81-0ad7073fb0b8\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| 3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51 | 2A 结构层 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 84234bf1-17ce-4de2-9411-67bc15ea722e | 2B 打出链 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\84234bf1-17ce-4de2-9411-67bc15ea722e\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 67068e40-6143-4ca9-867d-f95843ac63b8 | 2C 指挥与词条（需求阐明记录） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\67068e40-6143-4ca9-867d-f95843ac63b8\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
