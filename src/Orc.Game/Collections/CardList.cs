@@ -11,6 +11,8 @@ namespace Orc.Game.Collections;
 /// 方法语义：Add / AddRange 尾部装填；Insert 指定位置插入（越界抛错）；Draw 取首张并移除（空集合抛错）；
 /// Shuffle 以传入的确定性随机源（受控源形态 <see cref="IRandomSource"/>）就地打乱（Fisher–Yates；集合自身不持有随机源）；
 /// Instantiate 经卡牌库把名单转换为卡牌实例集（纯转换，不含洗牌/抽取等副作用）。
+/// 〔G7 回迁基础件〕InsertInstanceAt＝「新增条目＋装配实例」封装的单操作（原子；卡组侧已含同一实例＝明确拒绝）；
+/// ContainsInstance＝实例存在性只读查询（回迁动作「重复归属」前置校验的读面）。
 /// </summary>
 public sealed class CardList : IReadOnlyList<string>
 {
@@ -130,6 +132,43 @@ public sealed class CardList : IReadOnlyList<string>
         }
 
         entry.Instance = instance;
+    }
+
+    /// <summary>
+    /// 在指定位置插入新条目并装配加载实例（G7 回迁基础件：「新增条目＋装配实例」封装的单操作——由回迁动作组合调用）。
+    /// 原子：全部校验通过后才变更（拒绝＝集合不变）。新条目＝id（允许重复——对齐名单哲学）；instance＝该条目的加载实例
+    /// （插入即已加载状态、可经 <see cref="DrawInstance"/> 取件）。
+    /// 重复实例归属检查：卡组侧（任一条目）已含同一实例＝明确拒绝（对齐既有「重复装配拒绝」——实例唯一归属不变量）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">instance 为 null。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">index 越界（合法范围 0..Count）。</exception>
+    /// <exception cref="InvalidOperationException">卡组已含同一实例（重复归属被拒绝）。</exception>
+    public void InsertInstanceAt(int index, string id, CardBase instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        if (index < 0 || index > _items.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"插入位置越界（合法范围：0..{_items.Count}）。");
+        }
+
+        if (ContainsInstance(instance))
+        {
+            throw new InvalidOperationException(
+                $"卡牌 '{instance.Name}' 已装配在卡组中（重复归属被拒绝——实例唯一归属不变量）。");
+        }
+
+        _items.Insert(index, new Entry(id) { Instance = instance });
+    }
+
+    /// <summary>
+    /// 卡组侧实例存在性（G7 只读查询；按引用相等——实例唯一归属检查的读面）：任一条目已装配该实例＝true。
+    /// 回迁动作的「重复归属」前置校验使用；纯读、无副作用。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">instance 为 null。</exception>
+    public bool ContainsInstance(CardBase instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        return _items.Any(entry => ReferenceEquals(entry.Instance, instance));
     }
 
     /// <summary>以给定确定性随机源就地打乱（Fisher–Yates；对局路径经对局随机服务〔受控源形态〕传入、可复现——G8：集合不持有随机源）。</summary>

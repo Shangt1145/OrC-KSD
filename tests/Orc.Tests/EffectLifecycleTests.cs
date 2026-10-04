@@ -14,7 +14,7 @@ public class EffectLifecycleTests
     // ---------- 放置链路边界 ----------
 
     [Fact]
-    public async Task Add_Before_Place_Is_Static_Assembly_And_Place_Drives_Loadout()
+    public async Task Add_Loads_Immediately_And_Place_Drive_Is_Idempotent()
     {
         var engine = new LogicEngine();
         var attacker = new Card(engine, "战士");
@@ -24,24 +24,21 @@ public class EffectLifecycleTests
         var heal = new AttackHealEffect(engine, 5);
         attacker.AddEffect(heal);
 
-        // 放置前：静态组装——未装载、无注入
-        Assert.False(heal.IsMounted);
-        Assert.Equal(0, heal.MountCount);
-        Assert.DoesNotContain("攻击时回血", engine.Bus.GetSubscribers(Updates.EffectRemoved));
+        // W3-A3（受控适配：原「放置前＝静态组装」断言反转）——添加即装载：未放置也装载、注入已就绪
+        Assert.True(heal.IsMounted);
+        Assert.Equal(1, heal.MountCount);
+        Assert.Contains("攻击时回血", engine.Bus.GetSubscribers(Updates.EffectRemoved));
 
-        await engine.AttackFlow.ExecuteAsync(attacker, defender, 3); // 注入未完成：不回血
-        Assert.Equal(0, heal.HealCount);
-        Assert.Equal(10, attacker.GetData<HealthData>().Hp);
+        await engine.AttackFlow.ExecuteAsync(attacker, defender, 3); // 装载已生效：回血
+        Assert.Equal(1, heal.HealCount);
+        Assert.Equal(15, attacker.GetData<HealthData>().Hp);
 
-        // 放置驱动装载
+        // 放置驱动：幂等（不重复装载/不重复 OnMount）；初始化照常完成
         await S4TestHelpers.Place(engine, attacker);
         Assert.True(attacker.IsPlaced);
         Assert.True(heal.IsMounted);
-        Assert.Equal(1, heal.MountCount);
-
-        await engine.AttackFlow.ExecuteAsync(attacker, defender, 3); // 已生效
-        Assert.Equal(1, heal.HealCount);
-        Assert.Equal(15, attacker.GetData<HealthData>().Hp);
+        Assert.Equal(1, heal.MountCount); // 不重复 OnMount
+        Assert.Single(S4TestHelpers.EntriesWith(engine, "loadout", "mount", "攻击时回血")); // 装载留痕恰一条
     }
 
     [Fact]
@@ -122,26 +119,27 @@ public class EffectLifecycleTests
     }
 
     [Fact]
-    public async Task Remove_Before_Place_Is_Container_Only()
+    public async Task Remove_Of_Unloaded_Effect_Is_Container_Only()
     {
         var engine = new LogicEngine();
         var card = new Card(engine, "战士");
         card.AddData(new HealthData { Hp = 10 });
-        var heal = new AttackHealEffect(engine, 5);
-        card.AddEffect(heal); // 未放置（未装载）
+        var bad = new FailingMountEffect(); // W3-A3 受控适配：旧「未放置卡 Add 后移除」构造不再产生未装载态——改用「装载失败回滚后的效果」构造未装载态
+        card.AddEffect(bad);
+        Assert.False(bad.IsMounted); // 装载尝试失败（回滚为未生效）＝未装载态
 
-        card.RemoveEffect(heal); // 仅容器面移除
+        card.RemoveEffect(bad); // 仅容器面移除
 
         Assert.Empty(card.Effects);
-        Assert.False(heal.IsMounted);
-        Assert.Equal(0, heal.UnmountCount); // 未装载不触 OnUnmount（幂等边界）
-        Assert.Equal(0, heal.MountCount);
+        Assert.False(bad.IsMounted);
+        Assert.Equal(0, bad.UnmountCount); // 未装载不触 OnUnmount（幂等边界）
+        Assert.Equal(1, bad.MountAttempts);
         Assert.Contains(
             engine.RootStream.Entries,
-            e => e.Keywords.Contains("detach") && e.Keywords.Contains("攻击时回血")); // 留痕：未装载移除
+            e => e.Keywords.Contains("detach") && e.Keywords.Contains("装载炸弹")); // 留痕：未装载移除
         Assert.DoesNotContain(
             engine.RootStream.Entries,
-            e => e.Keywords.Contains("cleanup") && e.Keywords.Contains("攻击时回血")); // 无运行态清理
+            e => e.Keywords.Contains("cleanup") && e.Keywords.Contains("装载炸弹")); // 无运行态清理
     }
 
     // ---------- 两路径收敛 ----------
@@ -290,18 +288,26 @@ public class EffectLifecycleTests
         card.AddData(new HealthData { Hp = 10 });
         var bad = new FailingMountEffect();
         var good = new AttackHealEffect(engine, 5, "好效果");
-        card.AddEffect(bad);
+        card.AddEffect(bad); // W3-A3：添加即装载——首次尝试失败（回滚为未生效、记录）
         card.AddEffect(good);
-
-        await S4TestHelpers.Place(engine, card); // 不抛：装载失败被隔离
 
         Assert.False(bad.IsMounted);  // 视为未生效（回滚）
         Assert.True(good.IsMounted);  // 不阻断其它效果的装载
         Assert.DoesNotContain("装载炸弹", engine.Bus.GetSubscribers(Updates.EffectRemoved)); // 回滚：主触发器未滞留
+        var firstErrors = engine.RootStream.Entries
+            .Where(e => e.Level == LogLevel.Error && e.Source == "装载炸弹/OnMount")
+            .ToArray();
+        Assert.Single(firstErrors); // 添加即时装载：失败记录恰一条
 
-        var error = engine.RootStream.Entries.Single(
-            e => e.Level == LogLevel.Error && e.Source == "装载炸弹/OnMount");
-        Assert.Contains("loadout", error.Keywords); // 失败记录可定位（source 含效果标识与钩子名）
+        await S4TestHelpers.Place(engine, card); // 不抛：装载失败被隔离；放置驱动对未装载者＝兜底重试（再次失败、再次记录）
+
+        Assert.False(bad.IsMounted);
+        Assert.True(good.IsMounted);  // 已装载＝幂等跳过、不受影响
+        var errors = engine.RootStream.Entries
+            .Where(e => e.Level == LogLevel.Error && e.Source == "装载炸弹/OnMount")
+            .ToArray();
+        Assert.Equal(2, errors.Length); // 两次装载驱动（Add 即时＋放置兜底重试）各记录一条
+        Assert.All(errors, e => Assert.Contains("loadout", e.Keywords)); // 失败记录可定位（source 含效果标识与钩子名）
 
         var defender = new Card(engine, "哥布林");
         defender.AddData(new HealthData { Hp = 10 });
@@ -349,7 +355,7 @@ public class EffectLifecycleTests
 
         await S4TestHelpers.Place(engine, card);
         Assert.True(heal.MountSawTriggerOnBus); // 挂载先行、OnMount 后随
-        Assert.True(heal.SawPlacedAtMount);     // 单位初始化先、效果注入后
+        Assert.False(heal.SawPlacedAtMount);    // W3-A3 受控适配：添加即装载——OnMount 时尚未放置（「初始化先、装载后」顺序契约在放置驱动兜底装载场景保持，见 Place_Driven_Fallback_Load 用例）
         Assert.Equal(10, heal.MountHp);         // 钩子内可访问宿主卡牌与数据组件
 
         card.RemoveEffect(heal);
@@ -388,14 +394,15 @@ public class EffectLifecycleTests
         var engine = new LogicEngine();
         var card = new Card(engine, "战士");
         card.AddData(new HealthData { Hp = 10 });
-        var heal = new AttackHealEffect(engine, 5);
-        card.AddEffect(heal); // 未放置（未装载）
+        var bad = new FailingMountEffect(); // W3-A3 受控适配：改用「装载失败回滚后的效果」构造未装载态
+        card.AddEffect(bad);
+        Assert.False(bad.IsMounted);
 
-        await S4TestHelpers.RemoveViaUpdate(engine, card, heal); // 低层更新驱动对未装载效果：幂等模板（仅容器面）
+        await S4TestHelpers.RemoveViaUpdate(engine, card, bad); // 低层更新驱动对未装载效果：幂等模板（仅容器面）
 
         Assert.Empty(card.Effects);
-        Assert.False(heal.IsMounted);
-        Assert.Equal(0, heal.UnmountCount);
-        Assert.Equal(0, heal.MountCount);
+        Assert.False(bad.IsMounted);
+        Assert.Equal(0, bad.UnmountCount);
+        Assert.Equal(1, bad.MountAttempts);
     }
 }

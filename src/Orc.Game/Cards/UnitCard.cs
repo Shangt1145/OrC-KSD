@@ -12,8 +12,8 @@ namespace Orc.Game.Cards;
 /// 触发器（2B）：
 /// ①预打出触发器（费用校验——指挥点验证；开始＝验证＋targeter 交互由打出管理器驱动）；
 /// ②打出触发器（费用校验——外层复验；默认链＝打出宣告〔card.played〕→ 部署链 → 收尾〔扣费→离手→词条落点〔闪击＝扣费后〕〕）；
-/// ③部署触发器（默认链＝部署逻辑检查〔组件存在且 handler 非空〕→ 部署词条效果按序触发〔逐条异常隔离〕→ 单位化触发器 → unit.deployed）；
-/// ④加入触发器（默认链＝单位化触发器 → unit.joined；不扣费、不走部署词条）；
+/// ③部署触发器（默认链＝部署逻辑检查〔组件存在且 handler 非空〕→ 部署词条效果按序触发〔逐条异常隔离〕→ 单位化触发器 → card.placed → unit.deployed）；
+/// ④加入触发器（默认链＝单位化触发器 → card.placed → unit.joined；不扣费、不走部署词条）；
 /// ⑤单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位＋建立修饰机制初始快照〔W2b〕）。
 /// 门户（W2b G3；单位数值受控变更面——防御语义）：伤害扣减 <see cref="ApplyDefenseDamageAsync"/>（损伤量增加）与
 /// 修复 <see cref="RepairDefenseAsync"/>（恢复到上限）＝运行期数值本体的合规变更入口（配合卡侧修饰容器＝修饰加值/撤销）；
@@ -85,20 +85,13 @@ public class UnitCard : CardBase
             return; // 部署链未完成（防御：单位化失败等）：不进入收尾（不扣费、不离手）
         }
 
-        // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C）
+        // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C-A1：闪击＝扣费后；经静态助手收口——组件遍历在其内）
         player.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
         player.Hand.Remove(unit);
-        if (unit.TryGetData<KeywordLogicData>(out var keywordLogics))
-        {
-            // 闪击：部署链收尾（扣费完成之后、链返回之前）——允许单位可移动和攻击；仅部署路径生效。
-            foreach (var logic in keywordLogics.Logics)
-            {
-                await logic.OnDeployChainFinalizedAsync(unit, ct);
-            }
-        }
+        await KeywordRules.OnDeployChainFinalizedAsync(unit, ct);
     }
 
-    /// <summary>部署链（内层）：默认检查〔部署逻辑组件存在且 handler 非空〕→ 部署词条效果按序触发 → 单位化 → unit.deployed。</summary>
+    /// <summary>部署链（内层）：默认检查〔部署逻辑组件存在且 handler 非空〕→ 部署词条效果按序触发 → 单位化 → card.placed → unit.deployed。</summary>
     private async Task HandleDeployChainAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
         if (view.Card is not UnitCard unit || view.Position is not { } slot)
@@ -146,14 +139,18 @@ public class UnitCard : CardBase
         await unit.UnitizeTrigger.InvokeAsync(_chainEngine, BuildUnitData(unit, view.Player as Player, slot), ct);
         if (ctx.Interrupted)
         {
-            return; // 单位化未完成（防御：装配失败不留矛盾中间态）：不发射 unit.deployed
+            return; // 单位化未完成（防御：装配失败不留矛盾中间态）：不发射 card.placed / unit.deployed
         }
 
-        // ③ 部署完成：unit.deployed（单位化之后——组件挂载＋槽位占用已成立）
+        // ③ W3-A3：放置驱动装载信号（card.placed）——单位化（组件挂载＋槽位占用）成功之后、完成信号之前
+        //    （策略 1 效果以此驱动延迟挂载；装载链放置处理器幂等吸收；失败/中止不发射——「每次成功完成的部署恰发射一次」）。
+        await GameUpdates.EmitCardPlaced(_chainEngine, unit, ct);
+
+        // ④ 部署完成：unit.deployed（单位化之后——组件挂载＋槽位占用已成立）
         await GameUpdates.EmitUnitDeployed(_chainEngine, unit, slot, ct);
     }
 
-    /// <summary>加入链：单位化 → unit.joined（不扣费、不走部署词条）。</summary>
+    /// <summary>加入链：单位化 → card.placed → unit.joined（不扣费、不走部署词条）。</summary>
     private async Task HandleJoinChainAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
         if (view.Card is not UnitCard unit || view.Position is not { } slot)
@@ -165,8 +162,11 @@ public class UnitCard : CardBase
         await unit.UnitizeTrigger.InvokeAsync(_chainEngine, BuildUnitData(unit, view.Player as Player, slot), ct);
         if (ctx.Interrupted)
         {
-            return; // 单位化未完成（防御）：不发射 unit.joined
+            return; // 单位化未完成（防御）：不发射 card.placed / unit.joined
         }
+
+        // W3-A3：放置驱动装载信号（card.placed）——单位化成功之后、完成信号之前（每次成功完成的加入恰发射一次）。
+        await GameUpdates.EmitCardPlaced(_chainEngine, unit, ct);
 
         await GameUpdates.EmitUnitJoined(_chainEngine, unit, slot, ct);
     }

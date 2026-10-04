@@ -8,9 +8,9 @@ namespace Orc.Cards;
 /// 容器语义：键＝类型（每类型恰一份数据组件；重复添加拒绝、缺失读取抛明确异常）；引用共享（读取返回实例、外部可直接修改）；
 /// Effects 为只读枚举面（增删经 Add/Remove API）；单线程语义、无额外保护。
 /// 生命周期（驱动信号＝更新；响应＝装载链处理器/效果主触发器）：
-/// 放置（card.placed）→ 初始化＋效果装载（被动：挂载＋OnMount；已放置后再 Add 的被动效果即时装载）；
-/// 加载时点装载（MountPassiveEffects）→ 挂主触发器＋OnMount（幂等；与放置驱动共用同一装载链——后续放置/入场入口幂等跳过）；
-/// 移除（RemoveEffect）/ 效果移除更新（effect.removed）→ 容器面移除＋卸载链；销毁（<see cref="LogicEngine.DestroyCard"/>）＝杀＋card.destroyed 驱动清理。
+/// 放置（card.placed）→ 初始化＋效果装载幂等兜底（被动：挂载＋OnMount；装载不再以放置状态为前提——三入口：加载时点/放置驱动/Add 即时）；
+/// 加载时点装载（MountPassiveEffects）→ 挂主触发器＋OnMount（幂等；与放置驱动/Add 即时共用同一装载链——重复驱动幂等跳过）；
+/// 移除（RemoveEffect）/ 效果移除更新（effect.removed）→ 容器面移除＋卸载链（成功事务实际移除命中恰发射一次 effect.removed）；销毁（<see cref="LogicEngine.DestroyCard"/>）＝杀＋card.destroyed 驱动清理。
 /// </summary>
 public class Card : Entity
 {
@@ -31,7 +31,11 @@ public class Card : Entity
     /// <summary>所属引擎（构造期绑定；内部使用）。</summary>
     internal LogicEngine Engine { get; }
 
-    /// <summary>放置初始化标记（S4 顺序契约观察点）：经 card.placed 放置处理置位（先于效果注入）；置位后新增被动效果即时装载。</summary>
+    /// <summary>
+    /// 放置初始化标记：经 card.placed 放置处理置位（先于该处理内效果装载步骤）。
+    /// W3-A3：本状态保留为查询原语（效果侧「仅在场生效」语义可读——如策略 2 内部门控）；不再作为框架即时装载的门控
+    /// （Add 即装载——未上场语义由效果按三策略自持）。
+    /// </summary>
     public bool IsPlaced { get; private set; }
 
     // ---------- 数据组件（数据面：键＝类型；每类型恰一份） ----------
@@ -92,8 +96,9 @@ public class Card : Entity
     public IReadOnlyList<Effect> Effects => _effects;
 
     /// <summary>
-    /// 添加效果。放置前 Add＝静态组装（等待放置驱动）；已放置卡 Add 的被动效果＝即时执行装载链（与放置驱动装载行为一致，不产生静默死效果）；
-    /// 主动效果始终仅进入列表（等待施放）。
+    /// 添加效果。被动效果＝即时执行装载链（与放置驱动/加载时点装载行为一致——「Add 即装载」；
+    /// 装载不再以放置状态为前提——「仅在场生效」的未上场语义由效果按三策略自持）；复装（移除后再添加）＝重新装载
+    /// （托管登记随通用装载路径自动重建）。主动效果始终仅进入列表（等待施放）。
     /// </summary>
     /// <exception cref="ArgumentNullException">effect 为 null。</exception>
     /// <exception cref="InvalidOperationException">该实例已在列表（重复添加被拒绝）；或该效果实例已属于另一张卡牌。</exception>
@@ -116,15 +121,17 @@ public class Card : Entity
         _effects.Add(effect);
         effect.SetHost(this);
 
-        if (IsPlaced && effect.Kind == TriggerKind.Passive)
+        if (effect.Kind == TriggerKind.Passive)
         {
-            CardLoadout.MountEffect(this, effect); // 即时装载（幂等：未装载才执行）
+            CardLoadout.MountEffect(this, effect); // 即时装载（幂等：未装载才执行；失败＝记录＋回滚为未生效、不阻断容器添加）
         }
     }
 
     /// <summary>
     /// 移除效果（规范入口）：容器面移除；已装载 → 卸载链（OnUnmount → 撤销登记 → 总线卸载 → 清引用）；
     /// 未装载 → 仅容器面移除（无运行态清理动作）。
+    /// 发射（W3-A3）：实际移除命中＝恰发射一次 effect.removed（载荷＝{Card, Effect}；先清理〔落定〕、后发射〔对外通知〕）；
+    /// 幂等无操作（不存在/已移除/非本卡）＝不发射。
     /// 幂等：移除不存在/已移除的效果＝无操作、不抛错；重复移除＝幂等。
     /// </summary>
     /// <exception cref="ArgumentNullException">effect 为 null。</exception>
@@ -135,10 +142,23 @@ public class Card : Entity
     }
 
     /// <summary>
+    /// 移除效果（静默清理路径；W3-A3 加性面——未成功事务的回滚专用）：与 <see cref="RemoveEffect"/> 行为一致
+    /// （容器移除＋已装载卸载链；幂等），但**不发射** effect.removed 更新（「无痕」回滚语义——装载失败/授予失败等
+    /// 未成功事务中的卸载不得对外发移除信号）。使用约定：正常（成功事务）路径一律使用 <see cref="RemoveEffect"/>；
+    /// 本面仅限回滚路径（及「源头即信号」类场景）使用。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">effect 为 null。</exception>
+    public void RemoveEffectSilently(Effect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        CardLoadout.CleanupEffect(this, effect, emitRemoved: false);
+    }
+
+    /// <summary>
     /// 装载全部被动效果（加载时点装载入口；加性公共面——供游戏层在「卡牌加载」时点驱动）：
     /// 按 Effects 列表序逐效果执行装载链（挂主触发器 → OnMount；幂等——已装载者跳过；失败＝记录 ＋ 回滚为未生效、不阻断其它效果与宿主）。
-    /// 与放置驱动装载（card.placed 处理器）共用同一装载链与幂等语义：加载时点装载后，
-    /// 后续其它装载入口（放置/入场等）到达时幂等跳过（已装载不重复 OnMount）；主动效果不装载（仅列表进出）。
+    /// 与放置驱动装载（card.placed 处理器）/ Add 即时装载共用同一装载链与幂等语义：
+    /// Add 即装载（W3-A3）后本面多为幂等跳过；对仍未装载者（如装载失败回滚后）＝兜底重试装载；主动效果不装载（仅列表进出）。
     /// </summary>
     public void MountPassiveEffects()
     {

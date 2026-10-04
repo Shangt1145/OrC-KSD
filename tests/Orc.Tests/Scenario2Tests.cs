@@ -22,21 +22,25 @@ public class Scenario2Tests
         var heal = new AttackHealEffect(engine, 5);
         attacker.AddEffect(heal);
 
-        // ── ① 放置 → 注入生效（初始化先、注入后）────────────────────────
+        // ── ① 添加即装载（W3-A3）→ 放置驱动幂等 ────────────────────────
+        Assert.True(heal.IsMounted); // 效果生效（注入完成——未放置也装载）
+        Assert.Equal(1, heal.MountCount);
+        Assert.False(heal.SawPlacedAtMount); // 装载时初始化尚未发生（未上场语义下放效果三策略）
+
         await S4TestHelpers.Place(engine, attacker);
         await S4TestHelpers.Place(engine, defender);
 
-        Assert.True(heal.IsMounted); // 效果生效（注入完成）
+        Assert.True(heal.IsMounted);
         Assert.Contains("攻击时回血", engine.Bus.GetSubscribers(Updates.EffectRemoved)); // 主触发器挂载（运行时代表就位）
         Assert.Contains("攻击时回血", engine.Bus.GetSubscribers(Updates.CardDestroyed));
+        Assert.Equal(1, heal.MountCount); // 放置驱动幂等：不重复装载/不重复 OnMount
 
         var initIdx = S4TestHelpers.IndexOfEntry(
             engine, e => e.Keywords.Contains("loadout") && e.Keywords.Contains("init") && e.Keywords.Contains("战士"));
         var mountIdx = S4TestHelpers.IndexOfEntry(
             engine, e => e.Keywords.Contains("loadout") && e.Keywords.Contains("mount") && e.Keywords.Contains("攻击时回血"));
         Assert.True(initIdx >= 0 && mountIdx >= 0);
-        Assert.True(initIdx < mountIdx); // 事件流条目次序：初始化先于装载/注入
-        Assert.True(heal.SawPlacedAtMount); // 状态可观察：OnMount 执行时初始化已可用
+        Assert.True(mountIdx < initIdx); // 事件流条目次序（W3-A3 新时序）：添加即装载先于放置初始化（放置驱动幂等跳过）
 
         // ── ② 攻击 →（经伤害结算）→ 攻击者回血；伤害结算先于回血 ────────
         var attackStream = await engine.AttackFlow.ExecuteAsync(attacker, defender, 3);

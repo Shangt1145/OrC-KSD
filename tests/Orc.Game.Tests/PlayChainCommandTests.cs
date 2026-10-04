@@ -289,8 +289,9 @@ public class PlayChainCommandTests
 
         Assert.Equal(PlayResultStatus.Failed, result.Status);
         Assert.Equal(PlayFailureReason.PlayVerificationRejected, result.FailureReason);
-        // 零副作用：不触发主动 handler 集/不扣费/不发更新/不离手（本测试无 handler 集；更新仅来自 spender 的部署链）。
-        Assert.Equal(new[] { GameUpdates.CardPlayed, GameUpdates.UnitDeployed }, recorder.Types);
+        // 零副作用：不触发主动 handler 集/不扣费/不发更新/不离手（本测试无 handler 集；更新仅来自 spender 的部署链——
+        // W3-A3 起含放置驱动信号 card.placed）。
+        Assert.Equal(new[] { GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed }, recorder.Types);
         Assert.Equal(0, player.Points);
         Assert.Contains(command, player.Hand);
         Assert.Contains(

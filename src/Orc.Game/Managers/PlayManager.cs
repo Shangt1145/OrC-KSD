@@ -81,6 +81,9 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.GameEnded);
         }
 
+        // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段（外层优先——内部衔接的打出链合并入本段）。
+        await using var _actionScope = _engine.BeginAction();
+
         // ① 开始：触发预打出触发器（验证＝指挥点检查；不足＝拒绝、不发起 targeter 请求、不发任何更新）。
         var preStream = await card.PrePlayTrigger.InvokeAsync(
             _engine,
@@ -165,6 +168,9 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
         }
 
+        // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段。
+        await using var _actionScope = _engine.BeginAction();
+
         var stream = await card.PlayTrigger.InvokeAsync(
             _engine,
             new Dictionary<string, object?>
@@ -212,6 +218,9 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
         }
 
+        // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段。
+        await using var _actionScope = _engine.BeginAction();
+
         var stream = await card.JoinTrigger.InvokeAsync(
             _engine,
             new Dictionary<string, object?>
@@ -251,6 +260,9 @@ public sealed class PlayManager
         {
             return PlayResult.Failure(PlayFailureReason.GameEnded);
         }
+
+        // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段（预打出段＋打出段合并入本段）。
+        await using var _actionScope = _engine.BeginAction();
 
         // ① 预打出段：验证＋handler 捕获集（默认无 handler＝无交互、零更新）。
         var captureBox = new CardCaptureBox();
@@ -324,6 +336,9 @@ public sealed class PlayManager
             throw new InvalidOperationException(
                 "反制使用需要回合上下文（当前行动方），本管理器未装配回合管理器（独立构造场景不支持反制使用）。");
         }
+
+        // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段。
+        await using var _actionScope = _engine.BeginAction();
 
         // 前置判定（与验证同源；用于失败原因的可辨识映射）。
         var rejection = card.EvaluateUse(_turnManager.CurrentPlayer);

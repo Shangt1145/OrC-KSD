@@ -103,5 +103,8 @@ public class GameUpdatesTests
         // 空集合＝无变更不发（逻辑错误——fail-fast 拒绝）
         await Assert.ThrowsAsync<ArgumentException>(() => GameUpdates.EmitCardStatChanged(engine, unit, Array.Empty<string>()));
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardDrawn(engine, null!, null!));
+        // W3-A3：card.placed 发射助手逐参校验
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlaced(null!, unit));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlaced(engine, null!));
     }
 }

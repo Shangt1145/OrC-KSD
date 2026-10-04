@@ -68,31 +68,33 @@ public class EffectSystemTests
     }
 
     [Fact]
-    public async Task Manually_Attached_Effect_Is_Loaded_At_Card_Load()
+    public async Task Manually_Attached_Effect_Is_Loaded_Immediately_And_Load_Is_Idempotent()
     {
-        // 无效果源的卡：装载语境照常（对局卡库实例化）——效果经测试内装配（手动 AddEffect；未放置＝静态组装），
-        // 加载链装载步骤一并覆盖
+        // 无效果源的卡：装载语境照常（对局卡库实例化）——效果经测试内装配（手动 AddEffect；W3-A3：添加即装载），
+        // 加载链装载步骤幂等覆盖（已装载跳过）
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
         var demo = (UnitCard)match.CardLibrary.Instantiate(CommandTestKit.InfantryId);
         var effect = new LifecycleProbeEffect("手动装配效果");
         demo.AddEffect(effect);
 
-        Assert.False(effect.IsMounted); // 装载前：静态组装
+        Assert.True(effect.IsMounted); // W3-A3：添加即装载（不再要求已放置）
+        Assert.Equal(1, effect.MountCalls);
 
         await demo.LoadAsync(match.Players[0]);
 
-        Assert.True(effect.IsMounted);
+        Assert.True(effect.IsMounted); // 加载链幂等：已装载跳过、不重复 OnMount
         Assert.Equal(1, effect.MountCalls);
     }
 
     [Fact]
-    public async Task Standalone_Construction_Skips_Effect_Load_Without_Error()
+    public async Task Standalone_Construction_Loads_Effect_And_Skips_Load_Chain()
     {
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
 
-        // 独立构造（脱离对局——不经对局卡库、无对局装载语境）：加载＝跳过装载（不抛错、加载不失败、功能不可用）
+        // 独立构造（脱离对局——不经对局卡库、无对局装载语境）：W3-A3 起装载照常发生（内核装载机制不感知对局语境——
+        // 不设语境门控）；「加载链整链跳过」防御语义收窄于 LoadAsync 路径（不抛错、加载不失败、列表保留、不重复装载）
         var standalone = new UnitCard(
             new LogicEngine(),
             new CardDefinition(
@@ -101,10 +103,13 @@ public class EffectSystemTests
         var effect = new LifecycleProbeEffect("独立构造探针");
         standalone.AddEffect(effect);
 
+        Assert.True(effect.IsMounted); // 装载发生（Add 即装载——不设对局语境门控）
+        Assert.Equal(1, effect.MountCalls);
+
         await standalone.LoadAsync(match.Players[0]);
 
-        Assert.False(effect.IsMounted);
-        Assert.Equal(0, effect.MountCalls);
+        Assert.True(effect.IsMounted);
+        Assert.Equal(1, effect.MountCalls); // 不重复装载、不抛错
         Assert.Same(effect, Assert.Single(standalone.Effects)); // 列表保留（仅不装载——无持久副作用）
     }
 

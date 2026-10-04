@@ -6,10 +6,10 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2C 验收④（对战词条）：四词条各自行为（闪击＝部署链收尾〔扣费后〕置位、仅部署路径；奋战＝记账双攻；
+/// 2C 验收④（对战词条；2C-A1 组件化迁移随改）：四词条各自行为（闪击＝部署链收尾〔扣费后〕置位、仅部署路径；奋战＝记账双攻；
 /// 烟幕＝不可被攻击〔CommandRulesTests〕；伏击＝改写〔CommandCombatTests〕）＋挂载面
-/// （加载时登记可查询＋主动词条逻辑装载；无词条卡＝无副作用；死亡后登记保留）；定义校验
-/// （未实现标识/重复项 fail-fast）；回合恢复（两 bool 恢复＋奋战记账清零）。
+/// （加载时经授予链挂载可查询＋词条组件注册；无词条卡＝无副作用；死亡后登记保留、行为注销）；定义校验
+/// （未注册标识/同标识重复项 fail-fast）；回合恢复（两 bool 恢复＋奋战记账清零）。
 /// </summary>
 public class KeywordSystemTests
 {
@@ -192,20 +192,18 @@ public class KeywordSystemTests
         var playerA = match.Players[0];
         var playerB = match.Players[1];
 
-        // 加载时（卡在卡组、未部署）即完成登记：KeywordData 可查询（卡牌固有属性）。
+        // 加载时（卡在卡组、未部署）即完成挂载：卡上词条面可查询（卡牌固有属性）。
         var blitz = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.BlitzId);
-        Assert.True(blitz.GetData<KeywordData>().Contains(KeywordIds.Blitz));
-        Assert.Contains(KeywordIds.Blitz, blitz.GetData<KeywordData>().Keywords);
+        Assert.True(blitz.Keywords.Has(KeywordIds.Blitz));
+        Assert.True(KeywordRules.HasKeyword(blitz, KeywordIds.Blitz));
 
-        // 无词条卡＝无副作用（不挂词条组件、不装载逻辑组件）。
+        // 无词条卡＝无副作用（不注册词条组件、不装载逻辑；词条面可寻址、空内容）。
         var plain = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.InfantryId);
-        Assert.False(plain.TryGetData<KeywordData>(out _));
-        Assert.False(plain.TryGetData<KeywordRuntimeData>(out _));
-        Assert.False(plain.TryGetData<KeywordLogicData>(out _));
+        Assert.Empty(plain.Keywords.Components);
+        Assert.False(plain.Keywords.Has(KeywordIds.Blitz));
 
-        // 词条卡：主动词条逻辑组件已装载（闪击列入 Logics）。
-        Assert.True(blitz.TryGetData<KeywordLogicData>(out var logics));
-        Assert.Contains(logics.Logics, logic => logic.Keyword == KeywordIds.Blitz);
+        // 词条卡：词条组件已挂载（闪击＝能力型组件列入 Components——含运行逻辑承载）。
+        Assert.Contains(blitz.Keywords.Components, component => component.Keyword == KeywordIds.Blitz);
 
         // 死亡后：登记保留（可查询）；不再参与结算（候选层——尸体不在场）。
         var killer = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.BeastId, 4);
@@ -215,7 +213,8 @@ public class KeywordSystemTests
         var kill = await CommandTestKit.RunCommandAsync(match, bridge, killer, ambusher.Ref);
         Assert.Equal(CommandResultStatus.Success, kill.Status);
         Assert.True(ambusher.GetData<UnitStateData>().IsDestroyed);
-        Assert.True(ambusher.GetData<KeywordData>().Contains(KeywordIds.Ambush)); // 登记保留
+        Assert.True(KeywordRules.HasKeyword(ambusher, KeywordIds.Ambush)); // 登记保留（死亡注销仅行为撤销）
+        Assert.Empty(ambusher.Keywords.Components); // 行为态清空
         Assert.DoesNotContain(ambusher, CommandTestKit.AllUnitsOf(match)); // 不再在场（不参与筛选/指挥）
     }
 
@@ -225,15 +224,18 @@ public class KeywordSystemTests
     public void Definition_Rejects_Unimplemented_Keyword()
     {
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, keywords: new[] { "守护" }, faction: Faction.Germany, rarity: Rarity.Standard));
+            "怪卡", 1, 1, 1, 1, keywords: new[] { new KeywordDeclaration("守护") }, faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("未实现标识", ex.Message);
     }
 
     [Fact]
     public void Definition_Rejects_Duplicate_Keywords()
     {
+        // 同标识即重复（不论参值）——不同参值亦拒绝。
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, keywords: new[] { KeywordIds.Blitz, KeywordIds.Blitz }, faction: Faction.Germany, rarity: Rarity.Standard));
+            "怪卡", 1, 1, 1, 1,
+            keywords: new[] { new KeywordDeclaration(KeywordIds.Blitz, 1), new KeywordDeclaration(KeywordIds.Blitz, 2) },
+            faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("重复项", ex.Message);
     }
 
@@ -251,12 +253,22 @@ public class KeywordSystemTests
         // 缺省＝空列表（零类型/无词条——合法声明）；声明顺序保留。
         var definition = new CardDefinition(
             "标准", 1, 1, 1, 1,
-            keywords: new[] { KeywordIds.Fury, KeywordIds.Ambush },
+            keywords: new[] { new KeywordDeclaration(KeywordIds.Fury), new KeywordDeclaration(KeywordIds.Ambush) },
             unitTypes: new[] { UnitType.Artillery, UnitType.Bomber }, faction: Faction.Germany, rarity: Rarity.Standard);
 
-        Assert.Equal(new[] { KeywordIds.Fury, KeywordIds.Ambush }, definition.Keywords);
+        Assert.Equal(
+            new[] { new KeywordDeclaration(KeywordIds.Fury), new KeywordDeclaration(KeywordIds.Ambush) },
+            definition.Keywords);
         Assert.Equal(new[] { UnitType.Artillery, UnitType.Bomber }, definition.UnitTypes);
         Assert.False(definition.IsGuard);
+
+        // 带参值声明（「仅标识」＝参值位空形态——同一类型、同一解析归一）
+        var withValue = new CardDefinition(
+            "参值", 1, 1, 1, 1,
+            keywords: new[] { new KeywordDeclaration(KeywordIds.Blitz, 2) }, faction: Faction.Germany, rarity: Rarity.Standard);
+        var declaration = Assert.Single(withValue.Keywords);
+        Assert.Equal(KeywordIds.Blitz, declaration.Id);
+        Assert.Equal(2, declaration.Value);
 
         var plain = new CardDefinition("空白", 1, 1, 1, 1, faction: Faction.Germany, rarity: Rarity.Standard);
         Assert.Empty(plain.Keywords);

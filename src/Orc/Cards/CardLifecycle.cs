@@ -53,14 +53,19 @@ internal static class CardsLog
 
 /// <summary>
 /// 卡牌装载链（S4；框架模板骨架）：放置驱动装载（幂等）与清理模板（收敛点）。
+/// 装载链＝【挂主触发器 → OnMount → 装载完成动作（装载管线扩展点；如游戏层托管登记）】——
+/// 任何装载入口（加载时点/放置驱动/Add 即时/词条内嵌）统一经此、复装自动重建（W3-A3）。
 /// 清理模板被多个入口共用（RemoveEffect 容器入口 / effect.removed 驱动 / card.destroyed 驱动 / 主触发器模板事件），
-/// 内部幂等——重复调用收敛为无操作，行为终态一致（不再生效、注入撤销、总线卸载、宿主引用清除、从 Effects 列表移除）。
+/// 内部幂等——重复调用收敛为无操作，行为终态一致（不再生效、注入撤销、总线卸载、宿主引用清除、从 Effects 列表移除）；
+/// 成功事务的实际移除命中恰发射一次 effect.removed（W3-A3；静默路径除外——未成功事务回滚与「源头即信号」的更新驱动）。
 /// </summary>
 internal static class CardLoadout
 {
     /// <summary>
-    /// 装载一个被动效果：主触发器挂载至总线 → 执行 OnMount（注入）。幂等（已装载＝跳过）。
-    /// 作者逻辑失败（OnMount 抛）：记录进事件流（source 含效果标识与钩子名）、回滚装载（效果视为未生效）、不阻断其它效果。
+    /// 装载一个被动效果：主触发器挂载至总线 → 执行 OnMount（注入）→ 执行「装载完成动作」
+    /// （装载管线扩展点，如游戏层托管登记——任何装载入口统一生效、复装自动重建；可缺省）。
+    /// 幂等（已装载＝跳过）。失败（OnMount 抛 / 装载完成动作抛）：记录进事件流（source 含效果标识与钩子名/动作名）、
+    /// 回滚装载（撤销注入、卸载主触发器、清除卸载清理登记残留——效果视为未生效、「不登记残留」）、不阻断其它效果与宿主。
     /// </summary>
     /// <returns>true＝本次完成装载；false＝跳过（已装载）或失败（已记录并回滚）。</returns>
     internal static bool MountEffect(Card card, Effect effect)
@@ -86,6 +91,24 @@ internal static class CardLoadout
             return false;
         }
 
+        try
+        {
+            card.Engine.RunCardMountCompletedActions(card, effect);
+        }
+        catch (Exception ex)
+        {
+            // 「装载成功」的定义包含「自动动作完成」——动作异常归入装载失败口径：
+            // 记录＋回滚为未生效＋不登记残留（回滚清除本次装载期间的全部卸载清理登记）。
+            effect.RollbackMount();
+            CardsLog.Write(
+                card.Engine,
+                $"{effect.Name}/MountCompleted",
+                ex.Message,
+                LogLevel.Error,
+                new[] { "loadout", "error", $"exception:{ex.GetType().Name}", effect.Name });
+            return false;
+        }
+
         CardsLog.Write(
             card.Engine,
             "loadout",
@@ -100,9 +123,12 @@ internal static class CardLoadout
     /// 未装载 → 仅容器面移除（清宿主引用，无运行态清理动作）。
     /// 归属校验：效果不在该卡列表且宿主引用不指向该卡 → 无操作返回 false（防跨卡误清；「移除不存在或已移除的效果＝幂等」）。
     /// 作者清理逻辑失败（OnUnmount 抛）：记录（source 含效果标识与钩子名）、不阻断其它效果的清理；框架撤销/卸载照常完成（「清理未完成，以实况计」）。
+    /// 发射（W3-A3 加性面）：成功事务的「实际移除命中」＝恰发射一次 effect.removed（先清理〔落定〕后发射；
+    /// 载荷＝{Card, Effect}；幂等无操作＝不发射）。emitRemoved=false＝静默清理路径（未成功事务的回滚专用——「无痕」；
+    /// 亦用于「源头即信号」的 effect.removed 更新驱动的自身清理——不重复发射、防循环）。
     /// </summary>
     /// <returns>true＝执行了清理；false＝无操作（幂等/非本卡效果）。</returns>
-    internal static bool CleanupEffect(Card card, Effect effect)
+    internal static bool CleanupEffect(Card card, Effect effect, bool emitRemoved = true)
     {
         var contains = card.ContainsEffect(effect);
         var hostMatch = ReferenceEquals(effect.HostOrNull, card);
@@ -152,7 +178,26 @@ internal static class CardLoadout
                 new[] { "loadout", "detach", card.Name, effect.Name });
         }
 
+        if (emitRemoved)
+        {
+            // 先清理（落定）后发射（对外通知）——发射在清理模板完成之后；发射链异常＝沿用引擎总线既有语义
+            //（取消类穿透、其余隔离记录；「发射失败不影响清理」——已落定）。
+            EmitEffectRemoved(card, effect);
+        }
+
         return true;
+    }
+
+    /// <summary>发射 effect.removed（载荷＝{ Card, Effect }——卡牌＋效果对象引用；经引擎总线 Emit、P2 同步）。</summary>
+    private static void EmitEffectRemoved(Card card, Effect effect)
+    {
+        card.Engine.Emit(
+            Updates.EffectRemoved,
+            new Dictionary<string, object?>
+            {
+                [PayloadKeys.Card] = card,
+                [PayloadKeys.Effect] = effect,
+            }).GetAwaiter().GetResult();
     }
 }
 
@@ -245,7 +290,11 @@ internal sealed class CardLoadoutProcessor
         return Task.CompletedTask;
     }
 
-    /// <summary>清理处理：effect.removed（定位单个效果）/ card.destroyed（该卡全部效果）——均收敛到同一清理模板（幂等）。</summary>
+    /// <summary>
+    /// 清理处理：effect.removed（定位单个效果）/ card.destroyed（该卡全部效果）——均收敛到同一清理模板（幂等）。
+    /// 发射语义（W3-A3）：effect.removed 驱动＝「源头即信号」——清理不重复发射（防重复/自循环）；
+    /// card.destroyed 驱动的批量清理＝逐效果实际移除命中发 effect.removed（对称可观察——弃置/销毁未经逐一移除的场景亦可观察效果级移除）。
+    /// </summary>
     private Task OnCleanup(CardEventView view, Context ctx, CancellationToken ct)
     {
         var effect = view.Effect as Effect;
@@ -257,7 +306,7 @@ internal sealed class CardLoadoutProcessor
                 return Task.CompletedTask; // 载荷契约：effect.removed 携带卡牌＋效果；无卡牌＝无操作
             }
 
-            CardLoadout.CleanupEffect(card, effect);
+            CardLoadout.CleanupEffect(card, effect, emitRemoved: false); // 源头即信号：不重复发射
             return Task.CompletedTask;
         }
 
@@ -272,7 +321,7 @@ internal sealed class CardLoadoutProcessor
         var cleaned = 0;
         foreach (var item in destroyed.EffectsSnapshot())
         {
-            if (CardLoadout.CleanupEffect(destroyed, item))
+            if (CardLoadout.CleanupEffect(destroyed, item)) // 逐效果：实际移除命中＝恰发射一次 effect.removed
             {
                 cleaned++;
             }

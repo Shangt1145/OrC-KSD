@@ -132,4 +132,58 @@ public sealed class EventStream
                 ["childId"] = Id,
             }));
     }
+
+    // ---------- 段聚合内部读面（UI 消费桥接；S2） ----------
+
+    /// <summary>条目计数（含冒泡；内部使用：段游标）。</summary>
+    internal int EntryCount => _entries.Count;
+
+    /// <summary>子流计数（内部使用：段游标）。</summary>
+    internal int ChildCount => _children.Count;
+
+    /// <summary>取 [start, end) 区间的条目快照（内部使用：段聚合；越界区间返回空）。</summary>
+    internal IReadOnlyList<LogEntry> EntriesInRange(int start, int end)
+    {
+        if (end <= start || start < 0)
+        {
+            return Array.Empty<LogEntry>();
+        }
+
+        var count = Math.Min(end, _entries.Count) - start;
+        if (count <= 0)
+        {
+            return Array.Empty<LogEntry>();
+        }
+
+        var result = new List<LogEntry>(count);
+        for (var i = start; i < start + count; i++)
+        {
+            result.Add(_entries[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>取 [start, end) 区间的子流快照（内部使用：段聚合；越界区间返回空）。</summary>
+    internal IReadOnlyList<EventStream> ChildrenInRange(int start, int end)
+    {
+        if (end <= start || start < 0)
+        {
+            return Array.Empty<EventStream>();
+        }
+
+        var count = Math.Min(end, _children.Count) - start;
+        if (count <= 0)
+        {
+            return Array.Empty<EventStream>();
+        }
+
+        var result = new List<EventStream>(count);
+        for (var i = start; i < start + count; i++)
+        {
+            result.Add(_children[i]);
+        }
+
+        return result;
+    }
 }

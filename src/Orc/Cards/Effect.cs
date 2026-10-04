@@ -5,7 +5,7 @@ namespace Orc.Cards;
 /// <summary>
 /// 效果基类（S4；逻辑组件）：一个效果 ＝ 一个主触发器（主动/被动）＋作者覆写的装载/卸载钩子。
 /// 行为契约（框架装载链保证）：
-/// ①单位放置/加载时点装载后效果生效（被动：主触发器挂载至总线 ＋ OnMount 注入完成）；
+/// ①装载（加载时点/放置驱动/Add 即时——三入口幂等、统一装载链）后效果生效（被动：主触发器挂载至总线 ＋ OnMount 注入完成）；
 /// ②效果移除/卡牌销毁后清理完成（OnUnmount → 撤销注入登记 → 总线卸载 → 执行宿主卸载清理动作 → 清宿主引用）；
 /// ③顺序：单位初始化逻辑先、效果注入后；④装载＝【挂主触发器 → OnMount】、卸载＝【OnUnmount → 撤销登记 → 总线卸载 → 宿主清理】。
 /// 主动效果（指令）**不参与装载/卸载**（不挂总线、不执行钩子；纯列表进出），其生效经 <see cref="ActiveEffect{TView}.CastAsync"/> 调用主触发器（施放）。
@@ -92,9 +92,9 @@ public abstract class Effect
 
     /// <summary>
     /// 登记卸载清理动作（加性公共面；宿主机制扩展面——如游戏层「效果修饰器按来源撤销」托管）：
-    /// 效果卸载（<see cref="ExecuteUnmount"/>）时经框架执行（后进先出；各动作恰执行一次；执行后清空——重新装载需重新登记）。
-    /// 登记约定＝装载完成后（<see cref="ExecuteMount"/> 成功）进行；故装载回滚（<see cref="RollbackMount"/>）不触发已登记动作
-    /// （装载失败的残留清理由登记方在装载失败路径自行兜底——幂等清理语义）。
+    /// 效果卸载（<see cref="ExecuteUnmount"/>）时经框架执行（后进先出；各动作恰执行一次；执行后清空）。
+    /// 登记约定＝装载完成后进行（W3-A3 起：托管类登记由装载管线「装载完成动作」在每次装载成功时自动重建——
+    /// 任何装载入口统一、复装自动重建；装载回滚（<see cref="RollbackMount"/>）不触发已登记动作、并清除其登记残留）。
     /// 动作异常＝隔离记录（不阻断卸载链其余步骤——与框架清理语义一致）；动作不得引入新的跨调用可变状态。
     /// 与 <see cref="Inject{TView}"/> 的「注入登记」区分：本面供宿主机制登记（不面向效果作者手写撤销）。
     /// </summary>
@@ -133,12 +133,16 @@ public abstract class Effect
         }
     }
 
-    /// <summary>装载失败回滚：撤销已登记注入 → 卸载主触发器 → 复位装载状态（该效果视为未生效）。</summary>
+    /// <summary>
+    /// 装载失败回滚：撤销已登记注入 → 卸载主触发器 → 复位装载状态 → 清除卸载清理登记残留
+    /// （不触发、仅清除——「回滚不留登记」：装载完成动作失败时已登记的项不得残留；该效果视为未生效）。
+    /// </summary>
     internal void RollbackMount()
     {
         RollbackInjections();
         UnmountMainTrigger();
         IsMounted = false;
+        _unmountCleanups.Clear(); // W3-A3：回滚不留「卸载清理登记」残留（登记项不触发、仅清除）
     }
 
     /// <summary>
@@ -223,7 +227,7 @@ public abstract class Effect
 /// 被动效果（S4）：装载语境效果——主触发器由框架装配（hooks 覆盖移除类更新：<see cref="Updates.EffectRemoved"/>、<see cref="Updates.CardDestroyed"/>；
 /// 模板事件在移除/销毁更新到来且针对本效果时，经同一清理模板执行「OnUnmount → 撤销登记 → 总线卸载」；与容器入口收敛）。
 /// 作者只需覆写 <see cref="Effect.OnMount"/>（注入）/ <see cref="Effect.OnUnmount"/>（专属清理）。
-/// 放置驱动装载由装载链完成（放置处理器：初始化 → 逐效果「挂载主触发器 → OnMount」，Effects 列表序、幂等）。
+/// 装载由统一装载链完成（三入口幂等；放置处理器兜底：初始化 → 逐效果「挂载主触发器 → OnMount」，Effects 列表序、幂等）。
 /// </summary>
 public abstract class PassiveEffect : Effect
 {
@@ -283,7 +287,7 @@ public abstract class PassiveEffect : Effect
                 return Task.CompletedTask;
             }
 
-            CardLoadout.CleanupEffect(card, this);
+            CardLoadout.CleanupEffect(card, this, emitRemoved: false); // 源头即信号：清理不重复发射（防重复/自循环）
             return Task.CompletedTask;
         }
 
@@ -293,7 +297,7 @@ public abstract class PassiveEffect : Effect
             return Task.CompletedTask;
         }
 
-        CardLoadout.CleanupEffect(destroyed, this);
+        CardLoadout.CleanupEffect(destroyed, this); // 销毁链逐效果清理：命中即发射 effect.removed（与批量清理分支幂等收敛、恰一次）
         return Task.CompletedTask;
     }
 }

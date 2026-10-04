@@ -104,7 +104,7 @@ public class PlayChainDeploymentTests
         Assert.Equal(new[] { "A", "C" }, order);
         Assert.Same(unit, line[1].Occupant);
         Assert.Equal(
-            new[] { GameUpdates.CardPlayed, GameUpdates.UnitDeployed },
+            new[] { GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed }, // W3-A3：含放置驱动信号
             recorder.Types);
         Assert.Contains(
             match.Engine.RootStream.Entries,
@@ -125,14 +125,14 @@ public class PlayChainDeploymentTests
 
         var result = await match.PlayManager.JoinUnitAsync(unit, front);
 
-        // 加入路径：加入触发器 → 共用单位化；不扣费、不走部署词条；仅发 unit.joined（不发 card.played / unit.deployed）。
+        // 加入路径：加入触发器 → 共用单位化；不扣费、不走部署词条；发 card.placed ×1（W3-A3：放置驱动信号）＋ unit.joined ×1（不发 card.played / unit.deployed）。
         Assert.Equal(PlayResultStatus.Success, result.Status);
         Assert.Same(unit, front.Occupant);
         Assert.Equal(1, unit.GetData<UnitStateData>().OperateCost); // 共用单位化：组件挂载（实时值＝对战组件值）
         Assert.Equal(1, player.Points); // 不扣费
         Assert.Empty(fired); // 不走部署词条
-        Assert.Equal(new[] { GameUpdates.UnitJoined }, recorder.Types);
-        var payload = recorder.Updates[0].Payload!;
+        Assert.Equal(new[] { Updates.CardPlaced, GameUpdates.UnitJoined }, recorder.Types);
+        var payload = recorder.Updates[1].Payload!;
         Assert.Same(unit, payload[GameUpdates.PayloadUnit]);
         Assert.Same(front, payload[GameUpdates.PayloadPosition]);
     }

@@ -246,6 +246,9 @@ public sealed class Match
             throw new ArgumentException("指定玩家不属于本对局（洗切动作被拒绝）。", nameof(player));
         }
 
+        // 动作作用域（UI 消费桥接）：洗切动作产生的事件聚合为一段（被 Initialize 包载时合并入初始化大段）。
+        await using var _actionScope = Engine.BeginAction();
+
         player.Deck.Shuffle(_randomService);
         await GameUpdates.EmitDeckShuffled(Engine, player, player.Deck, ct);
     }
@@ -289,6 +292,13 @@ public sealed class Match
         {
             throw new InvalidOperationException($"对局已初始化（当前状态：{State}）；重复 Initialize 被拒绝。");
         }
+
+        // 动作作用域（UI 消费桥接）：初始化＝一次大动作；内部洗切/加载/起始回合等信号合并入本段。
+        await using var _actionScope = Engine.BeginAction();
+
+        // W3-A3：装载管线「装载完成动作」注册（游戏层装配期）——被动效果装载成功后自动登记托管清理
+        // （卸载时按来源撤销该效果施加的修饰器/光环声明；任何装载入口含复装统一生效；内核不感知本语义）。
+        Engine.RegisterCardMountCompletedAction(CardEffectLoader.CreateManagedCleanupAction(Engine));
 
         // 生成并初始化管理器群（2B：卡牌库注入回合上下文提供器——反制「仅己方回合」验证的延迟读取来源；
         // 2C：加注词条装载上下文提供器——词条装载〔伏击挂载〕的延迟读取来源；
@@ -401,6 +411,9 @@ public sealed class Match
         {
             throw new InvalidOperationException("对局尚未进入'进行'态，不能推进回合（须先成功完成 Initialize）。");
         }
+
+        // 动作作用域（UI 消费桥接）：结束回合链产生的事件聚合为一段。
+        await using var _actionScope = Engine.BeginAction();
 
         await TurnManager.EndTurn(ct);
     }

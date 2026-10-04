@@ -7,7 +7,8 @@ namespace Orc.Game.Cards;
 /// 数值域校验后置（负数等，本批不做）。
 /// 类别缺省＝单位（兼容既有构造调用；三类卡的区分经显式指定类别）。
 /// 〔2C 加性受控变更〕新增三个静态声明字段（定义＝单一真源、不可运行时增删）：
-/// ①词条清单（加载时逐条登记至 KeywordData ＋装载主动词条逻辑；未实现标识/重复项＝定义期明确错误 fail-fast——本批合法仅四枚）；
+/// ①词条声明清单（2C-A1 单一声明类型＝标识＋可选参值；加载时逐条经词条管理组件的授予链挂载；
+/// 未注册标识/同标识重复项〔不论参值〕＝定义期明确错误 fail-fast——合法集来源＝词条注册面内容）；
 /// ②单位类型清单（单位化时填充 UnitStateData.UnitTypes——部署/加入两路径一致；未声明＝空列表＝零类型·行为按基线〔视同步兵〕；重复项 fail-fast）；
 /// ③守护者标记（守护机制：相邻单位获「被守护」——需求空白点的实现裁决，交付汇报标注）。
 /// 〔W1-1 G12 加性受控变更〕再加两维卡牌元数据（定义＝单一真源、不可运行时增删）：
@@ -23,13 +24,14 @@ public sealed class CardDefinition
     /// <param name="attack">攻击力。</param>
     /// <param name="defense">防御力。</param>
     /// <param name="category">卡牌类别（缺省＝单位）。</param>
-    /// <param name="keywords">词条清单（2C 加性；可缺省＝无词条；标识须为已实现词条、不得重复——未实现/重复＝定义期拒绝）。</param>
+    /// <param name="keywords">词条声明清单（2C-A1；可缺省＝无词条；单一声明类型＝标识＋可选参值——「仅标识」＝参值位空；
+    /// 标识须为注册面已注册词条、同标识不得重复〔不论参值〕——未注册/重复＝定义期拒绝）。</param>
     /// <param name="unitTypes">单位类型清单（2C 加性；可缺省＝空列表＝零类型；枚举值须已定义、不得重复——重复＝定义期拒绝）。</param>
     /// <param name="isGuard">守护者标记（2C 加性；缺省＝false；守护机制的来源标记——相邻单位/HQ 获「被守护」）。</param>
     /// <param name="faction">国籍（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
     /// <param name="rarity">稀有度（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
     /// <param name="tags">开放 tag 清单（W1-1 加性；可缺省＝空列表＝无开放 tag；null 元素/空白/重复项＝定义期拒绝）。</param>
-    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失（未提供/为 null）；词条清单含 null/空白/未实现标识/重复项；单位类型清单含重复项；开放 tag 清单含 null/空白/重复项。</exception>
+    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失（未提供/为 null）；词条声明清单含空白标识/未注册标识/同标识重复项；单位类型清单含重复项；开放 tag 清单含 null/空白/重复项。</exception>
     /// <exception cref="ArgumentOutOfRangeException">category 为未定义的卡牌类别；国籍/稀有度为未定义枚举值；单位类型含未定义枚举值。</exception>
     public CardDefinition(
         string name,
@@ -38,7 +40,7 @@ public sealed class CardDefinition
         int attack,
         int defense,
         CardCategory category = CardCategory.Unit,
-        IEnumerable<string>? keywords = null,
+        IEnumerable<KeywordDeclaration>? keywords = null,
         IEnumerable<UnitType>? unitTypes = null,
         bool isGuard = false,
         Faction? faction = null,
@@ -89,37 +91,40 @@ public sealed class CardDefinition
         Tags = ResolveTags(tags);
     }
 
-    /// <summary>词条清单校验与拷贝（fail-fast：null 元素 / null 或空白标识 / 未实现标识 / 重复项均被拒绝；登记序保留）。</summary>
-    private static IReadOnlyList<string> ResolveKeywords(IEnumerable<string>? keywords)
+    /// <summary>
+    /// 词条声明清单校验与拷贝（2C-A1 fail-fast：空白标识 / 未注册标识 / 同标识重复项〔不论参值〕均被拒绝；登记序保留）。
+    /// 合法标识集来源＝词条注册面（<see cref="KeywordRegistry"/>）内容（单源）。
+    /// </summary>
+    private static IReadOnlyList<KeywordDeclaration> ResolveKeywords(IEnumerable<KeywordDeclaration>? keywords)
     {
         if (keywords is null)
         {
-            return Array.Empty<string>();
+            return Array.Empty<KeywordDeclaration>();
         }
 
-        var list = new List<string>();
-        foreach (var keyword in keywords)
+        var list = new List<KeywordDeclaration>();
+        foreach (var declaration in keywords)
         {
-            if (string.IsNullOrWhiteSpace(keyword))
+            if (string.IsNullOrWhiteSpace(declaration.Id))
             {
-                throw new ArgumentException("词条清单含 null/空白标识（配置错误在定义期被拒绝）。", nameof(keywords));
+                throw new ArgumentException("词条声明清单含 null/空白标识（配置错误在定义期被拒绝）。", nameof(keywords));
             }
 
-            if (!KeywordIds.IsDefined(keyword))
+            if (!KeywordRegistry.IsDefined(declaration.Id))
             {
                 throw new ArgumentException(
-                    $"词条清单含未实现标识 '{keyword}'（本批合法标识仅：{string.Join(" / ", KeywordIds.All)}；fail-fast）。",
+                    $"词条声明清单含未实现标识 '{declaration.Id}'（合法标识集＝词条注册面内容：{string.Join(" / ", KeywordRegistry.Registered)}；fail-fast）。",
                     nameof(keywords));
             }
 
-            if (list.Contains(keyword))
+            if (list.Any(item => string.Equals(item.Id, declaration.Id, StringComparison.Ordinal)))
             {
                 throw new ArgumentException(
-                    $"词条清单含重复项 '{keyword}'（重复＝定义声明的明确错误——非静默去重、非保留原样，与 hooks 声明先例一致）。",
+                    $"词条声明清单含重复项 '{declaration.Id}'（同标识即重复〔不论参值〕——非静默去重、非保留原样，与 hooks 声明先例一致）。",
                     nameof(keywords));
             }
 
-            list.Add(keyword);
+            list.Add(declaration);
         }
 
         return list.ToArray();
@@ -202,8 +207,8 @@ public sealed class CardDefinition
     /// <summary>防御力初始值（＝HP）。</summary>
     public int Defense { get; }
 
-    /// <summary>词条清单（2C 加性；固定字面值之一、登记序；空列表＝无词条——加载时无副作用）。</summary>
-    public IReadOnlyList<string> Keywords { get; }
+    /// <summary>词条声明清单（2C-A1；标识＋可选参值、登记序；空列表＝无词条——加载时无副作用）。</summary>
+    public IReadOnlyList<KeywordDeclaration> Keywords { get; }
 
     /// <summary>单位类型清单（2C 加性；登记序；空列表＝零类型——行为按基线〔视同步兵〕；单位化时填充）。</summary>
     public IReadOnlyList<UnitType> UnitTypes { get; }

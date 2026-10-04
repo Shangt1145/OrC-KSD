@@ -93,15 +93,50 @@ public sealed class RecordingPassiveEffect : PassiveEffect
     protected override void OnUnmount() => _trace.Add($"{_mark}:unmount");
 }
 
-/// <summary>装载失败效果：OnMount 故意抛出（钩子失败隔离用）。</summary>
+/// <summary>装载失败效果：OnMount 故意抛出（钩子失败隔离用；W3-A3：含装载尝试/卸载计数观察点——「未装载移除仅容器面」等用例）。</summary>
 public sealed class FailingMountEffect : PassiveEffect
 {
+    public int MountAttempts;  // OnMount 尝试次数（每次装载驱动各计一次）
+    public int UnmountCount;   // OnUnmount 次数（未装载不应触发）
+
     public FailingMountEffect(string name = "装载炸弹")
         : base(name)
     {
     }
 
-    protected override void OnMount() => throw new InvalidOperationException("OnMount 故意爆炸");
+    protected override void OnMount()
+    {
+        MountAttempts++;
+        throw new InvalidOperationException("OnMount 故意爆炸");
+    }
+
+    protected override void OnUnmount() => UnmountCount++;
+}
+
+/// <summary>
+/// 摇摆装载效果（W3-A3 用例）：首次装载尝试抛异常、后续成功——放置驱动兜底装载/重试语义
+/// 与「初始化先、装载后」顺序契约观察点。
+/// </summary>
+public sealed class FlakyMountEffect : PassiveEffect
+{
+    public int Attempts;           // OnMount 尝试次数
+    public bool SawPlacedAtMount;  // 成功装载时宿主是否已放置（放置处理内「初始化先」观察点）
+
+    public FlakyMountEffect(string name = "摇摆效果")
+        : base(name)
+    {
+    }
+
+    protected override void OnMount()
+    {
+        Attempts++;
+        if (Attempts == 1)
+        {
+            throw new InvalidOperationException("首次装载故意失败");
+        }
+
+        SawPlacedAtMount = Host.IsPlaced;
+    }
 }
 
 /// <summary>清理失败效果：OnUnmount 故意抛出（钩子失败隔离用）。</summary>

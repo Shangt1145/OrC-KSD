@@ -34,6 +34,9 @@ public abstract class CardBase : Orc.Cards.Card
 
         // W2a G3 修饰机制：卡侧修饰器组件构造期常驻（所有卡类；轻量伴生、非数据组件——不进装配/加载/快照语义）。
         Modifiers = new CardModifierComponent(this, engine);
+
+        // 2C-A1 词条组件化：卡上词条管理组件构造期常驻（所有卡类；轻量伴生、非数据组件——空管理面零行为负担、可寻址不抛）。
+        Keywords = new KeywordManager(this, engine);
     }
 
     /// <summary>本卡的定义（代码注册形态；名称/类别/四项数值可读）。</summary>
@@ -46,6 +49,14 @@ public abstract class CardBase : Orc.Cards.Card
     /// 不纳入 AddData 数据组件体系（轻量伴生；不进快照导出）。
     /// </summary>
     public CardModifierComponent Modifiers { get; }
+
+    /// <summary>
+    /// 词条管理组件（2C-A1；每实例构造期常驻的卡上伴生——轻量伴生、非数据组件，对齐 <see cref="Modifiers"/> 先例）：
+    /// 词条组件的注册与索引（有无/参值查询）＋授予/移除/参值改写统一读写口。加载时词条装载经其授予链完成
+    /// （<see cref="LoadKeywords"/>——先于 card.load）；运行时动态授予（含「无词条卡 → 有」）经其操作面。
+    /// 空管理面（无词条卡）零行为负担、可寻址（含无词条卡不抛——统一根写法：<c>card.Keywords.Has(...)</c>）。
+    /// </summary>
+    public KeywordManager Keywords { get; }
 
     /// <summary>
     /// 所属玩家（2B 加性面；加载时装配——<see cref="LoadAsync"/> 记录；未加载＝null）。
@@ -61,9 +72,9 @@ public abstract class CardBase : Orc.Cards.Card
     internal Func<Player?>? TurnPlayerProvider { get; set; }
 
     /// <summary>
-    /// 词条装载上下文提供器（2C 加性面；internal）：加载时（<see cref="LoadAsync"/> 的词条装载步骤）装载主动词条逻辑
-    /// 所需的对局级服务（如「造成攻击伤害」触发器——伏击挂载点）；由对局加载路径经卡牌库注入（延迟读取）；
-    /// 独立构造（脱离对局）＝null（主动词条逻辑装载跳过注册、不抛错——功能不可用、加载不失败）。
+    /// 词条装载上下文提供器（2C-A1 加性面；internal）：加载时（<see cref="LoadAsync"/> 的词条装载步骤）与运行时授予时
+    /// 装载词条组件运行逻辑所需的对局级服务（如「造成攻击伤害」触发器——伏击挂载点）；由对局加载路径经卡牌库注入（延迟读取）；
+    /// 独立构造（脱离对局）＝null（词条组件运行逻辑装载跳过注册、不抛错——功能不可用、加载不失败）。
     /// </summary>
     internal Func<KeywordLoadContext?>? KeywordLoadContextProvider { get; set; }
 
@@ -95,8 +106,9 @@ public abstract class CardBase : Orc.Cards.Card
     /// ② 重建/装配步骤（可重写扩展点 <see cref="RebuildFromPersistence"/>；默认空实现——持久化重建后置、本批无重建逻辑）；
     /// ③ 对局级卡牌 ID 分配（W1-1 加性：经提供器分配自增 ID；幂等——已分配保持原值；先于 card.load 广播）；
     /// ④ 元数据装配（W1-1 加性：从定义读国籍/稀有度/开放 tag → 装配 TagData；先于 card.load 广播——消费者查询不到未就绪状态）；
-    /// ⑤ 词条装载（2C 加性：从定义读词条 → 逐条登记至 KeywordData ＋ 装载主动词条逻辑〔伏击挂到「造成攻击伤害」〕；
-    ///    无词条卡＝无副作用；登记/装载先于 card.load 广播——消费者查询不到未就绪状态）；
+    /// ⑤ 词条装载（2C-A1 加性：从定义读词条声明〔标识＋可选参值〕→ 逐条经词条管理组件的授予链挂载
+    ///    〔存在性置位 → 运行逻辑装载＋内嵌效果装载 → OnGrant；伏击在运行逻辑装载时挂到「造成攻击伤害」〕；
+    ///    无词条卡＝无副作用；装载先于 card.load 广播——消费者查询不到未就绪状态）；
     /// ⑥ 效果装载（X2 加性：从装配源解析效果声明 → 构造＋登记＋装载被动效果〔挂主触发器＋OnMount；含监听 handler 注册〕
     ///    ＋托管登记〔卸载自动按来源撤销修饰器〕；无装配源＝跳过；先于 card.load 广播——消费者查询不到未就绪状态）；
     /// ⑦ 广播 card.load（载荷 {Card, Player}——Card＝本实例、Player＝所属卡组玩家）。
@@ -145,11 +157,12 @@ public abstract class CardBase : Orc.Cards.Card
     }
 
     /// <summary>
-    /// 词条装载（2C；加载时＝与 card.load 同时完成「登记＋效果装载」）：
-    /// ① 词条登记（KeywordData＝卡牌固有属性——加载时挂载、卡组/手牌即可被读取查询；单位化不重复挂）；
-    /// ② 词条运行态存储（KeywordRuntimeData——效果模块自维护；如奋战「本轮已攻次数」）；
-    /// ③ 主动词条逻辑装载（闪击/伏击——除登记外作为逻辑组件；被动词条〔奋战/烟幕〕仅登记、由读取方按标识查询）。
-    /// 无词条卡＝无副作用（不挂任何组件、不装载）。标识合法性与重复项已在定义期 fail-fast。
+    /// 词条装载（2C-A1；加载时＝与 card.load 同时完成）：
+    /// 逐条经词条管理组件的授予链挂载（存在性置位 → 运行逻辑装载〔如伏击注册改写〕＋内嵌效果装载 → OnGrant）——
+    /// 与运行时动态授予同一机制；词条组件经注册面（<see cref="KeywordRegistry"/>）构造。
+    /// 卡组/手牌即可被读取查询（先于 card.load 广播——消费者查询不到未就绪状态）。
+    /// 无词条卡＝无副作用（不注册词条组件、不装载逻辑；词条面可寻址、空内容）。
+    /// 标识合法性与重复项已在定义期 fail-fast（合法集＝注册面内容）；装载链内失败＝fail-fast（上抛——加载失败、回滚无残留）。
     /// </summary>
     private void LoadKeywords()
     {
@@ -159,32 +172,10 @@ public abstract class CardBase : Orc.Cards.Card
             return;
         }
 
-        var keywordData = new KeywordData();
-        foreach (var keyword in keywords)
-        {
-            keywordData.Add(keyword);
-        }
-
-        AddData(keywordData);
-        AddData(new KeywordRuntimeData());
-
         var context = KeywordLoadContextProvider?.Invoke();
-        var logics = new KeywordLogicData();
-        foreach (var keyword in keywords)
+        foreach (var declaration in keywords)
         {
-            var logic = KeywordLogicFactory.Create(keyword);
-            if (logic is null)
-            {
-                continue; // 被动词条：仅登记、无逻辑组件
-            }
-
-            logic.Mount(this, context);
-            logics.Add(logic);
-        }
-
-        if (logics.Logics.Count > 0)
-        {
-            AddData(logics);
+            Keywords.GrantCore(declaration.Id, declaration.Value, context);
         }
     }
 

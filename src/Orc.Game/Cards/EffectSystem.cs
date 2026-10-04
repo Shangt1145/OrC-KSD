@@ -12,9 +12,10 @@ namespace Orc.Game.Cards;
 //   实例化后创建）；独立构造（无装配源）＝null＝跳过装载、不抛错、加载不失败（沿用词条先例）。
 // ③效果装载链（CardEffectLoader；加载时＝先于 card.load 广播，与词条装载先例对齐）：
 //   声明解析（未知标识＝fail-fast 上抛、工厂返回 null＝fail-fast 上抛）→ 构造（执行异常＝隔离记录、跳过——
-//   分界＝错误性质〔配置 vs 执行〕非代码阶段）→ 登记入容器（列表序＝声明序）→ 装载全部被动效果
-//   （挂主触发器＋OnMount；失败＝引擎装载链既有语义：回滚为未生效、记录、不阻断）→
-//   托管登记（效果卸载 → 框架自动按来源批量撤销该效果施加的全部修饰器；作者不手写撤销）＋失败残留清理。
+//   分界＝错误性质〔配置 vs 执行〕非代码阶段）→ 登记入容器（列表序＝声明序；Add 即装载——W3-A3）→
+//   装载兜底（幂等；失败＝引擎装载链既有语义：回滚为未生效、记录、不阻断）＋装载失败残留清理。
+//   W3-A3：托管登记（效果卸载 → 框架自动按来源批量撤销该效果施加的全部修饰器/光环声明）已从本链专属
+//   移入「通用装载路径」自动化（内核「装载完成动作」扩展点；任何装载入口含复装统一登记）——本链不再手动登记。
 // ④失败回滚口径（三层）：装配/配置层＝fail-fast（上抛、加载失败）；运行时装载层＝隔离（回滚为未生效、
 //   不阻断其它效果与宿主、广播照常）；独立构造无上下文＝跳过（不抛错）。
 // W3-1 G4 托管扩展（加性）：光环声明托管注销——效果卸载（任何路径统一收口）时，框架除按来源撤销该效果
@@ -123,8 +124,8 @@ public sealed class CardEffectLoadContext
 /// <summary>
 /// 效果装载链（X2；游戏层装载执行——加载时点驱动、先于 card.load 广播）：
 /// ①声明解析（未知标识＝fail-fast 上抛）；②构造（执行异常＝隔离记录并跳过；工厂返回 null＝fail-fast 上抛）；
-/// ③登记入容器（Effects 列表序＝声明序）；④装载全部被动效果（挂主触发器＋OnMount；幂等；失败回滚＋记录、不阻断）；
-/// ⑤托管登记（效果卸载 → 框架自动按来源撤销其修饰器——经 <see cref="Effect.AddUnmountCleanup"/>）＋失败残留清理。
+/// ③登记入容器（Effects 列表序＝声明序；Add 即装载）；④装载兜底（幂等；失败回滚＋记录、不阻断）；
+/// ⑤装载失败残留清理（幂等兜底——托管登记自 W3-A3 起随「通用装载路径」自动完成，本链不再手动登记）。
 /// 语境：对局装载语境（context 非 null）＝全链执行（声明部分可空——无效果源＝跳过①②③、④⑤照常；
 /// 卡上手动装配〔AddEffect〕的效果经 ④⑤ 一并覆盖）；独立构造（context 为 null）＝整链跳过（不抛错、加载不失败）。
 /// </summary>
@@ -198,10 +199,11 @@ internal static class CardEffectLoader
             }
         }
 
-        // ④ 装载全部被动效果（挂主触发器＋OnMount；幂等——已装载跳过；失败＝回滚为未生效、记录、不阻断）。
+        // ④ 装载兜底（幂等——Add 即装载后多为跳过；对装载失败回滚者＝重试装载；失败＝回滚为未生效、记录、不阻断）。
         card.MountPassiveEffects();
 
-        // ⑤ 托管登记（卸载时框架自动按来源撤销修饰器）＋装载失败残留清理（幂等兜底）。
+        // ⑤ 装载失败残留清理（幂等兜底）——托管登记自 W3-A3 起随「通用装载路径」自动完成（任何装载入口含复装均登记），
+        //    本链不再手动登记；此处仅对仍未装载（失败回滚）者清理可能的中途残留。
         foreach (var effect in card.Effects.ToArray())
         {
             if (effect.Kind != TriggerKind.Passive)
@@ -209,18 +211,35 @@ internal static class CardEffectLoader
                 continue; // 主动效果不装载、不托管（仅列表进出；施放时调用）
             }
 
-            if (effect.IsMounted)
-            {
-                // 装载成功：登记托管清理——效果卸载（任何路径统一收口）时框架按来源批量撤销该效果施加的全部修饰器。
-                effect.AddUnmountCleanup(() => RunManagedCleanup(card, engine, effect));
-            }
-            else
+            if (!effect.IsMounted)
             {
                 // 装载失败（回滚为未生效）：清理可能的中途残留（幂等——无命中＝无操作；异常隔离、不阻断加载）。
                 await CleanupFailedLoadAsync(card, engine, effect, ct);
             }
         }
     }
+
+    /// <summary>
+    /// 托管动作工厂（W3-A3；供游戏层装配期注册进内核「装载完成动作」扩展点——本侧的装载管线接线）：
+    /// 装载成功（任何入口含复装）后自动登记托管清理；非 CardBase 宿主（纯内核卡——无修饰器组件/环境面）＝无操作
+    /// （内核通用卡不受游戏层托管影响）。
+    /// </summary>
+    internal static Action<Card, Effect> CreateManagedCleanupAction(LogicEngine engine)
+        => (card, effect) =>
+        {
+            if (card is CardBase cardBase)
+            {
+                RegisterManagedCleanup(cardBase, engine, effect);
+            }
+        };
+
+    /// <summary>
+    /// 托管清理登记（单效果；单源入口——W3-A3 起由「装载完成动作」在每次装载成功时自动调用〔任何装载入口统一、
+    /// 复装自动重建〕，不再由各装载路径手动调用）：效果卸载（任何路径统一收口）时框架自动按来源批量撤销
+    /// 该效果施加的全部修饰器/光环声明。
+    /// </summary>
+    internal static void RegisterManagedCleanup(CardBase card, LogicEngine engine, Effect effect)
+        => effect.AddUnmountCleanup(() => RunManagedCleanup(card, engine, effect));
 
     /// <summary>
     /// 托管清理执行（引擎卸载链中同步调用）：按来源收口该效果的落地物——

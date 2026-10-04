@@ -86,45 +86,6 @@ public sealed class CommandData
 }
 
 /// <summary>
-/// 词条组件：词条标识的登记列表（本批载体形态＝字符串——推荐可扩展；只存标识）。
-/// 词条数值（如「重甲 2」）由效果模块维护、不落本组件。
-/// 基础增删查 API（列表级）：Add/Remove 幂等（重复登记/移除不存在＝无操作、返回 false）；标识非空（空白被拒绝）。
-/// 以引擎数据组件形态挂载；加载时的词条登记属后续批次。
-/// </summary>
-public sealed class KeywordData
-{
-    private readonly List<string> _keywords = new();
-
-    /// <summary>登记列表（只读枚举面；登记序）。</summary>
-    public IReadOnlyList<string> Keywords => _keywords;
-
-    /// <summary>登记一个词条标识（幂等：已登记＝false 无操作；新增＝true）。</summary>
-    /// <exception cref="ArgumentException">keyword 为 null/空白（标识非空）。</exception>
-    public bool Add(string keyword)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
-        if (_keywords.Contains(keyword))
-        {
-            return false;
-        }
-
-        _keywords.Add(keyword);
-        return true;
-    }
-
-    /// <summary>注销一个词条标识（幂等：未登记＝false 无操作；移除＝true）。</summary>
-    /// <exception cref="ArgumentException">keyword 为 null/空白（标识非空）。</exception>
-    public bool Remove(string keyword)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
-        return _keywords.Remove(keyword);
-    }
-
-    /// <summary>查询：是否已登记该词条标识（null/空白＝false、不抛错——存在性查询口径）。</summary>
-    public bool Contains(string keyword) => !string.IsNullOrWhiteSpace(keyword) && _keywords.Contains(keyword);
-}
-
-/// <summary>
 /// 反制激活状态组件：反制卡当前是否已激活（初始 false）。
 /// 激活流程（先验证〔未激活时检查指挥点〕→ 合法 → 反转状态 → 扣/退点）属打出链批次；
 /// 翻转/置位逻辑属后批次（本批仅承载字段与读写）。

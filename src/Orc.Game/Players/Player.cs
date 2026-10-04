@@ -20,7 +20,11 @@ public sealed class Player
     /// <summary>HQ 初始血量（20）。</summary>
     public const int InitialHqHealth = 20;
 
-    /// <summary>手牌上限（9；本批仅数据、可读、不触发超限裁决——弃置后置）。</summary>
+    /// <summary>
+    /// 手牌上限（9）。G7 起启用——回合抽牌链路超限裁决：满手时新抽的牌不经手牌、直烧（移除＋销毁＋
+    /// <c>card.discarded</c> 信号——KARDS 烧牌语义）；裁决点＝回合抽牌链路（起手装载不受裁决、维持静默）；
+    /// 常量值与公开读面不变、超限判定为内部行为（不新增公开状态）。
+    /// </summary>
     public const int HandLimit = 9;
 
     internal Player(int index, CardList deck, LogicEngine engine)

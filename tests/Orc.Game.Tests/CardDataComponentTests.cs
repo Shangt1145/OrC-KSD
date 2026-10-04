@@ -6,8 +6,10 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2A 验收锚点④（数据组件全集）：六组件就位；拆分实施（指挥点花费单列＋对战三值；四合一退役、无双真源）；
-/// 字段与基础读写可测（含实时值读写、词条增删查；初始值：位置 null／已毁 false／指挥 false·false／激活 false）。
+/// 2A 验收锚点④（数据组件全集）：数据组件就位；拆分实施（指挥点花费单列＋对战三值；四合一退役、无双真源）；
+/// 字段与基础读写可测（含实时值读写；初始值：位置 null／已毁 false／指挥 false·false／激活 false）。
+/// 2C-A1 随改：词条面已迁出数据组件体系（三口合并替代＝词条组件化；寻址＝卡上词条面 <see cref="CardBase.Keywords"/>）——
+/// 相关用例迁移至 KeywordComponentTests（见原用例处的逐条迁移说明）。
 /// </summary>
 public class CardDataComponentTests
 {
@@ -104,34 +106,10 @@ public class CardDataComponentTests
         Assert.True(command.CanAttack);
     }
 
-    [Fact]
-    public void KeywordData_Add_Remove_Contains_Are_Idempotent_And_Ordered()
-    {
-        var keywords = new KeywordData();
-        Assert.Empty(keywords.Keywords);
-
-        Assert.True(keywords.Add("闪击")); // 登记
-        Assert.False(keywords.Add("闪击")); // 幂等：重复登记＝false 无操作
-        Assert.True(keywords.Add("奋战"));
-        Assert.Equal(new[] { "闪击", "奋战" }, keywords.Keywords); // 登记序
-
-        Assert.True(keywords.Contains("闪击"));
-        Assert.False(keywords.Contains("烟幕"));
-        Assert.False(keywords.Contains(null!)); // 存在性查询不抛错
-
-        Assert.True(keywords.Remove("闪击"));
-        Assert.False(keywords.Remove("闪击")); // 幂等：移除不存在＝false 无操作
-        Assert.False(keywords.Contains("闪击"));
-    }
-
-    [Fact]
-    public void KeywordData_Rejects_Blank_Identifiers()
-    {
-        var keywords = new KeywordData();
-        Assert.Throws<ArgumentException>(() => keywords.Add(""));
-        Assert.Throws<ArgumentException>(() => keywords.Add("  "));
-        Assert.Throws<ArgumentNullException>(() => keywords.Remove(null!));
-    }
+    // 〔2C-A1 随改：旧→新〕原 KeywordData_Add_Remove_Contains_Are_Idempotent_And_Ordered（登记/幂等/登记序/null 宽容查询）
+    // 与 KeywordData_Rejects_Blank_Identifiers（空白标识拒绝）两条用例随「三口合并替代（词条组件化）」迁移至
+    // KeywordComponentTests.Manager_Query_Semantics_Mirrors_Legacy_Registration_Coverage
+    // （等价覆盖：授予/移除幂等、登记序、null/空白宽容查询、空白标识拒绝——不得以删除代替迁移）。
 
     [Fact]
     public void CounterActivationData_Defaults_And_ReadWrite()
@@ -144,7 +122,7 @@ public class CardDataComponentTests
     }
 
     [Fact]
-    public void All_Six_Components_Attach_Via_Existing_Component_System()
+    public void Component_Set_Attaches_Via_Existing_System_And_Keyword_Face_Is_Addressable()
     {
         var card = CreateUnitCard();
 
@@ -152,15 +130,18 @@ public class CardDataComponentTests
         Assert.NotNull(card.GetData<CommandPointCostData>());
         Assert.NotNull(card.GetData<BattleStatsData>());
 
-        // 其余四件（单位/指挥/词条/反制）：类定义就绪＋测试内构造挂载（实际挂载时机属后续批次）
+        // 其余三件（单位/指挥/反制）：类定义就绪＋测试内构造挂载（实际挂载时机属后续批次）
         card.AddData(new UnitStateData());
         card.AddData(new CommandData());
-        card.AddData(new KeywordData());
         card.AddData(new CounterActivationData());
         Assert.NotNull(card.GetData<UnitStateData>());
         Assert.NotNull(card.GetData<CommandData>());
-        Assert.NotNull(card.GetData<KeywordData>());
         Assert.NotNull(card.GetData<CounterActivationData>());
+
+        // 2C-A1 随改（旧「All_Six_Components_Attach...」→ 本用例）：词条面＝组件化体系（卡上伴生管理组件、非数据组件——
+        // GetData<KeywordData> 契约随三口合并替代移除）；含无词条卡可寻址、不抛、空内容。
+        Assert.Empty(card.Keywords.Components);
+        Assert.False(card.Keywords.Has("词条"));
     }
 
     [Fact]

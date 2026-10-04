@@ -234,6 +234,9 @@ public sealed class CommandManager
             return CommandResult.Failure(CommandFailureReason.NoActionAvailable);
         }
 
+        // 动作作用域（UI 消费桥接）：一次拖拽指挥链产生的事件聚合为一段。
+        await using var _actionScope = _engine.BeginAction();
+
         var box = new CommandFlowBox();
         var data = new Dictionary<string, object?>
         {
@@ -976,7 +979,7 @@ public sealed class CommandManager
 
     /// <summary>
     /// 统一死亡流程（攻击结算判定死亡后调用；伏击改写的攻击者死亡同走此流程）。
-    /// 清理最小口径：①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③词条效果注销 ＋ 修饰器清理
+    /// 清理最小口径：①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③词条死亡注销（2C-A1：仅行为撤销——登记/参值保留） ＋ 修饰器清理
     /// （W2b：含期限订阅随销；数值整合至最终态、零新发射——死亡清理为内部特殊路径）＋ 效果卸载
     /// （X2：统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；托管清理幂等）→
     /// ④UnitStateData.Position 置空（实例保留可查询）→ ⑤card.died 发射（恰一次；死亡状态就绪后）。
@@ -988,10 +991,7 @@ public sealed class CommandManager
 
         state.Position?.Clear();
         state.IsDestroyed = true;
-        if (unit.TryGetData<KeywordLogicData>(out var keywordLogics))
-        {
-            keywordLogics.UnmountAll();
-        }
+        KeywordRules.RevokeAllOnDeath(unit); // 2C-A1：词条死亡注销（经静态助手转发——仅行为撤销：OnRevoke 序列＋运行逻辑注销＋内嵌效果卸载；登记/参值保留可查询）
 
         await unit.Modifiers.ClearAllForDeathAsync(ct); // W2b：注销全部修饰器（含期限订阅随销）＋数值整合至最终态（零新发射）
 

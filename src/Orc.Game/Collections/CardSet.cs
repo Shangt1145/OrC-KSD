@@ -8,6 +8,10 @@ namespace Orc.Game.Collections;
 /// 同一实例重复添加被拒绝（实例唯一归属不变量：一张牌不能同属两处；同名多张＝多个独立实例）。
 /// 方法语义：Add / AddRange 尾部装填；Insert 指定位置插入（越界抛错）；Draw 取首张并移除（空集合抛错）；
 /// Shuffle 以传入的确定性随机源（受控源形态 <see cref="IRandomSource"/>）就地打乱（Fisher–Yates；集合自身不持有随机源）。
+/// 〔G7 手牌顺序原子面（纯容器操作：除成员/顺序变化外无副作用＋原子）〕MoveTo / MoveToLeft / MoveToRight
+/// 移至最左/最右/指定位置（目标卡不在集合中、目标位置越界＝明确拒绝；自移＝无操作成功）；
+/// RemoveAt 按索引移除（返回被移除卡引用）；Peek 按索引只读读取——「定位→组合」的明确读点
+/// （如"弃掉最左"＝Peek(0)＋弃置动作；按索引移除不得与销毁混用/串联）。
 /// </summary>
 public sealed class CardSet : IReadOnlyList<Card>
 {
@@ -73,6 +77,82 @@ public sealed class CardSet : IReadOnlyList<Card>
     {
         ArgumentNullException.ThrowIfNull(card);
         return _items.Remove(card);
+    }
+
+    /// <summary>
+    /// 移至指定位置（G7 手牌顺序原子面；0 基、＝移动完成后该卡所在位置；有效范围 0..Count−1，以移动后的序列为准）。
+    /// 纯容器操作（除成员顺序变化外无副作用——不发射信号、不销毁卡、不触发更新）；原子（要么成功、要么集合不变）。
+    /// 自移（目标位置＝当前位置）＝无操作、视为成功（合法请求、结果＝集合不变——无需调用方特判）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">该实例不在集合中（前提校验失败——明确拒绝）。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">index 越界（负数或 ≥Count——明确拒绝）。</exception>
+    public void MoveTo(int index, Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+
+        var current = _items.IndexOf(card);
+        if (current < 0)
+        {
+            throw new InvalidOperationException($"卡牌 '{card.Name}' 不在集合中（移至位置被拒绝：目标卡不在手牌）。");
+        }
+
+        if (index < 0 || index >= _items.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"目标位置越界（合法范围：0..{_items.Count - 1}）。");
+        }
+
+        if (index == current)
+        {
+            return; // 自移：无操作、视为成功（结果＝集合不变）
+        }
+
+        _items.RemoveAt(current);
+        _items.Insert(index, card);
+    }
+
+    /// <summary>移至最左（G7；＝移至索引 0 位置）。其余语义同 <see cref="MoveTo"/>。</summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">该实例不在集合中（明确拒绝）。</exception>
+    public void MoveToLeft(Card card) => MoveTo(0, card);
+
+    /// <summary>移至最右（G7；＝移至索引 Count−1 位置）。其余语义同 <see cref="MoveTo"/>。</summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">该实例不在集合中（明确拒绝）。</exception>
+    public void MoveToRight(Card card) => MoveTo(Count - 1, card);
+
+    /// <summary>
+    /// 按索引移除（G7；0 基）并返回被移除的卡引用（供调用方承接后续处置）。
+    /// 纯容器操作（不销毁、不发信号——与销毁型动作解耦；「取出（不销毁）供其他处置」的通用容器能力）。
+    /// 注意边界的组合约束：按索引移除不得与销毁混用/串联——凡销毁型处置一律「定位 → 对应动作」直达
+    /// （先按索引移除再弃置将因弃置前提校验失败而被拒绝——该失败为预期行为）。
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">index 越界（明确拒绝）。</exception>
+    public Card RemoveAt(int index)
+    {
+        if (index < 0 || index >= _items.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"移除位置越界（合法范围：0..{_items.Count - 1}）。");
+        }
+
+        var card = _items[index];
+        _items.RemoveAt(index);
+        return card;
+    }
+
+    /// <summary>
+    /// 按索引只读读取（G7；0 基；「最左」＝索引 0、「最右」＝Count−1）：不移除、不改动（只读）。
+    /// 用途＝为「定位 → 组合」提供明确读点（如"弃掉最左"＝Peek(0)＋弃置动作）。
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">index 越界（明确拒绝、可区分；读取后集合不变）。</exception>
+    public Card Peek(int index)
+    {
+        if (index < 0 || index >= _items.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"读取位置越界（合法范围：0..{_items.Count - 1}）。");
+        }
+
+        return _items[index];
     }
 
     /// <summary>取首张并移除；返回该卡牌实例。</summary>
