@@ -15,12 +15,13 @@ internal static class GameTestData
     /// <summary>
     /// 标准定义集：id "c01".."cNN"，名称 "卡01".."卡NN"（名称与 id 一一对应且全局唯一，便于逐位断言）；
     /// 四数值对每个 i 各异（部署费＝i、行动费＝i+1、攻击＝i+2、防御＝i+3），便于装配断言。
+    /// W1-1 随改：必填槽位（国籍/稀有度）统一补 Germany / Standard（无特定语义卡取合理值）。
     /// </summary>
     public static IReadOnlyList<CardDefinitionEntry> CreateDefinitions(int count = StandardDeckSize)
         => Enumerable.Range(1, count)
             .Select(i => new CardDefinitionEntry(
                 $"c{i:D2}",
-                new CardDefinition($"卡{i:D2}", deployCost: i, operateCost: i + 1, attack: i + 2, defense: i + 3)))
+                new CardDefinition($"卡{i:D2}", deployCost: i, operateCost: i + 1, attack: i + 2, defense: i + 3, faction: Faction.Germany, rarity: Rarity.Standard)))
             .ToList();
 
     /// <summary>标准卡组名单：id "c01".."cNN"（与标准定义集对应）。</summary>

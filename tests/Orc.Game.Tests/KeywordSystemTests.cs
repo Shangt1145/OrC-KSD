@@ -225,7 +225,7 @@ public class KeywordSystemTests
     public void Definition_Rejects_Unimplemented_Keyword()
     {
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, keywords: new[] { "守护" }));
+            "怪卡", 1, 1, 1, 1, keywords: new[] { "守护" }, faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("未实现标识", ex.Message);
     }
 
@@ -233,7 +233,7 @@ public class KeywordSystemTests
     public void Definition_Rejects_Duplicate_Keywords()
     {
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, keywords: new[] { KeywordIds.Blitz, KeywordIds.Blitz }));
+            "怪卡", 1, 1, 1, 1, keywords: new[] { KeywordIds.Blitz, KeywordIds.Blitz }, faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("重复项", ex.Message);
     }
 
@@ -241,7 +241,7 @@ public class KeywordSystemTests
     public void Definition_Rejects_Duplicate_UnitTypes()
     {
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, unitTypes: new[] { UnitType.Tank, UnitType.Tank }));
+            "怪卡", 1, 1, 1, 1, unitTypes: new[] { UnitType.Tank, UnitType.Tank }, faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("重复项", ex.Message);
     }
 
@@ -252,13 +252,13 @@ public class KeywordSystemTests
         var definition = new CardDefinition(
             "标准", 1, 1, 1, 1,
             keywords: new[] { KeywordIds.Fury, KeywordIds.Ambush },
-            unitTypes: new[] { UnitType.Artillery, UnitType.Bomber });
+            unitTypes: new[] { UnitType.Artillery, UnitType.Bomber }, faction: Faction.Germany, rarity: Rarity.Standard);
 
         Assert.Equal(new[] { KeywordIds.Fury, KeywordIds.Ambush }, definition.Keywords);
         Assert.Equal(new[] { UnitType.Artillery, UnitType.Bomber }, definition.UnitTypes);
         Assert.False(definition.IsGuard);
 
-        var plain = new CardDefinition("空白", 1, 1, 1, 1);
+        var plain = new CardDefinition("空白", 1, 1, 1, 1, faction: Faction.Germany, rarity: Rarity.Standard);
         Assert.Empty(plain.Keywords);
         Assert.Empty(plain.UnitTypes);
     }

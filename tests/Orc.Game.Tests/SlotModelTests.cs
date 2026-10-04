@@ -13,7 +13,7 @@ namespace Orc.Game.Tests;
 public class SlotModelTests
 {
     private static UnitCard CreateUnit(LogicEngine engine)
-        => new(engine, new CardDefinition("单位", 1, 2, 3, 4));
+        => new(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
 
     [Fact]
     public void Slot_Read_Surface_Exposes_Index_Occupant_And_Emptiness()
@@ -100,9 +100,9 @@ public class SlotModelTests
         Assert.Equal(5, frontLine.Capacity);
         Assert.Equal(4, lineB.Capacity);
 
-        // HQ 占位：支援线槽 0＝对应玩家（占容量格——恰 1 格被占、余 3 格空）；前线 0 占位
-        Assert.Same(match.Players[0], lineA[0].Occupant);
-        Assert.Same(match.Players[1], lineB[0].Occupant);
+        // HQ 占位：支援线槽 0＝对应玩家的总部实体（占容量格——恰 1 格被占、余 3 格空）；前线 0 占位
+        Assert.Same(match.Players[0].Hq, lineA[0].Occupant);
+        Assert.Same(match.Players[1].Hq, lineB[0].Occupant);
         Assert.Single(lineA, slot => !slot.IsEmpty);
         Assert.Single(lineB, slot => !slot.IsEmpty);
         Assert.All(frontLine, slot => Assert.True(slot.IsEmpty));

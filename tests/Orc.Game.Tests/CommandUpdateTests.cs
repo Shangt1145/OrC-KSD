@@ -15,7 +15,7 @@ namespace Orc.Game.Tests;
 public class CommandUpdateTests
 {
     [Fact]
-    public async Task Attack_Without_Deaths_Emits_No_Updates()
+    public async Task Attack_Without_Deaths_Emits_StatChanged_For_Both_Sides()
     {
         var bridge = new MockTargeterBridge();
         var match = CommandTestKit.CreateCommandMatch(bridge);
@@ -30,9 +30,17 @@ public class CommandUpdateTests
 
         var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, target.Ref);
 
-        // 攻击互伤但无死亡：不产生任何更新（更新仅位置变化与死亡两类；结算数值静默变更）。
+        // 攻击互伤但无死亡（W2b 随改——原「结算数值静默」语义废止）：数值变更经门户→跑链→集中触发——
+        // 互伤双方各恰一条 card.stat.changed（目标在前、攻击者在后；载荷＝目标卡＋变化字段 [Defense]）；无其它更新。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Empty(recorder.Updates);
+        Assert.Equal(new[] { GameUpdates.CardStatChanged, GameUpdates.CardStatChanged }, recorder.Types);
+        var targetUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], target));
+        var attackerUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], attacker));
+        Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(targetUpdate.Payload));
+        Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(attackerUpdate.Payload));
+        // 互伤数值（以互扣前有效值为基准）：5-2=3 与 5-2=3
+        Assert.Equal(3, target.Modifiers.GetEffectiveValue(CardStatFields.Defense));
+        Assert.Equal(3, attacker.Modifiers.GetEffectiveValue(CardStatFields.Defense));
     }
 
     [Fact]
@@ -89,8 +97,16 @@ public class CommandUpdateTests
         var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, target.Ref);
 
         // 死亡不发 unit.position.changed（专属移动语义）；与引擎内置 card.destroyed 不同义（游戏层死亡＝card.died）。
+        // W2b 随改：防御扣减经门户→跑链集中触发——被攻击者（防御 2→0）与攻击者（5→4）各一条 card.stat.changed；
+        // 「先数值变化、后死亡信号」：被攻击者的 sc（外部订阅通知）先于 card.died（防御归零的统一死亡衔接——总线触发器阶段），
+        // 攻击者的 sc 随后；恰一次死亡。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.CardDied }, recorder.Types);
+        Assert.Equal(
+            new[]
+            {
+                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardStatChanged,
+            },
+            recorder.Types);
         Assert.DoesNotContain(GameUpdates.UnitPositionChanged, recorder.Types);
         Assert.DoesNotContain(Updates.CardDestroyed, recorder.Types);
         Assert.NotEqual(Updates.CardDestroyed, GameUpdates.CardDied);

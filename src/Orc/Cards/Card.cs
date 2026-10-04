@@ -9,6 +9,7 @@ namespace Orc.Cards;
 /// Effects 为只读枚举面（增删经 Add/Remove API）；单线程语义、无额外保护。
 /// 生命周期（驱动信号＝更新；响应＝装载链处理器/效果主触发器）：
 /// 放置（card.placed）→ 初始化＋效果装载（被动：挂载＋OnMount；已放置后再 Add 的被动效果即时装载）；
+/// 加载时点装载（MountPassiveEffects）→ 挂主触发器＋OnMount（幂等；与放置驱动共用同一装载链——后续放置/入场入口幂等跳过）；
 /// 移除（RemoveEffect）/ 效果移除更新（effect.removed）→ 容器面移除＋卸载链；销毁（<see cref="LogicEngine.DestroyCard"/>）＝杀＋card.destroyed 驱动清理。
 /// </summary>
 public class Card : Entity
@@ -131,6 +132,23 @@ public class Card : Entity
     {
         ArgumentNullException.ThrowIfNull(effect);
         CardLoadout.CleanupEffect(this, effect);
+    }
+
+    /// <summary>
+    /// 装载全部被动效果（加载时点装载入口；加性公共面——供游戏层在「卡牌加载」时点驱动）：
+    /// 按 Effects 列表序逐效果执行装载链（挂主触发器 → OnMount；幂等——已装载者跳过；失败＝记录 ＋ 回滚为未生效、不阻断其它效果与宿主）。
+    /// 与放置驱动装载（card.placed 处理器）共用同一装载链与幂等语义：加载时点装载后，
+    /// 后续其它装载入口（放置/入场等）到达时幂等跳过（已装载不重复 OnMount）；主动效果不装载（仅列表进出）。
+    /// </summary>
+    public void MountPassiveEffects()
+    {
+        foreach (var effect in EffectsSnapshot())
+        {
+            if (effect.Kind == TriggerKind.Passive)
+            {
+                CardLoadout.MountEffect(this, effect);
+            }
+        }
     }
 
     // ---------- 框架内部（装载链/销毁/收集） ----------

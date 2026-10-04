@@ -70,9 +70,17 @@ public class CommandCard : CardBase
         string name, Func<CardTriggerView, Context, CancellationToken, Task> handler, int priority = 0)
         => PlayTrigger.Register(name, handler, priority);
 
-    /// <summary>打出宣告（默认链首步）：发 card.played（空载荷；先于主动 handler 集）。</summary>
-    private Task HandlePlayAnnounceAsync(CardTriggerView view, Context ctx, CancellationToken ct)
-        => GameUpdates.EmitCardPlayed(_chainEngine, ct);
+    /// <summary>打出宣告（默认链首步）：发 card.played（W4-1 升级版载荷＝{ Card, Player }——被使用卡实例＋使用方；先于主动 handler 集）。</summary>
+    private async Task HandlePlayAnnounceAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    {
+        if (view.Card is not CommandCard card || view.Player is not Player player)
+        {
+            ctx.Interrupt(); // 载荷缺失（结构性错误）：宣告不发生
+            return;
+        }
+
+        await GameUpdates.EmitCardPlayed(_chainEngine, card, player, ct);
+    }
 
     /// <summary>打出收尾（默认链末步）：扣费（恰一次）→ 离手（扣费之后；失败/取消时留手——由链前验证保证）。</summary>
     private Task HandlePlayFinalizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
@@ -83,7 +91,8 @@ public class CommandCard : CardBase
             return Task.CompletedTask;
         }
 
-        player.Points -= card.GetData<CommandPointCostData>().DeployCost;
+        // W3-2 G5：扣费读「有效部署费」（修饰贡献叠加后的链输出——无修饰时＝基准；与校验/复验同口径）
+        player.Points -= card.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
         player.Hand.Remove(card);
         return Task.CompletedTask;
     }

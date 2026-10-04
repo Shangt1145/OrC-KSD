@@ -3,6 +3,7 @@ using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
+using Orc.Game.Triggers;
 
 namespace Orc.Game.Commanding;
 
@@ -12,19 +13,41 @@ namespace Orc.Game.Commanding;
 //   由对局装配期注册为底层触发器〔进注册表、可查询〕）；
 // ②指挥入口（BeginCommandAsync）：一次拖拽＝一次调用链、单一公开入口方法驱动；输入＝被拖动单位引用；
 //   发起判定（非己方回合 / 归属无效 / 已死亡 / 两动作均不可用 / 对局已结束）→ 指挥触发器（流程编排：读判定 → 交互 →
-//   分派〔空槽→移动；敌方单位/HQ→攻击〕→ 嵌套执行 → 外层收尾〔扣费＋两 bool 更新〕）；
+//   分派〔空槽→移动；敌方单位/敌方 HQ 实体引用→攻击〕→ 嵌套执行 → 外层收尾〔扣费＋两 bool 更新〕）；
 // ③动作可用性聚合判定公开面（GetCommandAvailability）：bool＋原因＋候选；与流程内部同源、纯查询；
 //   攻击目标筛选含轰炸机拦截（后置项 C：目标所在战线存在敌方战斗机时该战线非战斗机目标置黑——含 HQ）；
 // ④移动执行（仅推进：支援线→前线；前置＝前线不存在存活敌方单位〔后置项 C；候选＋执行复验双保险〕；
 //   候选＝前线空槽；无后撤/横移候选；发射 unit.position.changed——恰一次）；
-// ⑤攻击执行（单位 vs 单位必经「造成攻击伤害」触发器中转；HQ 简路＝直接扣血）；攻击结算＝按反击豁免判定表
+// ⑤攻击执行（单位 vs 单位必经「造成攻击伤害」触发器中转；HQ 简路＝伤害经 HQ 数值路径与管线
+//   〔改写→介入→应用→跑链集中触发〕、不反击、不走「造成攻击伤害」）；攻击结算＝按反击豁免判定表
 //   （后置项 A：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常；
 //   多类型逐条适用、豁免优先；同时互伤框架——豁免方不结算反击伤害）→ HP≤0 死亡（统一死亡流程：清位＋置毁＋
-//   效果注销＋Position 置空＋card.died 恰一次）；HQ≤0 → 立即终局（后置项 B：状态置结束＋胜者记录；其后动作入口
-//   拒绝，当次结算收尾照常完成）；
+//   效果注销＋Position 置空＋card.died 恰一次）；HQ≤0 → HQ 侧统一响应（W3-3：终局判定迁至 HQ——归零检查
+//   〔响应 card.stat.changed〕执行终局记录：状态置结束＋胜者＝HQ 归零方之对手；其后动作入口拒绝，
+//   当次结算收尾照常完成）；
 // ⑥守护维护（被守护状态：相邻〔同线槽位索引差 1〕守护者 → 获被守护；仅能被炮/轰攻击；守护者自身不可被守护；
 //   由位置/入场/死亡更新驱动重算——底层链负责）；⑦回合恢复（turn.start 处理段：行动方在场单位重置两 bool）。
 // 「两 bool 只在外层更新」：内层（移动/攻击/伤害/词条）一律不写——法定写入点＝指挥收尾 / 部署链收尾（闪击）/ 回合恢复。
+// W2b G3 接线（加性）：数值读取面接改——攻击力/防御力/行动费结算读点改读「有效值」（修饰机制缓存；
+//   伤害值/HQ 伤害＝攻击有效值、扣减经门户〔ApplyDefenseDamageAsync〕、死亡判定＝防御有效值、可用性/扣费/复验＝行动费有效值）；
+//   防御归零统一死亡衔接——被动触发器（响应 card.stat.changed；外部订阅通知完成之后检查）「防御有效值 ≤0 且未死亡」
+//   → 统一死亡流程〔死亡清理＝效果/修饰器注销＋数值整合零新发射；先数值变化、后死亡信号〕（含修饰撤销/到期等
+//   非伤害来源的 ≤0 边界；伤害路径判定为防护兜底——已死亡跳过，死亡恰一次）；互伤结算含死亡冻结防护（尸体不结算）。
+// W2c X1/X2 加性：
+// ①X1 触发者卡牌（TriggerCard）——4 个内置流程触发器视图承载「引发该操作的效果宿主卡引用」；填充规则：
+//   主动指挥（含其嵌套调用）＝缺省空（不携带）；效果引发＝调用方显式携带（BeginCommandAsync 可选参数 / 触发器数据键）
+//   且随同一效果链传递（指挥→移动/攻击；攻击→伤害链内一致）；复验只消费操作角色引用（前位、插入序），
+//   触发者引用置于尾部、不参与复验（去重后计数允许多余项）。
+// ②X2 效果卸载（死亡链）——修饰器清理之后、card.died 之前逐效果走统一卸载链（容器移除＋OnUnmount＋撤销登记
+//   ＋总线卸载；托管清理幂等——修饰器已清、零发射），保持「先数值变化→清理→card.died」观察序。
+// W3-3 G11 加性（HQ 实体化）：
+// ①HQ 目标承载＝HQ 实体引用（hq.Ref）——候选/交互/执行以实体引用为准（槽位引用不再作为 HQ 目标产出；
+//   槽位关系仅用于布局语义判定〔占位/邻位/守护/轰炸机拦截/范围矩阵基准〕）；
+// ②攻击 HQ（简路骨架保持：不反击、不经过「造成攻击伤害」、不触发死亡/防御归零单位语义）：伤害数值改走
+//   HQ 数值路径与管线（改写→介入→应用→跑链集中触发）；终局判定不内联——HQ 侧统一响应（归零检查触发器：
+//   任何来源致 HQ 血量 ≤0 均经同一判定；「先数值变化、后终局记录」观察序）；
+// ③被守护状态以 HQ 实体为单元维护（守护者/拦截基准仍为槽位关系与既有语义）；
+// ④HQ 终局响应装配注入（延迟读取；胜者＝HQ 归零方之对手；脱局＝防御降级）。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -45,9 +68,11 @@ public sealed class CommandManager
     private readonly IReadOnlyList<Player> _players;
     private readonly Func<Player?> _currentPlayerProvider;
     private readonly MatchLifecycle? _lifecycle;
+    private readonly Trigger<CardTriggerView> _defenseDepletionTrigger; // W2b：防御归零检查（被动；挂载于更新总线）
+    private readonly Trigger<CardTriggerView> _hqZeroTrigger; // W3-3：HQ 归零检查（被动；挂载于更新总线）
 
     private readonly HashSet<UnitCard> _guardedUnits = new();
-    private readonly HashSet<Player> _guardedHqs = new();
+    private readonly HashSet<Hq> _guardedHqs = new(); // W3-3：被守护 HQ 以 HQ 实体为单元
 
     /// <summary>
     /// 创建指挥管理器（创建四个内置流程触发器并装配默认链；订阅位置/入场/死亡更新以维护被守护状态）。
@@ -117,6 +142,34 @@ public sealed class CommandManager
 
             return Task.CompletedTask;
         });
+
+        // G3 修饰机制（W2b 加性）：防御归零的统一死亡衔接——被动触发器（挂载更新总线、响应 card.stat.changed）：
+        // 检查在「外部订阅通知完成之后」（总线触发器阶段）执行——「先数值变化、后死亡信号」：
+        // card.stat.changed（致死结算段、数值落定）→ 死亡清理 → card.died（清理就绪后、恰一次）。
+        _defenseDepletionTrigger = new Trigger<CardTriggerView>(
+            "防御归零检查触发器",
+            TriggerKind.Passive,
+            events: new[] { new TriggerEvent<CardTriggerView>("防御归零检查", HandleDefenseDepletionAsync) },
+            hooks: new[] { GameUpdates.CardStatChanged });
+        _engine.Bus.Mount(_defenseDepletionTrigger);
+
+        // W3-3（G11 HQ 实体化）：HQ 归零的统一响应——被动触发器（挂载更新总线、响应 card.stat.changed）：
+        // 「终局判定迁至 HQ」的触发侧——与防御归零检查同构（检查在「外部订阅通知完成之后」〔总线触发器阶段〕执行；
+        // 「先数值变化（通用数据改变更新）、后终局记录」观察序）；任何来源（攻击伤害/效果/修饰撤销等）使 HQ 血量 ≤0
+        // 均经同一判定：执行主体＝HQ 侧统一响应（RespondToZero——不内联于攻击流程）。
+        _hqZeroTrigger = new Trigger<CardTriggerView>(
+            "HQ 归零检查触发器",
+            TriggerKind.Passive,
+            events: new[] { new TriggerEvent<CardTriggerView>("HQ 归零检查", HandleHqZeroCheckAsync) },
+            hooks: new[] { GameUpdates.CardStatChanged });
+        _engine.Bus.Mount(_hqZeroTrigger);
+
+        // W3-3：终局响应装配注入（延迟读取）——HQ 随玩家创建，对局服务在此绑定：
+        // 胜者＝HQ 归零方之对手；脱局场景（本对象独立构造、无生命周期提供）＝HQ 侧防御降级（归零不记录、不抛错）。
+        foreach (var player in players)
+        {
+            player.Hq.ConfigureTerminalResponse(() => EnemyOf(player), () => _lifecycle);
+        }
     }
 
     // ---------- 内置流程触发器（公开只读；对局装配期注册为底层触发器） ----------
@@ -127,7 +180,7 @@ public sealed class CommandManager
     /// <summary>单位移动触发器（内置；执行段＝槽位变更＋发射 unit.position.changed；复验＝执行前兜底）。</summary>
     public Trigger<UnitMoveTriggerView> UnitMoveTrigger { get; }
 
-    /// <summary>单位攻击触发器（内置；执行段＝HQ 扣血直路 / 单位互伤经「造成攻击伤害」）。</summary>
+    /// <summary>单位攻击触发器（内置；执行段＝HQ 简路〔伤害经 HQ 数值路径〕/ 单位互伤经「造成攻击伤害」）。</summary>
     public Trigger<UnitAttackTriggerView> UnitAttackTrigger { get; }
 
     /// <summary>「造成攻击伤害」共享流程触发器（内置；单位 vs 单位攻击结算必经；伏击挂载点）。</summary>
@@ -143,11 +196,14 @@ public sealed class CommandManager
     /// 输入＝被拖动单位引用（行动方从单位归属与对局状态推导——无需额外上下文参数）。
     /// 发起拒绝（非己方回合 / 归属无效 / 已死亡 / 两动作均不可用）＝不进入交互、零副作用、不发射更新；
     /// 取消＝零副作用；成功＝完整执行（含以攻击者死亡告终的攻击结算——照常扣费、照常清位）。
+    /// X1 加性：<paramref name="triggerCard"/>＝触发者卡牌（效果引发情形——引发本次操作的效果宿主卡引用；
+    /// 显式携带、缺省＝null＝玩家主动操作）；携带后随指挥链透传（含嵌套的移动/攻击与伤害调用）。
     /// 装配性错误（未单位化）＝明确异常（fail-fast）。
     /// </summary>
     /// <exception cref="ArgumentNullException">unit 为 null。</exception>
     /// <exception cref="InvalidOperationException">单位尚未单位化（装配性错误、fail-fast）。</exception>
-    public async Task<CommandResult> BeginCommandAsync(UnitCard unit, CancellationToken ct = default)
+    public async Task<CommandResult> BeginCommandAsync(
+        UnitCard unit, CancellationToken ct = default, Ref<Entity>? triggerCard = null)
     {
         ArgumentNullException.ThrowIfNull(unit);
         RequireUnitized(unit);
@@ -171,15 +227,18 @@ public sealed class CommandManager
         }
 
         var box = new CommandFlowBox();
-        await CommandTrigger.InvokeAsync(
-            _engine,
-            new Dictionary<string, object?>
-            {
-                [CommandDataKeys.Card] = unit.Ref,
-                [CommandDataKeys.Player] = unit.Owner,
-                [CommandDataKeys.FlowBox] = box,
-            },
-            ct);
+        var data = new Dictionary<string, object?>
+        {
+            [CommandDataKeys.Card] = unit.Ref,
+            [CommandDataKeys.Player] = unit.Owner,
+            [CommandDataKeys.FlowBox] = box,
+        };
+        if (triggerCard is not null)
+        {
+            data[CommandDataKeys.TriggerCard] = triggerCard; // X1：效果引发情形显式携带（玩家主动操作＝缺省空）
+        }
+
+        await CommandTrigger.InvokeAsync(_engine, data, ct);
 
         return box.Result ?? CommandResult.Failure(CommandFailureReason.CommandFlowFault);
     }
@@ -249,7 +308,8 @@ public sealed class CommandManager
             return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
         }
 
-        if (owner.Points < state.OperateCost)
+        // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
+        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
             return CommandActionAvailability.Blocked(CommandBlockReason.PointShortage);
         }
@@ -289,7 +349,6 @@ public sealed class CommandManager
         }
 
         var owner = unit.Owner!;
-        var state = unit.GetData<UnitStateData>();
         var command = unit.GetData<CommandData>();
 
         if (!command.CanAttack)
@@ -297,7 +356,8 @@ public sealed class CommandManager
             return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
         }
 
-        if (owner.Points < state.OperateCost)
+        // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
+        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
             return CommandActionAvailability.Blocked(CommandBlockReason.PointShortage);
         }
@@ -345,10 +405,11 @@ public sealed class CommandManager
             }
         }
 
-        var hqSlot = enemyLine[0];
-        if (hqSlot.Occupant is Player hq && ReferenceEquals(hq, enemy) && IsLegalHqTarget(attacker, hqSlot))
+        // HQ（W3-3 实体化）：目标以 HQ 实体引用承载——候选产出 hq.Ref（不留双承载：槽位引用不再作为
+        // HQ 目标产出；槽位关系仅用于布局语义判定〔守护/轰炸机拦截/范围矩阵——经 HQ 占位槽〕）。
+        if (enemyLine[0].Occupant is Hq hq && IsLegalHqTarget(attacker, hq))
         {
-            result.Add(hqSlot.Ref);
+            result.Add(hq.Ref);
         }
 
         return result;
@@ -390,16 +451,22 @@ public sealed class CommandManager
         return IsLineInRange(attacker, targetPosition);
     }
 
-    /// <summary>HQ 为目标的合法性（仍为敌方 HQ ∧ 被守护仅炮/轰可攻 ∧ 范围矩阵；HQ 无死亡/烟幕语义）。</summary>
-    private bool IsLegalHqTarget(UnitCard attacker, Slot hqSlot)
+    /// <summary>HQ 为目标的合法性（仍为敌方 HQ〔引用同一性〕∧ 被守护仅炮/轰可攻 ∧ 范围矩阵；HQ 无死亡/烟幕语义）。
+    /// W3-3：HQ 实体引用承载——布局判定（守护/轰炸机拦截/范围矩阵）经 HQ 占位槽（布局语义基准）。</summary>
+    private bool IsLegalHqTarget(UnitCard attacker, Hq hq)
     {
         var enemy = attacker.Owner is { } owner ? EnemyOf(owner) : null;
-        if (enemy is null || !ReferenceEquals(hqSlot.Occupant, enemy))
+        if (enemy is null || !ReferenceEquals(hq.Owner, enemy))
         {
             return false;
         }
 
-        if (_guardedHqs.Contains(enemy) && !CountsAsBombard(attacker))
+        if (hq.Position is not { } hqSlot)
+        {
+            return false; // 异常布局（防御：HQ 未入槽）
+        }
+
+        if (_guardedHqs.Contains(hq) && !CountsAsBombard(attacker))
         {
             return false; // HQ 被守护（相邻守护者）：仅能被炮/轰攻击
         }
@@ -464,12 +531,20 @@ public sealed class CommandManager
         return _guardedUnits.Contains(unit);
     }
 
-    /// <summary>被守护状态查询（HQ）：同方支援线（HQ 占位槽的索引差 1 邻位）存在存活守护者 ＝ 被守护。</summary>
+    /// <summary>被守护状态查询（HQ；W3-3：HQ 实体承载——查询以 HQ 实体为单元）。</summary>
+    /// <exception cref="ArgumentNullException">hq 为 null。</exception>
+    public bool IsHqGuarded(Hq hq)
+    {
+        ArgumentNullException.ThrowIfNull(hq);
+        return _guardedHqs.Contains(hq);
+    }
+
+    /// <summary>被守护状态查询（HQ；按玩家转发——转发读面，读 player.Hq 的守护状态）。</summary>
     /// <exception cref="ArgumentNullException">player 为 null。</exception>
     public bool IsHqGuarded(Player player)
     {
         ArgumentNullException.ThrowIfNull(player);
-        return _guardedHqs.Contains(player);
+        return IsHqGuarded(player.Hq);
     }
 
     /// <summary>
@@ -518,12 +593,12 @@ public sealed class CommandManager
 
     private void MaintainHqGuard(BattleLine supportLine)
     {
-        if (supportLine[0].Occupant is not Player hq)
+        if (supportLine[0].Occupant is not Hq hq)
         {
             return;
         }
 
-        if (IsGuardianAt(supportLine, 1, hq))
+        if (IsGuardianAt(supportLine, 1, hq.Owner))
         {
             _guardedHqs.Add(hq); // HQ 计入保护（守护者在槽 1 → HQ 获被守护）
         }
@@ -632,34 +707,37 @@ public sealed class CommandManager
             return;
         }
 
-        // 分派：选中空槽 → 移动触发器；选中敌方单位 / 敌方 HQ → 攻击触发器
-        await DispatchSelectedAsync(unit, selected, box, ctx, ct);
+        // 分派：选中空槽 → 移动触发器；选中敌方单位 / 敌方 HQ → 攻击触发器（X1：触发者随指挥链透传）
+        await DispatchSelectedAsync(unit, selected, box, ctx, ct, view.TriggerCard);
     }
 
     private async Task DispatchSelectedAsync(
-        UnitCard unit, Ref<Entity> selected, CommandFlowBox box, Context ctx, CancellationToken ct)
+        UnitCard unit, Ref<Entity> selected, CommandFlowBox box, Context ctx,
+        CancellationToken ct, Ref<Entity>? triggerCard)
     {
         var owner = unit.Owner;
         var enemy = owner is null ? null : EnemyOf(owner);
         var selectedEntity = selected.Value;
 
-        if (selectedEntity is Slot slot)
+        // 分派：选中敌方 HQ 实体引用 / 敌方单位 → 攻击触发器；选中空槽 → 移动触发器
+        // （X1：触发者随指挥链透传）。W3-3：HQ 目标以实体引用承载——不再有「槽位→HQ」分派
+        // （槽位引用不再作为 HQ 目标产出；HQ 占位槽引用落入无效目标分派）。
+        if (selectedEntity is Hq hq)
         {
-            if (slot.IsEmpty)
+            if (enemy is not null && ReferenceEquals(hq.Owner, enemy))
             {
-                await DispatchMoveAsync(unit, selected, box, ctx, ct);
-                return;
-            }
-
-            if (enemy is not null && slot.Occupant is Player hq && ReferenceEquals(hq, enemy))
-            {
-                await DispatchAttackAsync(unit, selected, box, ctx, ct);
+                await DispatchAttackAsync(unit, selected, box, ctx, ct, triggerCard);
                 return;
             }
         }
         else if (selectedEntity is UnitCard)
         {
-            await DispatchAttackAsync(unit, selected, box, ctx, ct);
+            await DispatchAttackAsync(unit, selected, box, ctx, ct, triggerCard);
+            return;
+        }
+        else if (selectedEntity is Slot slot && slot.IsEmpty)
+        {
+            await DispatchMoveAsync(unit, selected, box, ctx, ct, triggerCard);
             return;
         }
 
@@ -668,7 +746,8 @@ public sealed class CommandManager
     }
 
     private async Task DispatchMoveAsync(
-        UnitCard unit, Ref<Entity> newPositionRef, CommandFlowBox box, Context ctx, CancellationToken ct)
+        UnitCard unit, Ref<Entity> newPositionRef, CommandFlowBox box, Context ctx,
+        CancellationToken ct, Ref<Entity>? triggerCard)
     {
         var state = unit.GetData<UnitStateData>();
         var oldSlot = state.Position;
@@ -679,15 +758,18 @@ public sealed class CommandManager
         }
 
         // 嵌套执行（复验＝移动触发器验证承载——拒绝＝仅本次取消、零副作用＋留痕）
-        var stream = await UnitMoveTrigger.InvokeAsync(
-            _engine,
-            new Dictionary<string, object?>
-            {
-                [CommandDataKeys.Unit] = unit.Ref,
-                [CommandDataKeys.OldPosition] = oldSlot.Ref,
-                [CommandDataKeys.NewPosition] = newPositionRef,
-            },
-            ct);
+        var data = new Dictionary<string, object?>
+        {
+            [CommandDataKeys.Unit] = unit.Ref,
+            [CommandDataKeys.OldPosition] = oldSlot.Ref,
+            [CommandDataKeys.NewPosition] = newPositionRef,
+        };
+        if (triggerCard is not null)
+        {
+            data[CommandDataKeys.TriggerCard] = triggerCard; // X1：效果引发情形随指挥链透传（主动指挥＝缺省空）
+        }
+
+        var stream = await UnitMoveTrigger.InvokeAsync(_engine, data, ct);
 
         if (ctx.Interrupted || stream.Outcome != ExecutionOutcome.Normal)
         {
@@ -703,17 +785,21 @@ public sealed class CommandManager
     }
 
     private async Task DispatchAttackAsync(
-        UnitCard unit, Ref<Entity> targetRef, CommandFlowBox box, Context ctx, CancellationToken ct)
+        UnitCard unit, Ref<Entity> targetRef, CommandFlowBox box, Context ctx,
+        CancellationToken ct, Ref<Entity>? triggerCard)
     {
         // 嵌套执行（复验＝攻击触发器验证承载——拒绝＝仅本次取消、零副作用＋留痕）
-        var stream = await UnitAttackTrigger.InvokeAsync(
-            _engine,
-            new Dictionary<string, object?>
-            {
-                [CommandDataKeys.Attacker] = unit.Ref,
-                [CommandDataKeys.Target] = targetRef,
-            },
-            ct);
+        var data = new Dictionary<string, object?>
+        {
+            [CommandDataKeys.Attacker] = unit.Ref,
+            [CommandDataKeys.Target] = targetRef,
+        };
+        if (triggerCard is not null)
+        {
+            data[CommandDataKeys.TriggerCard] = triggerCard; // X1：效果引发情形随指挥链透传（主动指挥＝缺省空）
+        }
+
+        var stream = await UnitAttackTrigger.InvokeAsync(_engine, data, ct);
 
         if (ctx.Interrupted || stream.Outcome != ExecutionOutcome.Normal)
         {
@@ -728,14 +814,13 @@ public sealed class CommandManager
         box.Result = CommandResult.Success();
     }
 
-    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
+    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
     private static void FinalizeMove(UnitCard unit)
     {
         var owner = unit.Owner!;
-        var state = unit.GetData<UnitStateData>();
         var command = unit.GetData<CommandData>();
 
-        owner.Points -= state.OperateCost;
+        owner.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost);
         command.CanMove = false;
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -743,14 +828,13 @@ public sealed class CommandManager
         }
     }
 
-    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
+    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
     private static void FinalizeAttack(UnitCard unit)
     {
         var owner = unit.Owner!;
-        var state = unit.GetData<UnitStateData>();
         var command = unit.GetData<CommandData>();
 
-        owner.Points -= state.OperateCost;
+        owner.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost);
         command.CanAttack = KeywordRules.ResolveCanAttackAfterAttack(unit);
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -791,29 +875,31 @@ public sealed class CommandManager
         }
 
         var targetEntity = targetRef.Value;
-        if (targetEntity is Slot hqSlot && hqSlot.Occupant is Player hq && !ReferenceEquals(hq, attacker.Owner))
+        if (targetEntity is Hq hq && !ReferenceEquals(hq.Owner, attacker.Owner))
         {
-            // HQ 简路：直接扣血（伤害＝攻击者实时攻击力；HQ 不反击；钳制到 0；不走「造成攻击伤害」）
-            // HQ 生命≤0 → 立即终局（后置项 B：当刻置状态结束＋记录胜者；当次结算收尾照常完成——内部步骤不经门禁）
-            var damage = attacker.GetData<UnitStateData>().Attack;
-            hq.HqHealth = Math.Max(0, hq.HqHealth - damage);
-            if (hq.HqHealth <= 0 && attacker.Owner is { } winner)
-            {
-                _lifecycle?.End(winner);
-            }
+            // HQ 简路（W3-3 实体化）：伤害＝攻击者攻击力有效值；HQ 不反击；不走「造成攻击伤害」（无单位互伤链）；
+            // 伤害数值改走 HQ 数值路径与管线（改写→介入→应用→跑链集中触发——不建专用 HQ 伤害流程）。
+            // 归零→终局：不内联于攻击流程——HQ 侧统一响应（数值变化下游；与「先数值变化、后终局记录」
+            // 观察序一致）。当次结算收尾照常完成（内部步骤不经门禁）。
+            var damage = attacker.Modifiers.GetEffectiveValue(CardStatFields.Attack);
+            await hq.ApplyDamageAsync(damage, ct);
         }
         else if (targetEntity is UnitCard)
         {
             // 单位 vs 单位：必经「造成攻击伤害」（伏击挂载点；同一目标承载）
-            await AttackDamageTrigger.InvokeAsync(
-                _engine,
-                new Dictionary<string, object?>
-                {
-                    [CommandDataKeys.Attacker] = attackerRef,
-                    [CommandDataKeys.Target] = targetRef,
-                    [CommandDataKeys.Resolution] = new AttackDamageResolution(),
-                },
-                ct);
+            // X1：触发者随链路传递（同一效果链内一致——攻击链读数透传至伤害链；主动指挥＝空、照常透传）
+            var damageData = new Dictionary<string, object?>
+            {
+                [CommandDataKeys.Attacker] = attackerRef,
+                [CommandDataKeys.Target] = targetRef,
+                [CommandDataKeys.Resolution] = new AttackDamageResolution(),
+            };
+            if (view.TriggerCard is not null)
+            {
+                damageData[CommandDataKeys.TriggerCard] = view.TriggerCard;
+            }
+
+            await AttackDamageTrigger.InvokeAsync(_engine, damageData, ct);
         }
         else
         {
@@ -837,6 +923,13 @@ public sealed class CommandManager
             return;
         }
 
+        // 死亡冻结（W2b）：任一方已死亡＝尸体不参与数值结算（对已死单位的伤害门户亦将明确拒绝——此处为流程侧防护；
+        // 真实对局不可达〔候选过滤〕——防御于测试/异常驱动路径）。
+        if (attacker.GetData<UnitStateData>().IsDestroyed || target.GetData<UnitStateData>().IsDestroyed)
+        {
+            return;
+        }
+
         if (resolution.IsRewritten)
         {
             // 伏击改写（已判定成立）：替代默认——攻击者死亡（统一死亡流程、无 HP 逐步扣减语义）、被攻击者不受伤
@@ -844,27 +937,30 @@ public sealed class CommandManager
             return;
         }
 
-        // 默认基础互伤：按反击豁免判定表（后置项 A）——同时结算、以互扣前实时值为基准；豁免方不结算反击伤害
+        // 默认基础互伤：按反击豁免判定表（后置项 A）——同时结算、以互扣前有效值为基准；豁免方不结算反击伤害
         // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常）
-        var attackerState = attacker.GetData<UnitStateData>();
-        var targetState = target.GetData<UnitStateData>();
-        var damageToTarget = attackerState.Attack;
-        var damageToAttacker = targetState.Attack;
+        // W2b：伤害值与扣减一律接改——伤害读「攻击力有效值」；扣减经门户（损伤量→跑链→有变更集中触发）。
+        var damageToTarget = attacker.Modifiers.GetEffectiveValue(CardStatFields.Attack);
+        var damageToAttacker = target.Modifiers.GetEffectiveValue(CardStatFields.Attack);
         var counterAttacks = CounterAttackRules.CanCounterAttack(attacker, target);
 
-        targetState.Defense -= damageToTarget;
+        await target.ApplyDefenseDamageAsync(damageToTarget, ct); // 门户：伤害＝即时变更（只扣当前、不减上限）
         if (counterAttacks)
         {
-            attackerState.Defense -= damageToAttacker;
+            await attacker.ApplyDefenseDamageAsync(damageToAttacker, ct);
         }
 
-        // 死亡判定（互扣后实时值 ≤ 0）；同归于尽＝两枚 card.died 均发射，顺序：被攻击者在前、攻击者在后
-        if (targetState.Defense <= 0)
+        // 死亡判定（互扣后防御有效值 ≤0；数值表现钳制后 ≤0 即 ==0）；同归于尽＝两枚 card.died 均发射，顺序：被攻击者在前、攻击者在后。
+        // 防御归零的统一死亡衔接由 stat.changed 订阅先行处理（含修饰撤销/到期等非伤害来源）；此处判定＝结算路径内防护兜底——
+        // 已死亡＝跳过（保证死亡恰一次、发射顺序稳定）。
+        if (!target.GetData<UnitStateData>().IsDestroyed
+            && target.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
         {
             await ProcessDeathAsync(target, ct);
         }
 
-        if (counterAttacks && attackerState.Defense <= 0)
+        if (counterAttacks && !attacker.GetData<UnitStateData>().IsDestroyed
+            && attacker.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
         {
             await ProcessDeathAsync(attacker, ct);
         }
@@ -872,7 +968,9 @@ public sealed class CommandManager
 
     /// <summary>
     /// 统一死亡流程（攻击结算判定死亡后调用；伏击改写的攻击者死亡同走此流程）。
-    /// 清理最小口径：①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③已挂载效果（含词条效果）注销 →
+    /// 清理最小口径：①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③词条效果注销 ＋ 修饰器清理
+    /// （W2b：含期限订阅随销；数值整合至最终态、零新发射——死亡清理为内部特殊路径）＋ 效果卸载
+    /// （X2：统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；托管清理幂等）→
     /// ④UnitStateData.Position 置空（实例保留可查询）→ ⑤card.died 发射（恰一次；死亡状态就绪后）。
     /// 不发 unit.position.changed（该更新专属移动语义）。
     /// </summary>
@@ -887,16 +985,67 @@ public sealed class CommandManager
             keywordLogics.UnmountAll();
         }
 
+        await unit.Modifiers.ClearAllForDeathAsync(ct); // W2b：注销全部修饰器（含期限订阅随销）＋数值整合至最终态（零新发射）
+
+        // X2：效果卸载（统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；含托管清理〔幂等：
+        // 修饰器已清、零操作〕）——清理就绪后方发 card.died（「先数值变化→清理→card.died」观察序保持）。
+        foreach (var effect in unit.Effects.ToArray())
+        {
+            unit.RemoveEffect(effect);
+        }
+
         state.Position = null;
         await GameUpdates.EmitCardDied(_engine, unit, ct);
         // 守护维护由本更新驱动（清位后等效触达——被守护状态可观测变化）
+    }
+
+    /// <summary>
+    /// 防御归零的统一死亡衔接（W2b；card.stat.changed 更新驱动的被动检查——总线触发器阶段）：
+    /// 任一单位的防御有效值经数值变更（伤害/修饰/撤销/到期）降至 ≤0（数值表现钳制后 ≤0 即 ==0）且尚未死亡
+    /// → 走既有统一死亡流程（无攻击者归因）。执行时机＝card.stat.changed 的外部订阅通知完成之后——
+    /// 「先数值变化、后死亡信号」（card.stat.changed → 死亡清理 → card.died）。
+    /// 已死亡/已毁＝跳过（幂等防护——死亡恰一次）；非单位卡（无单位数据组件）＝跳过。
+    /// </summary>
+    private async Task HandleDefenseDepletionAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    {
+        if (view.Card is not UnitCard unit
+            || !unit.TryGetData<UnitStateData>(out var state)
+            || state.IsDestroyed)
+        {
+            return;
+        }
+
+        if (unit.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
+        {
+            await ProcessDeathAsync(unit, ct);
+        }
+    }
+
+    /// <summary>
+    /// HQ 归零的统一响应（W3-3 G11；card.stat.changed 更新驱动的被动检查——总线触发器阶段）：
+    /// 任一 HQ 的有效血量经数值变更（伤害/修饰/撤销等）降至 ≤0 → 执行 HQ 侧统一响应
+    /// （终局记录：状态置结束＋胜者＝HQ 归零方之对手——「终局判定迁至 HQ」的落点：判定为 HQ 侧响应，
+    /// 不内联于攻击流程）。执行时机＝card.stat.changed 的外部订阅通知完成之后——
+    /// 「先数值变化（通用数据改变更新）、后终局记录」。非 HQ 卡＝跳过；有效值 &gt;0＝无操作；
+    /// 生命周期侧重复调用幂等（End 自身幂等）。
+    /// </summary>
+    private Task HandleHqZeroCheckAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    {
+        if (view.Card is Hq hq)
+        {
+            hq.RespondToZero(); // HQ 侧统一响应（≤0 才生效；内部幂等；脱局防御降级在 HQ 侧）
+        }
+
+        return Task.CompletedTask;
     }
 
     // ---------- ⑨ 执行前复验（分派后、执行前兜底；验证机制承载——ValidationRejected、零副作用＋留痕） ----------
 
     private bool RevalidateMove(IReadOnlyList<Ref<Entity>> refs)
     {
-        if (refs.Count != 3)
+        // X1：refs＝触发数据第一层引用收集（插入序）——操作角色引用（Unit/OldPosition/NewPosition）位于前位，
+        // 效果引发情形尾部可携带「触发者卡牌」引用（TriggerCard；不参与复验——去重后计数允许多余项）。
+        if (refs.Count < 3)
         {
             return false;
         }
@@ -936,7 +1085,8 @@ public sealed class CommandManager
             return false;
         }
 
-        if (owner.Points < state.OperateCost)
+        // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
+        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
             return false;
         }
@@ -966,7 +1116,9 @@ public sealed class CommandManager
 
     private bool RevalidateAttack(IReadOnlyList<Ref<Entity>> refs)
     {
-        if (refs.Count != 2)
+        // X1：refs＝触发数据第一层引用收集（插入序）——操作角色引用（Attacker/Target）位于前位，
+        // 效果引发情形尾部可携带「触发者卡牌」引用（TriggerCard；不参与复验——去重后计数允许多余项）。
+        if (refs.Count < 2)
         {
             return false;
         }
@@ -1002,7 +1154,8 @@ public sealed class CommandManager
             return false;
         }
 
-        if (owner.Points < state.OperateCost)
+        // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
+        if (owner.Points < attacker.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
             return false;
         }
@@ -1010,7 +1163,7 @@ public sealed class CommandManager
         return IsAttackTargetLegal(attacker, targetRef);
     }
 
-    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 占位仍为敌方玩家）。</summary>
+    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 引用仍为敌方 HQ——W3-3 实体承载）。</summary>
     private bool IsAttackTargetLegal(UnitCard attacker, Ref<Entity> targetRef)
     {
         if (!targetRef.IsAlive)
@@ -1019,9 +1172,9 @@ public sealed class CommandManager
         }
 
         var targetEntity = targetRef.Value;
-        if (targetEntity is Slot hqSlot)
+        if (targetEntity is Hq hq)
         {
-            return IsLegalHqTarget(attacker, hqSlot);
+            return IsLegalHqTarget(attacker, hq);
         }
 
         if (targetEntity is UnitCard target)

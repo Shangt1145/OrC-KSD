@@ -63,7 +63,7 @@ public class GameHooksTests
     {
         var engine = new LogicEngine();
         using var recorder = new UpdateRecorder(engine);
-        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4));
+        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
         var line = new BattleLine(4);
         var oldPosition = line[0];
         var newPosition = line[1];
@@ -158,7 +158,7 @@ public class GameHooksTests
         await match.Initialize();
         var engine = match.Engine;
         var player = match.Players[0];
-        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4));
+        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
         var line = new BattleLine(4);
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardLoad(null!, player, unit));

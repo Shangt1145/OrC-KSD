@@ -32,15 +32,15 @@ internal static class PlayChainTestKit
     /// <summary>重反制（部署费 3）。</summary>
     public const string CounterCostlyId = "px3";
 
-    /// <summary>定制定义集（六个；费用/类别入测试断言对照）。</summary>
+    /// <summary>定制定义集（六个；费用/类别入测试断言对照）。W1-1 随改：必填槽位（国籍/稀有度）统一补 Germany / Standard（无特定语义卡取合理值）。</summary>
     public static IReadOnlyList<CardDefinitionEntry> CreateDefinitions() => new[]
     {
-        new CardDefinitionEntry(UnitCheapId, new CardDefinition("轻单位", deployCost: 1, operateCost: 1, attack: 2, defense: 3, CardCategory.Unit)),
-        new CardDefinitionEntry(UnitCostlyId, new CardDefinition("重单位", deployCost: 5, operateCost: 1, attack: 4, defense: 5, CardCategory.Unit)),
-        new CardDefinitionEntry(CommandCheapId, new CardDefinition("轻指令", deployCost: 1, operateCost: 0, attack: 0, defense: 0, CardCategory.Command)),
-        new CardDefinitionEntry(CommandCostlyId, new CardDefinition("重指令", deployCost: 5, operateCost: 0, attack: 0, defense: 0, CardCategory.Command)),
-        new CardDefinitionEntry(CounterCheapId, new CardDefinition("轻反制", deployCost: 1, operateCost: 0, attack: 0, defense: 0, CardCategory.Counter)),
-        new CardDefinitionEntry(CounterCostlyId, new CardDefinition("重反制", deployCost: 3, operateCost: 0, attack: 0, defense: 0, CardCategory.Counter)),
+        new CardDefinitionEntry(UnitCheapId, new CardDefinition("轻单位", deployCost: 1, operateCost: 1, attack: 2, defense: 3, CardCategory.Unit, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(UnitCostlyId, new CardDefinition("重单位", deployCost: 5, operateCost: 1, attack: 4, defense: 5, CardCategory.Unit, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CommandCheapId, new CardDefinition("轻指令", deployCost: 1, operateCost: 0, attack: 0, defense: 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CommandCostlyId, new CardDefinition("重指令", deployCost: 5, operateCost: 0, attack: 0, defense: 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CounterCheapId, new CardDefinition("轻反制", deployCost: 1, operateCost: 0, attack: 0, defense: 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CounterCostlyId, new CardDefinition("重反制", deployCost: 3, operateCost: 0, attack: 0, defense: 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard)),
     };
 
     /// <summary>创建打出链测试对局（双方轻单位 x10 卡组＋定制定义集；可选目标选择桥接）。</summary>

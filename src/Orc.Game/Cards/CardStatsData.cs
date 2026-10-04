@@ -12,6 +12,9 @@ namespace Orc.Game.Cards;
 /// <summary>
 /// 指挥点花费数据组件（单列）：部署费——打出时的指挥点消耗（术语确认：指挥点花费＝部署费；与 KARDS 基线一致）。
 /// 装配范围＝全类别（单位 / 指令 / 反制）；配置数据、只读语义基准的同类：构造期注入、运行期不改（语言级只读——get-only）。
+/// W3-2 G5：「基准/有效」区分落地——本面承载「基准」（定义静态值，链起点）；「有效部署费」＝修饰机制链输出
+/// （修饰/设值/钳制等贡献叠加后的读取口径），由链读取口统一提供；打出校验/扣费/评估/翻转等结算读取点统一读有效值。
+/// 原 get-only 基准语义与构造调用保持兼容（不新增便捷读取面——有效值经修饰机制读取口查询）。
 /// 以引擎数据组件形态挂载：经 <see cref="Orc.Cards.Card.AddData"/> 装配、<c>GetData&lt;T&gt;</c> 读取（引用共享）。
 /// 纯数据、无行为方法；数值域校验后置（负数等，规则批次）。
 /// </summary>
@@ -20,7 +23,7 @@ public sealed class CommandPointCostData
     /// <summary>创建组件（部署费初始值注入）。</summary>
     public CommandPointCostData(int deployCost) => DeployCost = deployCost;
 
-    /// <summary>部署费（打出消耗；配置数据、运行期不改）。</summary>
+    /// <summary>部署费基准值（定义静态值——链起点；运行期本体不改；「有效部署费」经链读取口查询）。</summary>
     public int DeployCost { get; }
 }
 

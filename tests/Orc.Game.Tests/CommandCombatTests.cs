@@ -63,13 +63,21 @@ public class CommandCombatTests
 
         // 死亡清理：槽位释放（变空槽）；IsDestroyed 置位；Position 置空、实例保留可查询；card.died 恰一次；
         // 不发 unit.position.changed（该更新专属移动语义）。
+        // W2b 随改：防御扣减经门户→跑链集中触发——被攻击者（2→0）与攻击者（5→4）各一条 card.stat.changed；
+        // 「先数值变化、后死亡信号」：被攻击者的 sc（外部订阅通知）先于 card.died（防御归零的统一死亡衔接——总线触发器阶段），
+        // 攻击者的 sc 随后；恰一次死亡。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.True(targetSlot.IsEmpty);
         Assert.True(target.GetData<UnitStateData>().IsDestroyed);
         Assert.Null(target.GetData<UnitStateData>().Position);
         Assert.True(target.Ref.IsAlive); // 实例保留（不销毁）——可查询
-        Assert.Equal(new[] { GameUpdates.CardDied }, recorder.Types);
-        var diedPayload = recorder.Updates[0].Payload!;
+        Assert.Equal(
+            new[]
+            {
+                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardStatChanged,
+            },
+            recorder.Types);
+        var diedPayload = recorder.Updates[1].Payload!;
         Assert.Same(target, diedPayload[GameUpdates.PayloadCard]);
         Assert.DoesNotContain(GameUpdates.UnitPositionChanged, recorder.Types);
         // 攻击者收尾照常（未死）：扣费＋清位。
@@ -113,18 +121,19 @@ public class CommandCombatTests
         var mega = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.MegaId, 1); // 攻 30 / 防 30（炮兵）
         CommandTestKit.Activate(mega);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
-        var enemyHqSlot = match.Battlefield.PlayerBSupportLine[0];
+        var enemyHq = playerB.Hq; // W3-3：HQ 目标＝实体引用
 
-        var result = await CommandTestKit.RunCommandAsync(match, bridge, mega, enemyHqSlot.Ref);
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, mega, enemyHq.Ref);
 
         // 伤害＝实时攻击力（20-30 → 钳制到 0）；HQ 不反击（攻击者不受伤害）；HQ 生命≤0 → 立即终局
-        // （状态＝结束＋胜者＝攻击方）——适配（后置项 B：原「胜负后置、对局照常」）。当次结算收尾照常完成（扣费＋清位）。
+        // （状态＝结束＋胜者＝攻击方）。当次结算收尾照常完成（扣费＋清位）。
+        // W3-3：伤害经 HQ 数值路径与管线（改写→介入→应用→跑链）→ 归零统一响应（判定归 HQ 侧）。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.Equal(0, playerB.HqHealth);
         Assert.Equal(30, mega.GetData<UnitStateData>().Defense);
         Assert.Equal(MatchState.Ended, match.State);
         Assert.Same(playerA, match.Winner);
-        Assert.Same(playerB, enemyHqSlot.Occupant); // HQ 占位不变
+        Assert.Same(enemyHq, match.Battlefield.PlayerBSupportLine[0].Occupant); // HQ 占位不变（占位者＝HQ 实体）
         Assert.Equal(0, playerA.Points); // 当次收尾照常：扣费恰一次
         Assert.False(mega.GetData<CommandData>().CanAttack); // 清位照常
         Assert.False(mega.GetData<CommandData>().CanMove);

@@ -8,6 +8,10 @@ namespace Orc.Game.Commanding;
 // ②单位移动触发器视图（Unit / OldPosition / NewPosition——均引用、与 unit.position.changed 载荷同口径）；
 // ③单位攻击触发器视图（Attacker / Target——目标引用：单位目标＝单位引用、HQ 目标＝HQ 占位槽位引用）；
 // ④造成攻击伤害触发器视图（Attacker / Target / Resolution——同一承载供伏击判定读取）。
+// X1 加性：4 视图均增加「触发者卡牌」（TriggerCard）承载——引发该操作的效果宿主卡引用
+// （非空＝效果引发且知来源卡；空＝玩家主动操作／未携带——两集合互斥穷尽）；
+// 语义口径：主动指挥（含其嵌套调用）＝缺省空；效果引发＝调用方显式携带、随同一效果链传递（攻击→伤害链内一致）；
+// 缺省调用（未携带）＝空（向后兼容：既有调用与断言不受影响）。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -33,6 +37,15 @@ public class CommandTriggerView
     [Optional]
     [Read]
     public virtual object? FlowBox { get; set; }
+
+    /// <summary>
+    /// 触发者卡牌引用（X1 加性；可选）：引发本次操作的效果宿主卡——非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）。
+    /// 值＝<c>Ref&lt;Entity&gt;</c>（效果宿主卡实例的引用；判等以引用同一性为准——同一实体在链路上以同一引用实例承载）；
+    /// 缺省调用（未携带）＝空（向后兼容）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? TriggerCard { get; set; }
 }
 
 /// <summary>
@@ -57,11 +70,20 @@ public class UnitMoveTriggerView
     [Optional]
     [Read]
     public virtual Ref<Entity>? NewPosition { get; set; }
+
+    /// <summary>
+    /// 触发者卡牌引用（X1 加性；可选）：引发本次操作的效果宿主卡——非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）。
+    /// 值＝<c>Ref&lt;Entity&gt;</c>（效果宿主卡实例的引用；判等以引用同一性为准）；缺省调用（未携带）＝空（向后兼容）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? TriggerCard { get; set; }
 }
 
 /// <summary>
 /// 单位攻击触发器视图（2C）：<see cref="Attacker"/>＝攻击者引用；<see cref="Target"/>＝攻击目标引用
-/// （单位目标＝单位引用；HQ 目标＝HQ 占位槽位引用〔可解析出玩家〕——两分支可判别、与候选引用面同源）。
+/// （单位目标＝单位引用；HQ 目标＝HQ 实体引用〔hq.Ref——W3-3 实体化，槽位引用不再作为 HQ 目标产出〕——
+/// 两分支可判别、与候选引用面同源）。
 /// 全可选；数据键＝属性名。
 /// </summary>
 [ContextView]
@@ -72,10 +94,18 @@ public class UnitAttackTriggerView
     [Read]
     public virtual Ref<Entity>? Attacker { get; set; }
 
-    /// <summary>攻击目标引用（可选；值＝<c>Ref&lt;Entity&gt;</c>——单位引用或 HQ 占位槽位引用）。</summary>
+    /// <summary>攻击目标引用（可选；值＝<c>Ref&lt;Entity&gt;</c>——单位引用或 HQ 实体引用）。</summary>
     [Optional]
     [Read]
     public virtual Ref<Entity>? Target { get; set; }
+
+    /// <summary>
+    /// 触发者卡牌引用（X1 加性；可选）：引发本次攻击的效果宿主卡——非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）。
+    /// 值＝<c>Ref&lt;Entity&gt;</c>（效果宿主卡实例的引用；判等以引用同一性为准）；缺省调用（未携带）＝空（向后兼容）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? TriggerCard { get; set; }
 }
 
 /// <summary>
@@ -100,4 +130,13 @@ public class AttackDamageTriggerView
     [Optional]
     [Read]
     public virtual object? Resolution { get; set; }
+
+    /// <summary>
+    /// 触发者卡牌引用（X1 加性；可选）：引发本次操作的效果宿主卡——非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）。
+    /// 值＝<c>Ref&lt;Entity&gt;</c>（效果宿主卡实例的引用；判等以引用同一性为准）；缺省调用（未携带）＝空（向后兼容）；
+    /// 同一效果引发的「攻击→伤害」链中触发者随链路传递（伤害链路读数＝攻击链读数）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? TriggerCard { get; set; }
 }

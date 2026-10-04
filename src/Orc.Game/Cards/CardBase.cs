@@ -10,9 +10,11 @@ namespace Orc.Game.Cards;
 /// ①实例化路径数据组件装配（按类别差异化，需求原文 E 区）：全类别＝【指挥点花费】；
 ///   单位＝另加【对战】（<see cref="UnitCard"/> 构造装配）；指令＝花费（无其他）；反制＝花费（激活状态组件类就绪、挂载属后续批次）。
 ///   四合一 CardStatsData 已退役、无双真源。
-/// ②对局开始卡牌加载模板（<see cref="LoadAsync"/>）：固定链＝【重建/装配（可重写扩展点、默认空实现）→ 词条装载（2C 加性）→ 广播 card.load】；
+/// ②对局开始卡牌加载模板（<see cref="LoadAsync"/>）：固定链＝【重建/装配（可重写扩展点、默认空实现）→ 对局级 ID 分配（W1-1 加性）→ 元数据装配（W1-1 加性：TagData）→ 词条装载（2C 加性）→ 效果装载（X2 加性）→ 广播 card.load】；
 ///   持久化重建本批仅显式预留空位（无任何重建逻辑；总装阶段实现）。
 /// ③触发器声明位：预打出 / 打出 / 使用反制——对象在位于具体子类（构造期创建、装配点就绪）；链内容属打出链批次（2B）。
+/// ④修饰器组件（W2a G3 加性）：所有卡类构造期常驻持有 <see cref="Modifiers"/>（轻量伴生容器——非数据组件、不进
+///   装配/加载/快照语义；空状态零行为负担）；挂载/注销由效果装载链托管属后续批次（W2c）、本单先提供机制与装配接口。
 /// 加载失败（未注册 id、加载模板异常等）＝初始化 fail-fast（不进入进行态、明确上抛——加载路径保证）。
 /// </summary>
 public abstract class CardBase : Orc.Cards.Card
@@ -29,10 +31,21 @@ public abstract class CardBase : Orc.Cards.Card
 
         // 实例化路径数据组件装配（旧 → 新：原四合一 CardStatsData → 指挥点花费〔全类别〕＋对战〔单位专属，见 UnitCard〕）。
         AddData(new CommandPointCostData(definition.DeployCost));
+
+        // W2a G3 修饰机制：卡侧修饰器组件构造期常驻（所有卡类；轻量伴生、非数据组件——不进装配/加载/快照语义）。
+        Modifiers = new CardModifierComponent(this, engine);
     }
 
     /// <summary>本卡的定义（代码注册形态；名称/类别/四项数值可读）。</summary>
     public CardDefinition Definition { get; }
+
+    /// <summary>
+    /// 卡侧修饰器组件（W2a G3 修饰机制）：每实例构造期常驻的专用轻量容器
+    /// （修饰器集＋更新检测组件名单＋各组件缓存＋全量重跑链与「每轮管线」）。
+    /// 空状态零行为负担（无修饰不发任何更新、不影响既有装配/加载/快照行为）；集中查询面＝<see cref="CardModifierComponent.All"/>。
+    /// 不纳入 AddData 数据组件体系（轻量伴生；不进快照导出）。
+    /// </summary>
+    public CardModifierComponent Modifiers { get; }
 
     /// <summary>
     /// 所属玩家（2B 加性面；加载时装配——<see cref="LoadAsync"/> 记录；未加载＝null）。
@@ -55,12 +68,38 @@ public abstract class CardBase : Orc.Cards.Card
     internal Func<KeywordLoadContext?>? KeywordLoadContextProvider { get; set; }
 
     /// <summary>
+    /// 效果装载上下文提供器（X2 加性面；internal）：加载时（<see cref="LoadAsync"/> 的效果装载步骤）装载卡牌效果
+    /// 所需的对局装载语境与装配源（效果声明查询＋工厂解析；效果源可空——无注册表时声明为空、装载照常）；
+    /// 由对局加载路径经卡牌库注入（延迟读取）；独立构造（脱离对局——不经卡牌库）＝null（效果装载整链跳过——不抛错、加载不失败、功能不可用）。
+    /// </summary>
+    internal Func<CardEffectLoadContext?>? EffectLoadContextProvider { get; set; }
+
+    /// <summary>
+    /// 对局级卡牌 ID（W1-1 加性面；internal）：加载时分配——由 <see cref="MatchCardIdProvider"/> 取新值；
+    /// 未分配（未加载 / 独立构造 / 无提供器）＝null。既有 <see cref="Orc.Core.Entity.Id"/> 为 Guid 不可比较，
+    /// 本整数序号承载「构筑外判定」（ID ＞ 初始化水位线）。
+    /// 「同一实例同一 ID」：重复加载不重分配（幂等——判定不失真）。
+    /// </summary>
+    internal int? MatchCardId { get; private set; }
+
+    /// <summary>
+    /// 对局级卡牌 ID 提供器（W1-1 加性面；internal）：加载时（<see cref="LoadAsync"/> 的 ID 分配步骤）调用以获取下一个自增 ID；
+    /// 由对局加载路径经卡牌库注入（延迟读取——对局装配顺序下提供器目标在实例化后才就绪）；
+    /// 独立构造（脱离对局）＝null（不分配 ID——无对局上下文，判定侧以「未分配」明确拒绝）。
+    /// </summary>
+    internal Func<int>? MatchCardIdProvider { get; set; }
+
+    /// <summary>
     /// 对局开始卡牌加载（模板方法；由加载路径逐张调用）：
     /// ① 装配归属（Owner＝所属卡组玩家；2B 加性：打出链验证/扣费/离手依据）；
     /// ② 重建/装配步骤（可重写扩展点 <see cref="RebuildFromPersistence"/>；默认空实现——持久化重建后置、本批无重建逻辑）；
-    /// ③ 词条装载（2C 加性：从定义读词条 → 逐条登记至 KeywordData ＋ 装载主动词条逻辑〔伏击挂到「造成攻击伤害」〕；
+    /// ③ 对局级卡牌 ID 分配（W1-1 加性：经提供器分配自增 ID；幂等——已分配保持原值；先于 card.load 广播）；
+    /// ④ 元数据装配（W1-1 加性：从定义读国籍/稀有度/开放 tag → 装配 TagData；先于 card.load 广播——消费者查询不到未就绪状态）；
+    /// ⑤ 词条装载（2C 加性：从定义读词条 → 逐条登记至 KeywordData ＋ 装载主动词条逻辑〔伏击挂到「造成攻击伤害」〕；
     ///    无词条卡＝无副作用；登记/装载先于 card.load 广播——消费者查询不到未就绪状态）；
-    /// ④ 广播 card.load（载荷 {Card, Player}——Card＝本实例、Player＝所属卡组玩家）。
+    /// ⑥ 效果装载（X2 加性：从装配源解析效果声明 → 构造＋登记＋装载被动效果〔挂主触发器＋OnMount；含监听 handler 注册〕
+    ///    ＋托管登记〔卸载自动按来源撤销修饰器〕；无装配源＝跳过；先于 card.load 广播——消费者查询不到未就绪状态）；
+    /// ⑦ 广播 card.load（载荷 {Card, Player}——Card＝本实例、Player＝所属卡组玩家）。
     /// 加载路径保证每卡恰一次调用；失败直接上抛（初始化 fail-fast）。
     /// </summary>
     /// <exception cref="ArgumentNullException">owner 为 null。</exception>
@@ -70,8 +109,39 @@ public abstract class CardBase : Orc.Cards.Card
 
         Owner = owner;
         RebuildFromPersistence(owner);
+        LoadMatchCardId();
+        LoadTagData();
         LoadKeywords();
+        await LoadEffectsAsync(ct);
         await GameUpdates.EmitCardLoad(_engine, owner, this, ct);
+    }
+
+    /// <summary>
+    /// 对局级卡牌 ID 分配（W1-1；加载时）：未分配且提供器在位＝经提供器取新 ID；已分配＝保持原值
+    /// （幂等——「同一实例同一 ID」；重复加载不重分配、判定不失真）。提供器缺席（独立构造）＝不分配。
+    /// </summary>
+    private void LoadMatchCardId()
+    {
+        if (MatchCardId is null && MatchCardIdProvider is not null)
+        {
+            MatchCardId = MatchCardIdProvider();
+        }
+    }
+
+    /// <summary>
+    /// 元数据装配（W1-1；加载时＝与 card.load 同步完成）：从定义读国籍/稀有度（必填槽位）与开放 tag →
+    /// 装配 <see cref="TagData"/>（全类别覆盖；无开放 tag 卡＝空集合装配——槽位恒在）。登记先于 card.load 广播——
+    /// 消费者查询不到未就绪状态（与词条装配流先例一致）。重复加载＝重复装配被拒绝（AddData 契约：每类型恰一份）。
+    /// </summary>
+    private void LoadTagData()
+    {
+        var data = new TagData(Definition.Faction, Definition.Rarity);
+        foreach (var tag in Definition.Tags)
+        {
+            data.AddTag(tag);
+        }
+
+        AddData(data);
     }
 
     /// <summary>
@@ -116,6 +186,18 @@ public abstract class CardBase : Orc.Cards.Card
         {
             AddData(logics);
         }
+    }
+
+    /// <summary>
+    /// 效果装载（X2；加载时＝与 card.load 同时完成「声明解析＋构造＋登记＋装载」）：
+    /// 经效果装载链（<see cref="CardEffectLoader"/>）执行——声明校验与工厂解析 fail-fast（未知标识/工厂返回 null 上抛）、
+    /// 构造执行异常隔离（跳过该效果）、被动效果装载（挂主触发器＋OnMount——含监听 handler 注册；失败回滚、不阻断）、
+    /// 托管登记（卸载自动按来源撤销修饰器）；无装配源（独立构造）＝整链跳过、不抛错、加载不失败；无声明卡＝无副作用。
+    /// </summary>
+    private async Task LoadEffectsAsync(CancellationToken ct)
+    {
+        var context = EffectLoadContextProvider?.Invoke();
+        await CardEffectLoader.LoadAsync(this, _engine, context, ct);
     }
 
     /// <summary>

@@ -5,17 +5,19 @@ namespace Orc.Cards;
 /// <summary>
 /// 效果基类（S4；逻辑组件）：一个效果 ＝ 一个主触发器（主动/被动）＋作者覆写的装载/卸载钩子。
 /// 行为契约（框架装载链保证）：
-/// ①单位放置后效果生效（被动：主触发器挂载至总线 ＋ OnMount 注入完成）；
-/// ②效果移除/卡牌销毁后清理完成（OnUnmount → 撤销注入登记 → 总线卸载 → 清宿主引用）；
-/// ③顺序：单位初始化逻辑先、效果注入后；④装载＝【挂主触发器 → OnMount】、卸载＝【OnUnmount → 撤销登记 → 总线卸载】。
+/// ①单位放置/加载时点装载后效果生效（被动：主触发器挂载至总线 ＋ OnMount 注入完成）；
+/// ②效果移除/卡牌销毁后清理完成（OnUnmount → 撤销注入登记 → 总线卸载 → 执行宿主卸载清理动作 → 清宿主引用）；
+/// ③顺序：单位初始化逻辑先、效果注入后；④装载＝【挂主触发器 → OnMount】、卸载＝【OnUnmount → 撤销登记 → 总线卸载 → 宿主清理】。
 /// 主动效果（指令）**不参与装载/卸载**（不挂总线、不执行钩子；纯列表进出），其生效经 <see cref="ActiveEffect{TView}.CastAsync"/> 调用主触发器（施放）。
 /// 作者逻辑统一写在 <see cref="OnMount"/> / <see cref="OnUnmount"/>（框架模板负责「何时触发」）；
-/// 注入经 <see cref="Inject{TView}"/> 登记，卸载时框架自动撤销全部登记项（作者不手写撤销）。
+/// 注入经 <see cref="Inject{TView}"/> 登记，卸载时框架自动撤销全部登记项（作者不手写撤销）；
+/// 宿主机制（如游戏层修饰器托管）可经 <see cref="AddUnmountCleanup"/> 登记卸载清理动作（挂/卸两向均由框架链保证）。
 /// 幂等边界（框架保证）：未装载不触 OnUnmount（重复移除幂等）；已装载不重复 OnMount（重复放置不重复装载）；同一效果实例可多次成对装载/卸载（移除后重新 Add 复装）。
 /// </summary>
 public abstract class Effect
 {
     private readonly List<Action> _rollbacks = new();
+    private readonly List<Action> _unmountCleanups = new();
     private Card? _host;
     private bool _loading;
 
@@ -88,6 +90,21 @@ public abstract class Effect
         return registration;
     }
 
+    /// <summary>
+    /// 登记卸载清理动作（加性公共面；宿主机制扩展面——如游戏层「效果修饰器按来源撤销」托管）：
+    /// 效果卸载（<see cref="ExecuteUnmount"/>）时经框架执行（后进先出；各动作恰执行一次；执行后清空——重新装载需重新登记）。
+    /// 登记约定＝装载完成后（<see cref="ExecuteMount"/> 成功）进行；故装载回滚（<see cref="RollbackMount"/>）不触发已登记动作
+    /// （装载失败的残留清理由登记方在装载失败路径自行兜底——幂等清理语义）。
+    /// 动作异常＝隔离记录（不阻断卸载链其余步骤——与框架清理语义一致）；动作不得引入新的跨调用可变状态。
+    /// 与 <see cref="Inject{TView}"/> 的「注入登记」区分：本面供宿主机制登记（不面向效果作者手写撤销）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">cleanup 为 null。</exception>
+    public void AddUnmountCleanup(Action cleanup)
+    {
+        ArgumentNullException.ThrowIfNull(cleanup);
+        _unmountCleanups.Add(cleanup);
+    }
+
     // ---------- 框架装载链原语（由 CardLoadout 调用；对作者不可见） ----------
 
     /// <summary>挂载主触发器（被动子类重写；主动无操作）。</summary>
@@ -125,7 +142,8 @@ public abstract class Effect
     }
 
     /// <summary>
-    /// 卸载链：执行 OnUnmount（异常捕获并返回，由调用方记录；后续步骤照常完成）→ 撤销全部注入登记 → 卸载主触发器 → 清宿主引用。
+    /// 卸载链：执行 OnUnmount（异常捕获并返回，由调用方记录；后续步骤照常完成）→ 撤销全部注入登记 → 卸载主触发器
+    /// → 执行宿主卸载清理动作（<see cref="AddUnmountCleanup"/> 登记项；异常隔离记录、不阻断）→ 清宿主引用。
     /// </summary>
     /// <returns>OnUnmount 中抛出的异常（成功时为 null；「清理未完成，以实况计」）。</returns>
     internal Exception? ExecuteUnmount()
@@ -142,6 +160,7 @@ public abstract class Effect
 
         RollbackInjections();
         UnmountMainTrigger();
+        RunUnmountCleanups();
         IsMounted = false;
         _host = null;
         return failure;
@@ -162,6 +181,41 @@ public abstract class Effect
         }
 
         _rollbacks.Clear();
+    }
+
+    /// <summary>
+    /// 执行宿主卸载清理动作（后进先出；异常隔离记录、不阻断卸载链其余步骤；执行后清空——重新装载需重新登记）。
+    /// 记录写入宿主卡所属引擎的「当前执行者流（无则总流）」（与装载链留痕同渠道）。
+    /// </summary>
+    private void RunUnmountCleanups()
+    {
+        if (_unmountCleanups.Count == 0)
+        {
+            return;
+        }
+
+        var engine = _host?.Engine;
+        for (var i = _unmountCleanups.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                _unmountCleanups[i]();
+            }
+            catch (Exception ex)
+            {
+                if (engine is not null)
+                {
+                    CardsLog.Write(
+                        engine,
+                        $"{Name}/UnmountCleanup",
+                        ex.Message,
+                        LogLevel.Error,
+                        new[] { "loadout", "error", $"exception:{ex.GetType().Name}", Name });
+                }
+            }
+        }
+
+        _unmountCleanups.Clear();
     }
 }
 

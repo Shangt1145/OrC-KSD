@@ -3,8 +3,8 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 验收锚点③：指挥点——回合开始槽 +1、点数＝槽值（含上限行为与"回合结束不保留"）。
-/// 覆盖：默认序列结算数值、上限封顶（小上限路径，同时覆盖配置入口）、回合结束点数清零（槽保留）、默认上限 12。
+/// 验收锚点③：指挥点——回合开始槽 +1、点数＝槽值（含上限行为；X3：回合结束不清零、点数保留）。
+/// 覆盖：默认序列结算数值、上限封顶（小上限路径，同时覆盖配置入口）、回合结束点数保留（X3 修正——槽与点数均保留）、默认上限 12。
 /// </summary>
 public class CommandPointTests
 {
@@ -20,17 +20,17 @@ public class CommandPointTests
         Assert.Equal(1, first.PointSlots);
         Assert.Equal(1, first.Points);
 
-        await match.EndTurn(); // 回合 2（后手）：后手 1/1；先手回合结束清零（槽保留）
+        await match.EndTurn(); // 回合 2（后手）：后手 1/1；先手回合结束不清零（X3：点数保留）
         Assert.Equal(1, second.PointSlots);
         Assert.Equal(1, second.Points);
         Assert.Equal(1, first.PointSlots); // 槽保留
-        Assert.Equal(0, first.Points); // 点数不保留（回合结束清零）
+        Assert.Equal(1, first.Points); // 点数保留（X3：回合结束不清零）
 
         await match.EndTurn(); // 回合 3（先手）：2/2
         Assert.Equal(2, first.PointSlots);
         Assert.Equal(2, first.Points);
         Assert.Equal(1, second.PointSlots);
-        Assert.Equal(0, second.Points);
+        Assert.Equal(1, second.Points); // 点数保留（X3：回合结束不清零）
     }
 
     [Fact]
@@ -54,11 +54,11 @@ public class CommandPointTests
         Assert.Equal(2, b.PointSlots);
         Assert.Equal(2, b.Points);
 
-        await match.EndTurn(); // 回合 5：a 维持 2（封顶稳定）；b 为结束方、点数清零（槽保留）
+        await match.EndTurn(); // 回合 5：a 维持 2（封顶稳定）；b 为结束方、点数保留（X3：不清零）
         Assert.Equal(2, a.PointSlots);
         Assert.Equal(2, a.Points);
         Assert.Equal(2, b.PointSlots); // 封顶后槽保留
-        Assert.Equal(0, b.Points); // 回合结束点数清零、不保留
+        Assert.Equal(2, b.Points); // 点数保留（X3：回合结束不清零）
     }
 
     [Fact]

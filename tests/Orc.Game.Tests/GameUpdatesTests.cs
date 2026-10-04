@@ -1,4 +1,5 @@
 using Orc.Core;
+using Orc.Game.Cards;
 using Xunit;
 
 namespace Orc.Game.Tests;
@@ -7,7 +8,10 @@ namespace Orc.Game.Tests;
 /// 更新常量与发射 API（R2 最低满足形态）：
 /// ①8 条常量齐备且字面值断言通过（对外订阅契约、一旦定稿即冻结）；
 /// ②turn 五连与 card.drawn 在场景/循环测试中被实际发射与断言（见 TurnCycleTests / ScenarioTests）；
-/// ③card.played / card.stat.changed 存在性断言 ＋"可发射"冒烟（零调用点——调用点后续批次）。
+/// ③card.played（W4-1 升级）：载荷化契约（{ Card, Player }——被使用卡实例＋使用方）的发射冒烟与逐参校验
+/// （旧"空载荷"断言随升级同步；实际发射调用点＝部署/指令打出链，见 PlayChain*）；
+/// ④card.stat.changed（W2a 升级）：载荷化契约（{ Card, ChangedFields }——目标卡＋变化字段集合）的发射冒烟与参数校验
+/// （旧"无载荷＝硬约定"断言随升级同步；实际发射调用点＝修饰机制集中触发，见 ModifierSystemTests / StatUpdatePipelineTests）。
 /// </summary>
 public class GameUpdatesTests
 {
@@ -47,25 +51,57 @@ public class GameUpdatesTests
     [Fact]
     public async Task Emission_Paths_Of_CardPlayed_And_CardStatChanged_Are_Ready()
     {
-        var engine = new LogicEngine();
+        var match = GameTestData.CreateStandardMatch(seed: 42);
+        await match.Initialize();
+        var engine = match.Engine;
+        var player = match.Players[0];
         using var recorder = new UpdateRecorder(engine);
+        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
+        var changedFields = new[] { CardStatFields.Attack };
+        var updatesBefore = engine.RootStream.Entries.Count(e => e.Kind == LogEntryKind.Update);
 
-        await GameUpdates.EmitCardPlayed(engine); // 空载荷（载荷随调用点批次定型）
-        await GameUpdates.EmitCardStatChanged(engine); // 无载荷＝硬约定
+        // W4-1 升级：card.played 载荷化（{ Card, Player }——被使用卡实例＋使用方）
+        await GameUpdates.EmitCardPlayed(engine, unit, player);
+        // W2a 升级：card.stat.changed 载荷化（{ Card, ChangedFields }——目标卡＋本轮变化字段集合）
+        await GameUpdates.EmitCardStatChanged(engine, unit, changedFields);
 
         Assert.Equal(new[] { GameUpdates.CardPlayed, GameUpdates.CardStatChanged }, recorder.Types);
-        Assert.Null(recorder.Updates[0].Payload);
-        Assert.Null(recorder.Updates[1].Payload);
+        var playedPayload = recorder.Updates[0].Payload;
+        Assert.NotNull(playedPayload);
+        Assert.Same(unit, playedPayload![GameUpdates.PayloadCard]);
+        Assert.Same(player, playedPayload[GameUpdates.PayloadPlayer]);
+        var payload = recorder.Updates[1].Payload;
+        Assert.NotNull(payload);
+        Assert.Same(unit, payload![GameUpdates.PayloadCard]);
+        var recordedFields = Assert.IsAssignableFrom<IReadOnlyList<string>>(payload[GameUpdates.PayloadChangedFields]);
+        Assert.Equal(changedFields, recordedFields);
         // 更新条目照常写入总流（发射路径经总线 Emit 的既有通路）
-        Assert.Equal(2, engine.RootStream.Entries.Count(e => e.Kind == LogEntryKind.Update));
+        Assert.Equal(updatesBefore + 2, engine.RootStream.Entries.Count(e => e.Kind == LogEntryKind.Update));
     }
 
     [Fact]
     public async Task Emission_Helper_Validates_Arguments()
     {
-        var engine = new LogicEngine();
-        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlayed(null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardStatChanged(null!));
+        var match = GameTestData.CreateStandardMatch(seed: 42);
+        await match.Initialize();
+        var engine = match.Engine;
+        var player = match.Players[0];
+        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
+        var fields = new[] { CardStatFields.Attack };
+
+        // W4-1：card.played 升级为三参（engine / card / player）——逐参校验
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlayed(null!, unit, player));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlayed(engine, null!, player));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardPlayed(engine, unit, null!));
+        // W4-1：deck.shuffled 发射助手逐参校验
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitDeckShuffled(null!, player, player.Deck));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitDeckShuffled(engine, null!, player.Deck));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitDeckShuffled(engine, player, null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardStatChanged(null!, unit, fields));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardStatChanged(engine, null!, fields));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardStatChanged(engine, unit, null!));
+        // 空集合＝无变更不发（逻辑错误——fail-fast 拒绝）
+        await Assert.ThrowsAsync<ArgumentException>(() => GameUpdates.EmitCardStatChanged(engine, unit, Array.Empty<string>()));
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardDrawn(engine, null!, null!));
     }
 }

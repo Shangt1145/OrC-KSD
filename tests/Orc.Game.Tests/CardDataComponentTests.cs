@@ -12,7 +12,7 @@ namespace Orc.Game.Tests;
 public class CardDataComponentTests
 {
     private static UnitCard CreateUnitCard(LogicEngine? engine = null)
-        => new(engine ?? new LogicEngine(), new CardDefinition("单位", 1, 2, 3, 4, CardCategory.Unit));
+        => new(engine ?? new LogicEngine(), new CardDefinition("单位", 1, 2, 3, 4, CardCategory.Unit, faction: Faction.Germany, rarity: Rarity.Standard));
 
     [Fact]
     public void Unit_Instantiate_Attaches_Both_Split_Components_From_Definition()
@@ -31,8 +31,8 @@ public class CardDataComponentTests
     public void Category_Specific_Assembly_Commands_And_Counters_Carry_No_Battle_Stats()
     {
         var library = new CardLibrary(new LogicEngine());
-        library.Register("c1", new CardDefinition("指令", 5, 0, 0, 0, CardCategory.Command));
-        library.Register("x1", new CardDefinition("反制", 2, 0, 0, 0, CardCategory.Counter));
+        library.Register("c1", new CardDefinition("指令", 5, 0, 0, 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard));
+        library.Register("x1", new CardDefinition("反制", 2, 0, 0, 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard));
 
         // 指令＝花费（无其他数据组件）
         var command = library.Instantiate("c1");
@@ -51,29 +51,25 @@ public class CardDataComponentTests
     {
         var state = new UnitStateData();
 
-        // 初始值：位置 null／已毁 false／类型列表空（0 个合法）／实时值 0
+        // 初始值：位置 null／已毁 false／类型列表空（0 个合法）／实时值 0／损伤量 0
         Assert.Null(state.Position);
         Assert.False(state.IsDestroyed);
         Assert.Empty(state.UnitTypes);
         Assert.Equal(0, state.OperateCost);
         Assert.Equal(0, state.Attack);
         Assert.Equal(0, state.Defense);
+        Assert.Equal(0, state.DefenseLoss);
 
-        // 基础读写：三实时值、位置（Slot 引用）、类型列表（0 个/多个均合法）
+        // 基础读写：位置（Slot 引用）、类型列表（0 个/多个均合法）
+        // 三值/损伤量写面已收窄（W2b）：装配期填充经 CreateInitial（见下用例）、运行期变更经门户操作面（StatPortalTests）。
         var line = new BattleLine(4);
         state.Position = line[1];
         state.IsDestroyed = true;
-        state.OperateCost = 5;
-        state.Attack = 6;
-        state.Defense = 7;
         state.UnitTypes.Add(UnitType.Infantry);
         state.UnitTypes.Add(UnitType.Tank);
 
         Assert.Same(line[1], state.Position);
         Assert.True(state.IsDestroyed);
-        Assert.Equal(5, state.OperateCost);
-        Assert.Equal(6, state.Attack);
-        Assert.Equal(7, state.Defense);
         Assert.Equal(new[] { UnitType.Infantry, UnitType.Tank }, state.UnitTypes);
     }
 
@@ -83,14 +79,15 @@ public class CardDataComponentTests
         var stats = new BattleStatsData(2, 4, 6);
 
         var state = UnitStateData.CreateInitial(stats);
-        // 初始＝对战组件值（一次性复制契约）
+        // 初始＝对战组件值（一次性复制契约；损伤量清零）
         Assert.Equal(2, state.OperateCost);
         Assert.Equal(4, state.Attack);
         Assert.Equal(6, state.Defense);
+        Assert.Equal(0, state.DefenseLoss);
 
-        // 效果/词条修改实时值不影响只读基准
-        state.Attack += 3;
-        Assert.Equal(7, state.Attack);
+        // 复制为一次性、只读基准独立：运行期变更（经门户——伤害/修复/修饰）不回写基准。
+        // 「运行期变更不写基准」的行为证明见 StatPortalTests（伤害后 stats.Defense 保持原值）。
+        Assert.Equal(6, stats.Defense);
         Assert.Equal(4, stats.Attack);
     }
 

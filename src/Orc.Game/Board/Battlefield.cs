@@ -6,15 +6,16 @@ namespace Orc.Game.Board;
 /// 战场（KARDS 模仿）：三条战线——玩家A 支援线 / 前线（中立共享）/ 玩家B 支援线，各为固定容量槽位序列
 /// （<see cref="BattleLine"/>；容量 4/5/4）。
 /// 归属固定（对象稳定、不随回合滚动；"我方/敌方"为调用方视图概念，战场不做滚动）；前线不属于任何一方。
-/// HQ 初始占位（2A 槽位化受控变更）：各自支援线固定槽位（索引 0）＝对应玩家引用（与「HQ＝玩家纯数据」一致、无独立 HQ 实体）；
-/// HQ 占用容量格——支援线各含 HQ 占位（槽 0）＋其余初始为空；前线初始全空。
+/// HQ 初始占位（2A 槽位化；W3-3 受控变更：占位者由「对应玩家引用」改为「玩家总部实体」<see cref="Players.Hq"/>——
+/// 独立 HQ 实体占支援线固定槽位（索引 0），Player 持 HQ 引用；布局语义〔占容量格/邻位/守护/轰炸机拦截基准〕不变）：
+/// 支援线各含 HQ 占位（槽 0）＋其余初始为空；前线初始全空。
 /// 〔旧语义反转说明：原注释「初始化后三线均为空集合（不含 HQ、HQ 不落位）」已随 2A 槽位模型失效——
 ///   现为「战场构造期即含 HQ 占位」。〕
 /// 容量配置 4/5/4 经各线容量属性可读；校验逻辑后置（本批不做）。
 /// </summary>
 public sealed class Battlefield
 {
-    /// <summary>创建战场（构造期即含 HQ 占位：玩家A 支援线槽 0＝playerA；玩家B 支援线槽 0＝playerB）。</summary>
+    /// <summary>创建战场（构造期即含 HQ 占位：玩家A 支援线槽 0＝playerA.Hq；玩家B 支援线槽 0＝playerB.Hq）。</summary>
     /// <exception cref="ArgumentNullException">playerA 或 playerB 为 null。</exception>
     public Battlefield(Player playerA, Player playerB)
     {
@@ -25,8 +26,10 @@ public sealed class Battlefield
         FrontLine = new BattleLine(5, "前线");
         PlayerBSupportLine = new BattleLine(4, "玩家B支援线");
 
-        PlayerASupportLine[0].Place(playerA);
-        PlayerBSupportLine[0].Place(playerB);
+        PlayerASupportLine[0].Place(playerA.Hq);
+        playerA.Hq.AttachToSlot(PlayerASupportLine[0]); // W3-3：HQ 布局语义（占位槽引用）
+        PlayerBSupportLine[0].Place(playerB.Hq);
+        playerB.Hq.AttachToSlot(PlayerBSupportLine[0]);
     }
 
     /// <summary>玩家A 的支援线（固定归属）。</summary>

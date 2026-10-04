@@ -226,7 +226,7 @@ public class PlayChainUnitTests
     [Fact]
     public void Unit_Card_Declares_Chain_Triggers_InPlace()
     {
-        var unit = new UnitCard(new LogicEngine(), new CardDefinition("单位", 1, 1, 1, 1));
+        var unit = new UnitCard(new LogicEngine(), new CardDefinition("单位", 1, 1, 1, 1, faction: Faction.Germany, rarity: Rarity.Standard));
 
         // 2B 链触发器声明位：部署/加入/单位化（对象在位、名称/类型可断言）。
         Assert.NotNull(unit.DeployTrigger);

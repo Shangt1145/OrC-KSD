@@ -10,6 +10,9 @@ namespace Orc.Game.Cards;
 /// ①词条清单（加载时逐条登记至 KeywordData ＋装载主动词条逻辑；未实现标识/重复项＝定义期明确错误 fail-fast——本批合法仅四枚）；
 /// ②单位类型清单（单位化时填充 UnitStateData.UnitTypes——部署/加入两路径一致；未声明＝空列表＝零类型·行为按基线〔视同步兵〕；重复项 fail-fast）；
 /// ③守护者标记（守护机制：相邻单位获「被守护」——需求空白点的实现裁决，交付汇报标注）。
+/// 〔W1-1 G12 加性受控变更〕再加两维卡牌元数据（定义＝单一真源、不可运行时增删）：
+/// ④必填强类型槽位（国籍 / 稀有度——新定义卡须显式提供，缺失/未定义枚举值＝定义期 fail-fast 拒绝；全类别必填）；
+/// ⑤开放 tag 清单（子类别标记：海军/T-34/谢尔曼等——纯分类、不承载机制行为；加载时装配到实例 TagData）。
 /// </summary>
 public sealed class CardDefinition
 {
@@ -23,8 +26,11 @@ public sealed class CardDefinition
     /// <param name="keywords">词条清单（2C 加性；可缺省＝无词条；标识须为已实现词条、不得重复——未实现/重复＝定义期拒绝）。</param>
     /// <param name="unitTypes">单位类型清单（2C 加性；可缺省＝空列表＝零类型；枚举值须已定义、不得重复——重复＝定义期拒绝）。</param>
     /// <param name="isGuard">守护者标记（2C 加性；缺省＝false；守护机制的来源标记——相邻单位/HQ 获「被守护」）。</param>
-    /// <exception cref="ArgumentException">name 为 null/空白；词条清单含 null/空白/未实现标识/重复项；单位类型清单含重复项。</exception>
-    /// <exception cref="ArgumentOutOfRangeException">category 为未定义的卡牌类别；单位类型含未定义枚举值。</exception>
+    /// <param name="faction">国籍（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
+    /// <param name="rarity">稀有度（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
+    /// <param name="tags">开放 tag 清单（W1-1 加性；可缺省＝空列表＝无开放 tag；null 元素/空白/重复项＝定义期拒绝）。</param>
+    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失（未提供/为 null）；词条清单含 null/空白/未实现标识/重复项；单位类型清单含重复项；开放 tag 清单含 null/空白/重复项。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">category 为未定义的卡牌类别；国籍/稀有度为未定义枚举值；单位类型含未定义枚举值。</exception>
     public CardDefinition(
         string name,
         int deployCost,
@@ -34,12 +40,39 @@ public sealed class CardDefinition
         CardCategory category = CardCategory.Unit,
         IEnumerable<string>? keywords = null,
         IEnumerable<UnitType>? unitTypes = null,
-        bool isGuard = false)
+        bool isGuard = false,
+        Faction? faction = null,
+        Rarity? rarity = null,
+        IEnumerable<string>? tags = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (!Enum.IsDefined(category))
         {
             throw new ArgumentOutOfRangeException(nameof(category), category, "未定义的卡牌类别（配置错误在定义期被拒绝）。");
+        }
+
+        // W1-1：必填强类型槽位（国籍 / 稀有度）——缺失＝定义期 fail-fast 拒绝（不设可用默认值，「省略即默认」不成立）；
+        // 未定义枚举值＝拒绝（沿用既有 Enum 校验风格）。
+        if (faction is null)
+        {
+            throw new ArgumentException(
+                "未提供国籍（国籍为必填槽位——新定义卡必须显式提供；缺失＝定义期 fail-fast 拒绝）。", nameof(faction));
+        }
+
+        if (!Enum.IsDefined(faction.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(faction), faction, "国籍为未定义枚举值（配置错误在定义期被拒绝）。");
+        }
+
+        if (rarity is null)
+        {
+            throw new ArgumentException(
+                "未提供稀有度（稀有度为必填槽位——新定义卡必须显式提供；缺失＝定义期 fail-fast 拒绝）。", nameof(rarity));
+        }
+
+        if (!Enum.IsDefined(rarity.Value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(rarity), rarity, "稀有度为未定义枚举值（配置错误在定义期被拒绝）。");
         }
 
         Name = name;
@@ -51,6 +84,9 @@ public sealed class CardDefinition
         Keywords = ResolveKeywords(keywords);
         UnitTypes = ResolveUnitTypes(unitTypes);
         IsGuard = isGuard;
+        Faction = faction.Value;
+        Rarity = rarity.Value;
+        Tags = ResolveTags(tags);
     }
 
     /// <summary>词条清单校验与拷贝（fail-fast：null 元素 / null 或空白标识 / 未实现标识 / 重复项均被拒绝；登记序保留）。</summary>
@@ -119,6 +155,35 @@ public sealed class CardDefinition
         return list.ToArray();
     }
 
+    /// <summary>开放 tag 清单校验与拷贝（W1-1 fail-fast：null 元素 / null 或空白值 / 重复项均被拒绝；登记序保留）。</summary>
+    private static IReadOnlyList<string> ResolveTags(IEnumerable<string>? tags)
+    {
+        if (tags is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var list = new List<string>();
+        foreach (var tag in tags)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                throw new ArgumentException("开放 tag 清单含 null/空白值（配置错误在定义期被拒绝）。", nameof(tags));
+            }
+
+            if (list.Contains(tag))
+            {
+                throw new ArgumentException(
+                    $"开放 tag 清单含重复项 '{tag}'（重复＝定义声明的明确错误——fail-fast，与词条/单位类型先例一致）。",
+                    nameof(tags));
+            }
+
+            list.Add(tag);
+        }
+
+        return list.ToArray();
+    }
+
     /// <summary>卡牌名称（实例化时取用）。</summary>
     public string Name { get; }
 
@@ -145,6 +210,15 @@ public sealed class CardDefinition
 
     /// <summary>守护者标记（2C 加性；true＝守护者——相邻单位/HQ 获「被守护」；守护者自身不可被守护）。</summary>
     public bool IsGuard { get; }
+
+    /// <summary>国籍（W1-1 必填槽位终值；11 值全量域；实例侧只读——本批不支持运行时修改）。</summary>
+    public Faction Faction { get; }
+
+    /// <summary>稀有度（W1-1 必填槽位终值：Standard/Limited/Special/Elite；实例侧只读——本批不支持运行时修改）。</summary>
+    public Rarity Rarity { get; }
+
+    /// <summary>开放 tag 清单（W1-1 加性；登记序；空列表＝无开放 tag——加载时装配为空集合、无副作用）。</summary>
+    public IReadOnlyList<string> Tags { get; }
 }
 
 /// <summary>卡牌定义集条目：id（卡牌库注册键）＋定义。</summary>

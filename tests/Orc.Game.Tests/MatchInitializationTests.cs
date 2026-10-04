@@ -9,7 +9,7 @@ namespace Orc.Game.Tests;
 /// 验收锚点①：对局初始化完整（双玩家＋5 管理器＋战场三线就绪）。
 /// 覆盖：状态迁移（准备 → 进行）、五管理器就绪与访问、双玩家创建与初始值（资源/手牌/卡组/HQ）、
 /// 战场三线与 HQ 占位（2A 槽位化：支援线含 HQ 占位〔槽 0〕、其余为空；前线全空）与容量可读、按玩家查询支援线、
-/// 初始化更新序列（2A：40 张 card.load ＋ 3 条 turn.start.*；排序＝玩家索引升序；同一性＝加载实例即起手实例）、
+/// 初始化更新序列（2A：40 张 card.load ＋ 3 条 turn.start.*；W4-1 加性：前置 2 条 deck.shuffled 洗切信号；排序＝玩家索引升序；同一性＝加载实例即起手实例）、
 /// 入总流、起手装载（先手 4 / 后手 5；静默）。
 /// </summary>
 public class MatchInitializationTests
@@ -39,8 +39,8 @@ public class MatchInitializationTests
         var lineA = match.Battlefield.PlayerASupportLine;
         var frontLine = match.Battlefield.FrontLine;
         var lineB = match.Battlefield.PlayerBSupportLine;
-        Assert.Same(match.Players[0], lineA[0].Occupant); // HQ 占位＝对应玩家引用（玩家纯数据、无独立 HQ 实体）
-        Assert.Same(match.Players[1], lineB[0].Occupant);
+        Assert.Same(match.Players[0].Hq, lineA[0].Occupant); // HQ 占位＝总部实体（W3-3：Player 不再作为占位者）
+        Assert.Same(match.Players[1].Hq, lineB[0].Occupant);
         for (var i = 1; i < lineA.Count; i++)
         {
             Assert.True(lineA[i].IsEmpty); // 支援线余格初始为空
@@ -71,33 +71,43 @@ public class MatchInitializationTests
 
         await match.Initialize();
 
-        // 初始化期更新序列（2A 固定链）：双方卡组总数（40）张 card.load ＋ 3 条回合开始序列（先手第 1 回合不抽牌 → 无 card.drawn）
+        // 初始化期更新序列（2A 固定链＋W4-1 加性）：洗切 2 条 deck.shuffled（双方卡组各一）→ 双方卡组总数（40）张 card.load
+        // ＋ 3 条回合开始序列（先手第 1 回合不抽牌 → 无 card.drawn）
         var expectedLoads = GameTestData.StandardDeckSize * 2;
-        Assert.Equal(expectedLoads + 3, recorder.Types.Count);
+        var shuffleSignals = 2; // W4-1：初始化双方卡组洗切信号（玩家索引升序）
+        Assert.Equal(shuffleSignals + expectedLoads + 3, recorder.Types.Count);
+        Assert.Equal(
+            new[] { GameUpdates.DeckShuffled, GameUpdates.DeckShuffled },
+            recorder.Types.Take(shuffleSignals));
+        Assert.Same(match.Players[0], recorder.Updates[0].Payload![GameUpdates.PayloadPlayer]);
+        Assert.Same(match.Players[1], recorder.Updates[1].Payload![GameUpdates.PayloadPlayer]);
+        Assert.Same(recorder.Updates[0].Payload![GameUpdates.PayloadDeck], match.Players[0].Deck);
+        Assert.Same(recorder.Updates[1].Payload![GameUpdates.PayloadDeck], match.Players[1].Deck);
         Assert.Equal(expectedLoads, recorder.Types.Count(t => t == GameUpdates.CardLoad));
         Assert.Equal(
             new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
-            recorder.Types.Skip(expectedLoads));
+            recorder.Types.Skip(shuffleSignals + expectedLoads));
         // 起手装载静默（装载不产生 drawn / hand.add 更新）
         Assert.DoesNotContain(GameUpdates.CardDrawn, recorder.Types);
         Assert.DoesNotContain(GameUpdates.CardHandAdd, recorder.Types);
 
         // card.load 载荷定型：{ Card, Player }——排序＝玩家索引升序（A 组在前、B 组在后；Player＝所属卡组玩家）
-        Assert.All(recorder.Updates.Take(GameTestData.StandardDeckSize),
+        var loadUpdates = recorder.Updates.Skip(shuffleSignals).Take(expectedLoads).ToList();
+        Assert.All(loadUpdates.Take(GameTestData.StandardDeckSize),
             u => Assert.Same(match.Players[0], u.Payload![GameUpdates.PayloadPlayer]));
-        Assert.All(recorder.Updates.Skip(GameTestData.StandardDeckSize).Take(GameTestData.StandardDeckSize),
+        Assert.All(loadUpdates.Skip(GameTestData.StandardDeckSize),
             u => Assert.Same(match.Players[1], u.Payload![GameUpdates.PayloadPlayer]));
-        Assert.All(recorder.Updates.Take(expectedLoads),
+        Assert.All(loadUpdates,
             u => Assert.IsAssignableFrom<CardBase>(u.Payload![GameUpdates.PayloadCard]));
 
         // 同一性：加载实例＝起手所得实例（先手起手 4 张＝A 组加载序列前 4 张，引用相等）
         for (var i = 0; i < 4; i++)
         {
-            Assert.Same(match.Players[0].Hand[i], recorder.Updates[i].Payload![GameUpdates.PayloadCard]);
+            Assert.Same(match.Players[0].Hand[i], loadUpdates[i].Payload![GameUpdates.PayloadCard]);
         }
 
         // turn 系列载荷定型：{ 玩家, 回合数 }
-        var firstTurnUpdate = recorder.Updates[expectedLoads];
+        var firstTurnUpdate = recorder.Updates[shuffleSignals + expectedLoads];
         Assert.Equal(GameUpdates.TurnStartBefore, firstTurnUpdate.Type);
         Assert.Same(match.Players[0], firstTurnUpdate.Payload![GameUpdates.PayloadPlayer]);
         Assert.Equal(1, firstTurnUpdate.Payload[GameUpdates.PayloadTurnNumber]);
@@ -147,7 +157,7 @@ public class MatchInitializationTests
     [Fact]
     public async Task Initialize_Updates_Are_Written_To_Root_Stream()
     {
-        // 初始化期无执行帧：43 条更新写入引擎总事件流（与"边界 Emit→总流"语义一致）
+        // 初始化期无执行帧：45 条更新写入引擎总事件流（W4-1：40 张 card.load ＋ 2 条洗切信号 ＋ 3 条回合开始；与"边界 Emit→总流"语义一致）
         var match = GameTestData.CreateStandardMatch(seed: 42);
 
         await match.Initialize();
@@ -157,10 +167,11 @@ public class MatchInitializationTests
             .Select(e => e.Message)
             .ToArray();
         var expectedLoads = GameTestData.StandardDeckSize * 2;
-        Assert.Equal(expectedLoads + 3, updates.Length);
+        var shuffleSignals = 2; // W4-1
+        Assert.Equal(shuffleSignals + expectedLoads + 3, updates.Length);
         Assert.Equal(expectedLoads, updates.Count(u => u == GameUpdates.CardLoad));
         Assert.Equal(
             new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
-            updates.Skip(expectedLoads));
+            updates.Skip(shuffleSignals + expectedLoads));
     }
 }

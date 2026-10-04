@@ -167,7 +167,7 @@ public class CommandSystemTests
 
         // 对照：移动缺位不改变攻击面——前线单位对敌方 HQ 的攻击资格正常（前线→敌 HQ 允许）。
         Assert.True(report.Attack.CanUse);
-        Assert.Contains(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.Contains(match.Players[1].Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
     }
 
     [Fact]
@@ -407,7 +407,7 @@ public class CommandSystemTests
         var expected = new[] { enemyOnFront.Ref };
         Assert.Equal(expected, description.AllowedTargets);
         Assert.DoesNotContain(enemyOnSupport.Ref, description.AllowedTargets);
-        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, description.AllowedTargets);
+        Assert.DoesNotContain(playerB.Hq.Ref, description.AllowedTargets); // W3-3：HQ 目标＝实体引用（步兵不可达）
         Assert.DoesNotContain(front[0].Ref, description.AllowedTargets); // 移动剔除（前线空槽不作为移动候选）
 
         // 无效目标点击不构成确认（交互请求继续等待）——提交候选面之外引用被拒绝。
@@ -460,13 +460,14 @@ public class CommandSystemTests
         var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0);
         CommandTestKit.Activate(attacker);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
-        var enemyHqSlot = match.Battlefield.PlayerBSupportLine[0];
+        var enemyHq = playerB.Hq; // W3-3：HQ 目标＝实体引用
 
-        var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, enemyHqSlot.Ref);
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, enemyHq.Ref);
 
-        // HQ 简路：伤害＝攻击者实时攻击力；HQ 不反击（攻击者不受伤害）；收尾照常。
+        // HQ 简路：伤害＝攻击者实时攻击力（W3-3：经 HQ 数值路径与管线）；HQ 不反击（攻击者不受伤害）；收尾照常。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.Equal(Player.InitialHqHealth - 2, playerB.HqHealth);
+        Assert.Equal(Player.InitialHqHealth - 2, enemyHq.Health); // 实体读面与 Player 转发读面同值（20-2=18）
         Assert.Equal(5, attacker.GetData<UnitStateData>().Defense);
         Assert.False(attacker.GetData<CommandData>().CanAttack);
         Assert.Equal(0, playerA.Points);

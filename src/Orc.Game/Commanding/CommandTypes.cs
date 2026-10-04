@@ -186,6 +186,8 @@ public sealed class CommandAvailability
 /// 实体类值统一为「引用形态」（<c>Ref&lt;Entity&gt;</c>——与 targeter 候选/产出引用面同源：候选产出什么、分派与触发数据即传什么）；
 /// 槽位引用与 <c>unit.position.changed</c> 载荷同口径（均槽位引用）。「Unit / OldPosition / NewPosition」
 /// 与 <c>GameUpdates</c> 对应载荷键同字面值（语义一致、通道不同）。
+/// X1 加性：新增「触发者卡牌」键（<see cref="TriggerCard"/>）——4 个内置流程触发器共用（值＝效果宿主卡引用形态；
+/// 非空＝效果引发、空＝玩家主动操作；填充规则与判等口径见该常量注释）。
 /// </summary>
 public static class CommandDataKeys
 {
@@ -210,11 +212,19 @@ public static class CommandDataKeys
     /// <summary>攻击者（值＝<c>Ref&lt;Entity&gt;</c>；攻击/造成攻击伤害触发器数据）。</summary>
     public const string Attacker = "Attacker";
 
-    /// <summary>攻击目标引用（值＝<c>Ref&lt;Entity&gt;</c>；攻击/造成攻击伤害触发器数据——单位目标＝单位引用、HQ 目标＝HQ 占位槽位引用〔可解析出玩家〕）。</summary>
+    /// <summary>攻击目标引用（值＝<c>Ref&lt;Entity&gt;</c>；攻击/造成攻击伤害触发器数据——单位目标＝单位引用、HQ 目标＝HQ 实体引用〔hq.Ref——W3-3 实体化〕）。</summary>
     public const string Target = "Target";
 
     /// <summary>攻击伤害结算记录（值＝<see cref="AttackDamageResolution"/>；造成攻击伤害触发器数据——伏击改写标志承载）。</summary>
     public const string Resolution = "Resolution";
+
+    /// <summary>
+    /// 触发者卡牌（X1 加性；值＝<c>Ref&lt;Entity&gt;</c>——引发本次操作的效果宿主卡实例的引用；4 个内置流程触发器共用）：
+    /// 非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）——两集合互斥穷尽。
+    /// 填充规则：主动指挥（含其嵌套调用）＝缺省空（不携带）；效果引发＝调用方（效果侧）显式携带、逐次指定，
+    /// 且同一效果链内传递（「攻击→伤害」链内一致；出现新的独立直接因由时以新因由为准）。缺省调用（未携带）＝空（向后兼容）。
+    /// </summary>
+    public const string TriggerCard = "TriggerCard";
 }
 
 /// <summary>

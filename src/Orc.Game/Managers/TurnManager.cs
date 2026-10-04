@@ -8,7 +8,7 @@ namespace Orc.Game.Managers;
 /// 回合开始序列＝turn.start.before → turn.start →（开始处理：结算 → 单位行动状态恢复〔2C 加性〕→ 抽牌）→ turn.start.after；
 /// 结算＝资源管理器（槽 +1 至上限 → 点数＝槽值；静默）、行动状态恢复＝注入钩子（指挥管理器：行动方在场单位重置两 bool＋词条运行态清零；
 /// 未接线＝跳过）、抽牌＝玩家管理器（先手第 1 回合不抽、其余照抽 1；抽时所发 card.drawn 位于 start 与 after 之间）；
-/// 回合结束序列＝turn.end.before → turn.end →（结束处理：结束方点数清零；静默）→ 切换当前方、回合数 +1。
+/// 回合结束序列＝turn.end.before → turn.end → 切换当前方、回合数 +1（点数保留——X3：回合结束不清零、敌方回合内保留）。
 /// 所有 turn 系列更新经总线 Emit（载荷＝{ 玩家, 回合数 }）；全部顺序 await 完结（调用返回即结算与更新完结）。
 /// 终局门禁（后置项 B）：对局已结束＝EndTurn 拒绝（可空生命周期；缺省＝独立构造场景无门禁）。
 /// </summary>
@@ -65,7 +65,7 @@ public sealed class TurnManager
     }
 
     /// <summary>
-    /// 结束当前方回合：turn.end.before → turn.end →（结束方点数清零）→ 切换当前方、回合数 +1 → 回合开始序列（双人对局轮流）。
+    /// 结束当前方回合：turn.end.before → turn.end → 切换当前方、回合数 +1 → 回合开始序列（双人对局轮流；点数保留——X3）。
     /// </summary>
     /// <exception cref="InvalidOperationException">对局已结束（终局，不能推进回合）；或回合尚未开始，不能结束回合。</exception>
     public async Task EndTurn(CancellationToken ct = default)
@@ -84,10 +84,7 @@ public sealed class TurnManager
         await EmitTurnAsync(GameUpdates.TurnEndBefore, endingPlayer, TurnNumber, ct);
         await EmitTurnAsync(GameUpdates.TurnEnd, endingPlayer, TurnNumber, ct);
 
-        // 回合结束处理（静默）：结束方点数清零（槽保留）
-        _resourceManager.ClearPoints(endingPlayer);
-
-        // 切换当前方、回合数 +1（静默）
+        // 切换当前方、回合数 +1（静默；X3：不再清零点数——点数在回合结束与敌方回合内保留）
         _currentPlayer = _playerManager.Players[(endingPlayer.Index + 1) % 2];
         TurnNumber += 1;
 

@@ -84,43 +84,51 @@ internal static class CommandTestKit
     /// <summary>奋击坦克（坦克＋奋战——「移动一次＋攻击两次」叠加场景）。</summary>
     public const string FuryTankId = "u_furytank";
 
-    /// <summary>定制定义集（22 枚；数值入测试断言对照。后置项补全批新增 5 枚：混成空军 / 伏击战斗机 / 伏击轰炸机 / 轻指令 / 轻反制）。</summary>
+    /// <summary>定制定义集（22 枚；数值入测试断言对照。后置项补全批新增 5 枚：混成空军 / 伏击战斗机 / 伏击轰炸机 / 轻指令 / 轻反制）。
+    /// W1-1 随改：必填槽位（国籍/稀有度）统一补 Germany / Standard（无特定语义卡取合理值）。</summary>
     public static IReadOnlyList<CardDefinitionEntry> CreateDefinitions() => new[]
     {
-        new CardDefinitionEntry(InfantryId, new CardDefinition("步兵", 1, 1, 2, 5, unitTypes: new[] { UnitType.Infantry })),
-        new CardDefinitionEntry(TankId, new CardDefinition("坦克", 1, 1, 3, 5, unitTypes: new[] { UnitType.Tank })),
-        new CardDefinitionEntry(ArtilleryId, new CardDefinition("炮兵", 1, 1, 2, 2, unitTypes: new[] { UnitType.Artillery })),
-        new CardDefinitionEntry(FighterId, new CardDefinition("战斗机", 1, 1, 3, 2, unitTypes: new[] { UnitType.Fighter })),
-        new CardDefinitionEntry(BomberId, new CardDefinition("轰炸机", 1, 1, 4, 2, unitTypes: new[] { UnitType.Bomber })),
-        new CardDefinitionEntry(GuardianId, new CardDefinition("守护兵", 1, 1, 0, 6, unitTypes: new[] { UnitType.Infantry }, isGuard: true)),
-        new CardDefinitionEntry(TypelessId, new CardDefinition("白板", 1, 1, 2, 4)),
-        new CardDefinitionEntry(BlitzId, new CardDefinition("闪击兵", 1, 1, 2, 3, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Blitz })),
-        new CardDefinitionEntry(FuryId, new CardDefinition("奋战兵", 1, 1, 2, 6, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Fury })),
-        new CardDefinitionEntry(SmokeId, new CardDefinition("烟幕兵", 1, 1, 2, 4, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.SmokeScreen })),
-        new CardDefinitionEntry(AmbushId, new CardDefinition("伏击兵", 1, 1, 5, 6, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Ambush })),
-        new CardDefinitionEntry(WeakId, new CardDefinition("脆皮", 1, 1, 1, 2, unitTypes: new[] { UnitType.Infantry })),
-        new CardDefinitionEntry(BeastId, new CardDefinition("巨兽", 1, 1, 6, 7, unitTypes: new[] { UnitType.Infantry })),
-        new CardDefinitionEntry(CostlyId, new CardDefinition("重费兵", 1, 2, 2, 5, unitTypes: new[] { UnitType.Infantry })),
-        new CardDefinitionEntry(MegaId, new CardDefinition("巨炮", 1, 1, 30, 30, unitTypes: new[] { UnitType.Artillery })),
-        new CardDefinitionEntry(MixId, new CardDefinition("混合体", 1, 1, 3, 4, unitTypes: new[] { UnitType.Tank, UnitType.Artillery })),
-        new CardDefinitionEntry(MixAirId, new CardDefinition("混成空军", 1, 1, 2, 5, unitTypes: new[] { UnitType.Artillery, UnitType.Bomber })),
-        new CardDefinitionEntry(AmbushFighterId, new CardDefinition("伏击战斗机", 1, 1, 5, 2, unitTypes: new[] { UnitType.Fighter }, keywords: new[] { KeywordIds.Ambush })),
-        new CardDefinitionEntry(AmbushBomberId, new CardDefinition("伏击轰炸机", 1, 1, 4, 2, unitTypes: new[] { UnitType.Bomber }, keywords: new[] { KeywordIds.Ambush })),
-        new CardDefinitionEntry(CommandCardId, new CardDefinition("轻指令", 1, 0, 0, 0, CardCategory.Command)),
-        new CardDefinitionEntry(CounterCardId, new CardDefinition("轻反制", 1, 0, 0, 0, CardCategory.Counter)),
-        new CardDefinitionEntry(FuryTankId, new CardDefinition("奋击坦克", 1, 1, 2, 5, unitTypes: new[] { UnitType.Tank }, keywords: new[] { KeywordIds.Fury })),
+        new CardDefinitionEntry(InfantryId, new CardDefinition("步兵", 1, 1, 2, 5, unitTypes: new[] { UnitType.Infantry }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(TankId, new CardDefinition("坦克", 1, 1, 3, 5, unitTypes: new[] { UnitType.Tank }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(ArtilleryId, new CardDefinition("炮兵", 1, 1, 2, 2, unitTypes: new[] { UnitType.Artillery }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(FighterId, new CardDefinition("战斗机", 1, 1, 3, 2, unitTypes: new[] { UnitType.Fighter }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(BomberId, new CardDefinition("轰炸机", 1, 1, 4, 2, unitTypes: new[] { UnitType.Bomber }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(GuardianId, new CardDefinition("守护兵", 1, 1, 0, 6, unitTypes: new[] { UnitType.Infantry }, isGuard: true, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(TypelessId, new CardDefinition("白板", 1, 1, 2, 4, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(BlitzId, new CardDefinition("闪击兵", 1, 1, 2, 3, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Blitz }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(FuryId, new CardDefinition("奋战兵", 1, 1, 2, 6, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Fury }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(SmokeId, new CardDefinition("烟幕兵", 1, 1, 2, 4, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.SmokeScreen }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(AmbushId, new CardDefinition("伏击兵", 1, 1, 5, 6, unitTypes: new[] { UnitType.Infantry }, keywords: new[] { KeywordIds.Ambush }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(WeakId, new CardDefinition("脆皮", 1, 1, 1, 2, unitTypes: new[] { UnitType.Infantry }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(BeastId, new CardDefinition("巨兽", 1, 1, 6, 7, unitTypes: new[] { UnitType.Infantry }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CostlyId, new CardDefinition("重费兵", 1, 2, 2, 5, unitTypes: new[] { UnitType.Infantry }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(MegaId, new CardDefinition("巨炮", 1, 1, 30, 30, unitTypes: new[] { UnitType.Artillery }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(MixId, new CardDefinition("混合体", 1, 1, 3, 4, unitTypes: new[] { UnitType.Tank, UnitType.Artillery }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(MixAirId, new CardDefinition("混成空军", 1, 1, 2, 5, unitTypes: new[] { UnitType.Artillery, UnitType.Bomber }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(AmbushFighterId, new CardDefinition("伏击战斗机", 1, 1, 5, 2, unitTypes: new[] { UnitType.Fighter }, keywords: new[] { KeywordIds.Ambush }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(AmbushBomberId, new CardDefinition("伏击轰炸机", 1, 1, 4, 2, unitTypes: new[] { UnitType.Bomber }, keywords: new[] { KeywordIds.Ambush }, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CommandCardId, new CardDefinition("轻指令", 1, 0, 0, 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(CounterCardId, new CardDefinition("轻反制", 1, 0, 0, 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard)),
+        new CardDefinitionEntry(FuryTankId, new CardDefinition("奋击坦克", 1, 1, 2, 5, unitTypes: new[] { UnitType.Tank }, keywords: new[] { KeywordIds.Fury }, faction: Faction.Germany, rarity: Rarity.Standard)),
     };
 
-    /// <summary>创建指挥测试对局（双方步兵 x10 卡组＋定制定义集；可选目标选择桥接）。</summary>
-    public static Match CreateCommandMatch(MockTargeterBridge? bridge = null, int seed = 42)
+    /// <summary>创建指挥测试对局（双方步兵 x10 卡组＋定制定义集；可选目标选择桥接）。
+    /// W2c X2 加性：可选效果注册表（卡牌加载时效果装载的装配源）与追加定义集（测试专用卡；
+    /// 与既有 id 重复的条目将导致初始化注册期 fail-fast——测试自行避免）。</summary>
+    public static Match CreateCommandMatch(
+        MockTargeterBridge? bridge = null,
+        int seed = 42,
+        CardEffectRegistry? effectRegistry = null,
+        IEnumerable<CardDefinitionEntry>? extraDefinitions = null)
         => new(
             new CardList(Enumerable.Repeat(InfantryId, 10)),
             new CardList(Enumerable.Repeat(InfantryId, 10)),
-            CreateDefinitions(),
+            CreateDefinitions().Concat(extraDefinitions ?? Enumerable.Empty<CardDefinitionEntry>()),
             seed,
             firstPlayerIndex: null,
             options: null,
-            targeterBridge: bridge);
+            targeterBridge: bridge,
+            effectRegistry: effectRegistry);
 
     /// <summary>实例化＋加载一张定制卡（归属＝player；可选放入手牌）。</summary>
     public static async Task<UnitCard> InstantiateLoadedAsync(Match match, Player player, string id = InfantryId, bool toHand = false)
@@ -170,7 +178,8 @@ internal static class CommandTestKit
     public static Func<TargetingCollectionContext, Task<IReadOnlyList<object?>>> AllRefsScript(Match match)
         => _ => Task.FromResult<IReadOnlyList<object?>>(AllRefsOf(match));
 
-    /// <summary>全引用（槽位引用＋单位引用）。</summary>
+    /// <summary>全引用（槽位引用＋单位引用＋双方 HQ 实体引用）。
+    /// W3-3：HQ 目标以实体引用承载——收集超集须含 HQ 引用（与候选产出面同源；槽位引用不再作为 HQ 目标产出）。</summary>
     public static IReadOnlyList<object?> AllRefsOf(Match match)
     {
         var refs = new List<object?>();
@@ -182,6 +191,11 @@ internal static class CommandTestKit
         foreach (var unit in AllUnitsOf(match))
         {
             refs.Add(unit.Ref);
+        }
+
+        foreach (var player in match.Players)
+        {
+            refs.Add(player.Hq.Ref);
         }
 
         return refs;

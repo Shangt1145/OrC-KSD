@@ -22,12 +22,13 @@ public class MatchOutcomeTests
         return striker;
     }
 
-    /// <summary>终局构造助手（驱动巨炮攻击敌方 HQ——HQ 20-30 钳制到 0、立即终局）。</summary>
+    /// <summary>终局构造助手（驱动巨炮攻击敌方 HQ——HQ 20-30 钳制到 0、立即终局）。
+    /// W3-3：HQ 目标以 HQ 实体引用承载（hq.Ref——不再用槽位引用）。</summary>
     private static async Task<CommandResult> StrikeHqAsync(Match match, MockTargeterBridge bridge, UnitCard striker)
     {
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var result = await CommandTestKit.RunCommandAsync(
-            match, bridge, striker, match.Battlefield.PlayerBSupportLine[0].Ref);
+            match, bridge, striker, match.Players[1].Hq.Ref);
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.Equal(MatchState.Ended, match.State);
         Assert.Same(match.Players[0], match.Winner);
@@ -45,20 +46,37 @@ public class MatchOutcomeTests
         var playerB = match.Players[1];
         var striker = await PrepareHqStrikerAsync(match);
         using var recorder = new UpdateRecorder(match.Engine); // 攻击前挂接：验证结算期间更新流
+        MatchState? stateAtSignal = null; // W3-3：信号时刻对局状态（「先数值变化、后终局记录」观察序）
+        using var signalProbe = match.Engine.Subscribe((type, payload, ct) =>
+        {
+            if (type == GameUpdates.CardStatChanged
+                && ReferenceEquals(payload?[GameUpdates.PayloadCard], playerB.Hq))
+            {
+                stateAtSignal = match.State;
+            }
+
+            return Task.CompletedTask;
+        });
 
         var result = await StrikeHqAsync(match, bridge, striker);
 
         // HQ 归零（钳制）→ 立即终局（状态＝结束、胜者＝攻击方；HQ 占位不变）；当次结算收尾照常完成
-        //（扣费恰一次＋清位照常——内部步骤不经门禁）；攻击仍为成功；不发任何更新（数字静默）。
+        //（扣费恰一次＋清位照常——内部步骤不经门禁）；攻击仍为成功。
+        // W3-3：HQ 数值改走通用数据改变管线——结算期间恰一条数值变化更新（card.stat.changed、变化字段＝HqHealth），
+        // 且「先数值变化、后终局记录」（信号时刻状态尚为进行）；判定由 HQ 侧统一响应承接（不再内联于攻击流程）。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.Equal(MatchState.Ended, match.State);
         Assert.Same(playerA, match.Winner);
         Assert.Equal(0, playerB.HqHealth);
-        Assert.Same(playerB, match.Battlefield.PlayerBSupportLine[0].Occupant);
+        Assert.Same(playerB.Hq, match.Battlefield.PlayerBSupportLine[0].Occupant);
         Assert.Equal(0, playerA.Points);
         Assert.False(striker.GetData<CommandData>().CanAttack);
         Assert.False(striker.GetData<CommandData>().CanMove);
-        Assert.Empty(recorder.Updates);
+        var statUpdate = Assert.Single(recorder.Updates);
+        Assert.Equal(GameUpdates.CardStatChanged, statUpdate.Type);
+        Assert.Same(playerB.Hq, statUpdate.Payload![GameUpdates.PayloadCard]);
+        Assert.Equal(new[] { CardStatFields.HqHealth }, ModifierTestKit.ChangedFieldsOf(statUpdate.Payload));
+        Assert.Equal(MatchState.InProgress, stateAtSignal);
     }
 
     [Fact]
@@ -142,7 +160,7 @@ public class MatchOutcomeTests
             new Dictionary<string, object?>
             {
                 [CommandDataKeys.Attacker] = unit.Ref,
-                [CommandDataKeys.Target] = match.Battlefield.PlayerBSupportLine[0].Ref,
+                [CommandDataKeys.Target] = match.Players[1].Hq.Ref, // W3-3：HQ 目标以实体引用承载
             });
         Assert.Equal(Orc.Core.ExecutionOutcome.ValidationRejected, attackStream.Outcome);
 

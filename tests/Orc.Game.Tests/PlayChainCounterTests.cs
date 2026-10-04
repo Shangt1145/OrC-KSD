@@ -77,7 +77,7 @@ public class PlayChainCounterTests
         var playerB = match.Players[1];
         var counterA = await PlayChainTestKit.InstantiateLoadedAsync<CounterCard>(match, playerA, PlayChainTestKit.CounterCheapId);
 
-        await match.EndTurn(); // → 回合 2：玩家B 行动（B 结算后点数 1；A 回合结束清零）
+        await match.EndTurn(); // → 回合 2：玩家B 行动（B 结算后点数 1；A 点数保留——X3：回合结束不清零）
         Assert.Same(playerB, match.CurrentPlayer);
         var counterB = await PlayChainTestKit.InstantiateLoadedAsync<CounterCard>(match, playerB, PlayChainTestKit.CounterCheapId);
 
@@ -86,7 +86,7 @@ public class PlayChainCounterTests
         Assert.Equal(PlayResultStatus.Failed, rejected.Status);
         Assert.Equal(PlayFailureReason.CounterNotOwnerTurn, rejected.FailureReason);
         Assert.False(counterA.GetData<CounterActivationData>().IsActive);
-        Assert.Equal(0, playerA.Points);
+        Assert.Equal(1, playerA.Points); // A 的 1 点保留（X3）；拒绝零副作用（未扣点）
 
         // 正控：己方回合（B 的反制、当前行动方＝B）＝成功。
         var accepted = await match.PlayManager.UseCounterAsync(counterB);

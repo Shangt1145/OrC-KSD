@@ -123,7 +123,7 @@ public class CommandFrontLineTests
         Assert.Contains(enemyFighter.Ref, report.Attack.Candidates);
         Assert.DoesNotContain(frontInfantry.Ref, report.Attack.Candidates);
         Assert.Contains(supportInfantry.Ref, report.Attack.Candidates);
-        Assert.Contains(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.Contains(playerB.Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class CommandFrontLineTests
         // 同线非战斗机（支援线步兵）同样置黑；战斗机可选；前线无战斗机 → 前线目标不受影响。
         Assert.Contains(enemyFighter.Ref, report.Attack.Candidates);
         Assert.DoesNotContain(supportInfantry.Ref, report.Attack.Candidates);
-        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.DoesNotContain(playerB.Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
         Assert.Contains(frontInfantry.Ref, report.Attack.Candidates);
     }
 
@@ -168,7 +168,7 @@ public class CommandFrontLineTests
         // 战前：敌支援线存在存活战斗机 → HQ 置黑。
         CommandTestKit.Activate(bomber);
         var before = match.CommandManager.GetCommandAvailability(bomber);
-        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, before.Attack.Candidates);
+        Assert.DoesNotContain(playerB.Hq.Ref, before.Attack.Candidates); // W3-3：HQ 目标＝实体引用
 
         // 杀死战斗机（以存活为限：死亡不计）→ 拦截解除、HQ 恢复可选。
         var kill = await CommandTestKit.RunCommandAsync(match, bridge, beast, enemyFighter.Ref);
@@ -176,7 +176,7 @@ public class CommandFrontLineTests
         Assert.True(enemyFighter.GetData<UnitStateData>().IsDestroyed);
 
         var after = match.CommandManager.GetCommandAvailability(bomber);
-        Assert.Contains(match.Battlefield.PlayerBSupportLine[0].Ref, after.Attack.Candidates);
+        Assert.Contains(playerB.Hq.Ref, after.Attack.Candidates); // W3-3：HQ 目标＝实体引用
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public class CommandFrontLineTests
         var frontInfantry = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 1);
         CommandTestKit.Activate(bomber);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
-        var hqRef = match.Battlefield.PlayerBSupportLine[0].Ref;
+        var hqRef = playerB.Hq.Ref; // W3-3：HQ 目标＝实体引用
 
         var task = match.CommandManager.BeginCommandAsync(bomber);
         var (description, responder) = await bridge.WaitForNextBeginAsync();
@@ -227,7 +227,7 @@ public class CommandFrontLineTests
         await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.FighterId, 1); // 敌支援线战斗机
         CommandTestKit.Activate(fighter);
         CommandTestKit.Activate(artillery);
-        var hqRef = match.Battlefield.PlayerBSupportLine[0].Ref;
+        var hqRef = playerB.Hq.Ref; // W3-3：HQ 目标＝实体引用
 
         // 仅轰炸机攻击者受拦截约束：战斗机 / 炮兵的攻击筛选不受影响（HQ 可选）。
         var fighterReport = match.CommandManager.GetCommandAvailability(fighter);

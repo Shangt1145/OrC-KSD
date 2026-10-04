@@ -18,8 +18,9 @@ internal enum CounterUseRejection
 /// 反制卡（三大类之一）：激活/取消两态（数据组件 <see cref="CounterActivationData"/>；2B 起实例化路径装配——挂载落实）。
 /// 数据组件装配（E 区差异化）：＝指挥点花费（基类）＋激活状态组件。
 /// 触发器（2B 起链内容填入；唯一＝使用反制的触发器——<see cref="CounterUseTrigger"/>）：
-/// 单入口状态翻转（按当前激活状态分派）：未激活＝激活流程（验证〔指挥点〕→ 扣点 → 置激活 ＋ 注册效果 handler）；
-/// 已激活＝取消流程（退点〔无条件、同额〕→ 取消激活 ＋ 取消注册）；仅己方回合（该卡所属玩家是当前行动方）。
+/// 单入口状态翻转（按当前激活状态分派）：未激活＝激活流程（验证〔指挥点〕→ 扣点〔读「有效部署费」〕→ 记录实扣额 →
+/// 置激活 ＋ 注册效果 handler）；已激活＝取消流程（退点〔无条件、按激活实扣额——「扣点与退点同额」跨调用守恒、
+/// 与期间修饰漂移解耦〕→ 取消激活 ＋ 取消注册）；仅己方回合（该卡所属玩家是当前行动方）。
 /// 效果 handler 集经 <see cref="AddEffectHandler"/> 装配注册；激活时注册进「使用反制的触发器」、取消时注销
 /// （在册可经 <see cref="RegisteredEffectHandlerNames"/> 查询断言）。
 /// 使用反制不执行 targeter 交互、不发任何游戏更新；位置语义＝不做激活区——激活/取消＝状态翻转＋费用
@@ -30,6 +31,9 @@ public class CounterCard : CardBase
 {
     private readonly List<CounterEffectHandler> _effectHandlers = new();
     private readonly List<TriggerRegistration> _activeRegistrations = new();
+
+    /// <summary>激活实扣额（W3-2 G5）：激活时写入、取消时按此退还、取消后清空——「扣点与退点同额」跨调用守恒（与期间修饰漂移解耦）。</summary>
+    private int? _chargedCost;
 
     /// <summary>创建反制卡（激活状态组件＋触发器与默认链事件在构造期装配）。</summary>
     /// <exception cref="ArgumentNullException">engine 或 definition 为 null。</exception>
@@ -78,7 +82,9 @@ public class CounterCard : CardBase
             return CounterUseRejection.NotOwnerTurn;
         }
 
-        if (!GetData<CounterActivationData>().IsActive && owner.Points < GetData<CommandPointCostData>().DeployCost)
+        // W3-2 G5：未激活时检查指挥点（≥「有效部署费」——修饰贡献叠加后的链输出；评估与翻转同口径）。
+        if (!GetData<CounterActivationData>().IsActive
+            && owner.Points < Modifiers.GetEffectiveValue(CardStatFields.DeployCost))
         {
             return CounterUseRejection.NotEnoughPoints;
         }
@@ -96,12 +102,14 @@ public class CounterCard : CardBase
         }
 
         var activation = card.GetData<CounterActivationData>();
-        var cost = card.GetData<CommandPointCostData>().DeployCost;
 
         if (!activation.IsActive)
         {
-            // 激活流程：扣点 → 置激活 → 注册（效果）handler（登记序）。
+            // 激活流程：读「有效部署费」（W3-2 G5——修饰贡献叠加后的链输出；与评估同口径）→ 扣点 →
+            // 记录实扣额（取消按此退还——「扣点与退点同额」跨调用守恒）→ 置激活 → 注册（效果）handler（登记序）。
+            var cost = card.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
             player.Points -= cost;
+            card._chargedCost = cost;
             activation.IsActive = true;
             foreach (var effect in card._effectHandlers)
             {
@@ -110,8 +118,11 @@ public class CounterCard : CardBase
         }
         else
         {
-            // 取消流程：退点（无条件、同额）→ 取消激活 → 取消注册。
-            player.Points += cost;
+            // 取消流程：退点（无条件、按激活实扣额——与期间修饰漂移解耦、点数守恒）→ 清记录 → 取消激活 → 取消注册。
+            var refund = card._chargedCost ?? throw new InvalidOperationException(
+                $"反制 '{card.Name}' 处于激活态但无实扣额记录（结构性错误——激活须经使用流程；fail-fast、不静默）。");
+            player.Points += refund;
+            card._chargedCost = null;
             activation.IsActive = false;
             foreach (var registration in card._activeRegistrations)
             {

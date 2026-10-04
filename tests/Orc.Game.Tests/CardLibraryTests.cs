@@ -48,16 +48,16 @@ public class CardLibraryTests
     public void Register_Duplicate_Id_Is_Rejected()
     {
         var library = CreateLibrary(out _);
-        Assert.Throws<InvalidOperationException>(() => library.Register("c01", new CardDefinition("重复", 0, 0, 0, 0)));
+        Assert.Throws<InvalidOperationException>(() => library.Register("c01", new CardDefinition("重复", 0, 0, 0, 0, faction: Faction.Germany, rarity: Rarity.Standard)));
     }
 
     [Fact]
     public void Register_Validates_Arguments()
     {
         var library = CreateLibrary(out _);
-        Assert.Throws<ArgumentException>(() => library.Register("", new CardDefinition("空白", 0, 0, 0, 0)));
-        Assert.Throws<ArgumentException>(() => library.Register("  ", new CardDefinition("空白", 0, 0, 0, 0)));
-        Assert.Throws<ArgumentNullException>(() => library.Register(null!, new CardDefinition("空", 0, 0, 0, 0)));
+        Assert.Throws<ArgumentException>(() => library.Register("", new CardDefinition("空白", 0, 0, 0, 0, faction: Faction.Germany, rarity: Rarity.Standard)));
+        Assert.Throws<ArgumentException>(() => library.Register("  ", new CardDefinition("空白", 0, 0, 0, 0, faction: Faction.Germany, rarity: Rarity.Standard)));
+        Assert.Throws<ArgumentNullException>(() => library.Register(null!, new CardDefinition("空", 0, 0, 0, 0, faction: Faction.Germany, rarity: Rarity.Standard)));
         Assert.Throws<ArgumentNullException>(() => library.Register("c99", null!));
     }
 

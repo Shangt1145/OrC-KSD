@@ -14,6 +14,12 @@ namespace Orc.Game.Cards;
 /// （反制「仅己方回合」验证所需；延迟读取、随对局回合推进取当前值）；独立构造（不提供）＝卡上为 null。
 /// 2C 加性面：可选词条装载上下文提供器（<paramref name="keywordLoadContextProvider"/>）——实例化时注入每张卡
 /// （加载时装载主动词条逻辑所需；延迟读取——对局装配顺序下提供器目标在实例化后才就绪）；独立构造（不提供）＝卡上为 null。
+/// W1-1 加性面：可选对局级卡牌 ID 提供器（<paramref name="matchCardIdProvider"/>）——实例化时注入每张卡
+/// （加载时分配对局级自增 ID 所需——构筑外判定的 ID 水位线基础；延迟读取——对局装配顺序下提供器目标在实例化后才就绪）；
+/// 独立构造（不提供）＝卡上为 null（不分配 ID——无对局上下文）。
+/// X2 加性面：可选效果装载上下文提供器（<paramref name="effectLoadContextProvider"/>——按定义 id 解析对局装载语境与效果装配源；
+/// 效果源可空——无注册表时声明为空、装载照常）——实例化时注入每张卡（加载时装载卡牌效果所需；延迟读取）；
+/// 独立构造（不提供）＝卡上为 null（效果装载整链跳过）。
 /// </summary>
 public sealed class CardLibrary
 {
@@ -21,18 +27,25 @@ public sealed class CardLibrary
     private readonly Dictionary<string, CardDefinition> _definitions = new(StringComparer.Ordinal);
     private readonly Func<Player?>? _turnPlayerProvider;
     private readonly Func<KeywordLoadContext?>? _keywordLoadContextProvider;
+    private readonly Func<int>? _matchCardIdProvider;
+    private readonly Func<string, CardEffectLoadContext?>? _effectLoadContextProvider;
 
-    /// <summary>创建卡牌库（实例化所需引擎引用由构造注入；可选回合上下文提供器——2B 加性；可选词条装载上下文提供器——2C 加性）。</summary>
+    /// <summary>创建卡牌库（实例化所需引擎引用由构造注入；可选回合上下文提供器——2B 加性；可选词条装载上下文提供器——2C 加性；
+    /// 可选对局级卡牌 ID 提供器——W1-1 加性；可选效果装载上下文提供器——X2 加性）。</summary>
     /// <exception cref="ArgumentNullException">engine 为 null。</exception>
     public CardLibrary(
         LogicEngine engine,
         Func<Player?>? turnPlayerProvider = null,
-        Func<KeywordLoadContext?>? keywordLoadContextProvider = null)
+        Func<KeywordLoadContext?>? keywordLoadContextProvider = null,
+        Func<int>? matchCardIdProvider = null,
+        Func<string, CardEffectLoadContext?>? effectLoadContextProvider = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         _engine = engine;
         _turnPlayerProvider = turnPlayerProvider;
         _keywordLoadContextProvider = keywordLoadContextProvider;
+        _matchCardIdProvider = matchCardIdProvider;
+        _effectLoadContextProvider = effectLoadContextProvider;
     }
 
     /// <summary>注册定义（id 为注册键）。</summary>
@@ -73,7 +86,8 @@ public sealed class CardLibrary
 
     /// <summary>
     /// 实例化：id → 卡牌实例（按定义类别产出三大类卡基类实例之一；名称取自定义、实例化路径装配按类别差异化；
-    /// 实例化时注入回合上下文提供器〔2B〕与词条装载上下文提供器〔2C〕）。
+    /// 实例化时注入回合上下文提供器〔2B〕、词条装载上下文提供器〔2C〕、对局级卡牌 ID 提供器〔W1-1〕
+    /// 与效果装载上下文提供器〔X2〕）。
     /// </summary>
     /// <exception cref="ArgumentException">id 为 null/空白。</exception>
     /// <exception cref="KeyNotFoundException">未注册的 id（明确错误、不吞）。</exception>
@@ -90,6 +104,10 @@ public sealed class CardLibrary
 
         card.TurnPlayerProvider = _turnPlayerProvider;
         card.KeywordLoadContextProvider = _keywordLoadContextProvider;
+        card.MatchCardIdProvider = _matchCardIdProvider;
+        card.EffectLoadContextProvider = _effectLoadContextProvider is null
+            ? null
+            : () => _effectLoadContextProvider(id);
         return card;
     }
 }

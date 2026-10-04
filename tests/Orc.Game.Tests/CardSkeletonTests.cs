@@ -18,9 +18,9 @@ public class CardSkeletonTests
     {
         engine = new LogicEngine();
         var library = new CardLibrary(engine);
-        library.Register("u1", new CardDefinition("单位甲", 1, 2, 3, 4, CardCategory.Unit));
-        library.Register("c1", new CardDefinition("指令甲", 1, 1, 0, 0, CardCategory.Command));
-        library.Register("x1", new CardDefinition("反制甲", 1, 1, 0, 0, CardCategory.Counter));
+        library.Register("u1", new CardDefinition("单位甲", 1, 2, 3, 4, CardCategory.Unit, faction: Faction.Germany, rarity: Rarity.Standard));
+        library.Register("c1", new CardDefinition("指令甲", 1, 1, 0, 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard));
+        library.Register("x1", new CardDefinition("反制甲", 1, 1, 0, 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard));
         return library;
     }
 
@@ -38,10 +38,10 @@ public class CardSkeletonTests
     public void Catalog_Default_Category_Is_Unit_And_Invalid_Category_Is_Rejected()
     {
         // 既有构造形态（无类别参数）＝单位（兼容）；未定义类别在定义期被拒绝
-        var legacyStyle = new CardDefinition("旧式", 1, 1, 1, 1);
+        var legacyStyle = new CardDefinition("旧式", 1, 1, 1, 1, faction: Faction.Germany, rarity: Rarity.Standard);
         Assert.Equal(CardCategory.Unit, legacyStyle.Category);
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new CardDefinition("坏类别", 1, 1, 1, 1, (CardCategory)99));
+            () => new CardDefinition("坏类别", 1, 1, 1, 1, (CardCategory)99, faction: Faction.Germany, rarity: Rarity.Standard));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class CardSkeletonTests
         await defaultCard.LoadAsync(player);
 
         // 子类重写点可观测：自定义卡重写「持久化重建」扩展点（本批空位、可插桩——总装阶段填入重建逻辑）
-        var custom = new RecordingCard(match.Engine, new CardDefinition("自定义", 1, 2, 3, 4));
+        var custom = new RecordingCard(match.Engine, new CardDefinition("自定义", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
         await custom.LoadAsync(player);
         Assert.Equal(1, custom.RebuildInvocationCount);
         Assert.Same(player, custom.LastOwner);
@@ -154,7 +154,7 @@ public class CardSkeletonTests
     public void Deck_Instance_Channel_Preserves_Id_Face_And_Keeps_Count_On_Attach()
     {
         var engine = new LogicEngine();
-        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4));
+        var unit = new UnitCard(engine, new CardDefinition("单位", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
         var deck = new CardList(new[] { "c01", "c02" });
 
         deck.AttachInstanceAt(0, unit); // 装配（加载通道）

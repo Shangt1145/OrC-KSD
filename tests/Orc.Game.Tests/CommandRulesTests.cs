@@ -34,7 +34,7 @@ public class CommandRulesTests
         Assert.True(report.Attack.CanUse);
         Assert.Contains(enemyOnFront.Ref, report.Attack.Candidates);
         Assert.DoesNotContain(enemyOnSupport.Ref, report.Attack.Candidates);
-        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.DoesNotContain(playerB.Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class CommandRulesTests
 
         // 前线 → 敌支援线单位 / 敌 HQ：允许；前线 → 前线（同线）：不允许（相邻＝跨线）。
         Assert.Contains(enemyOnSupport.Ref, report.Attack.Candidates);
-        Assert.Contains(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.Contains(playerB.Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
         Assert.DoesNotContain(enemyOnFront.Ref, report.Attack.Candidates);
     }
 
@@ -74,7 +74,7 @@ public class CommandRulesTests
         CommandTestKit.Activate(artillery);
         CommandTestKit.Activate(fighter);
         CommandTestKit.Activate(bomber);
-        var hqRef = match.Battlefield.PlayerBSupportLine[0].Ref;
+        var hqRef = playerB.Hq.Ref; // W3-3：HQ 目标＝实体引用
 
         // 炮兵/战斗机/轰炸机（任意线组）：全组合允许（含 HQ、含敌支援线、含同线）。
         var artilleryReport = match.CommandManager.GetCommandAvailability(artillery);
@@ -105,7 +105,7 @@ public class CommandRulesTests
         var report = match.CommandManager.GetCommandAvailability(typeless);
         Assert.Contains(enemyOnFront.Ref, report.Attack.Candidates);
         Assert.DoesNotContain(enemyOnSupport.Ref, report.Attack.Candidates);
-        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+        Assert.DoesNotContain(playerB.Hq.Ref, report.Attack.Candidates); // W3-3：HQ 目标＝实体引用
     }
 
     [Fact]
@@ -255,18 +255,19 @@ public class CommandRulesTests
         var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 2);
         CommandTestKit.Activate(infantry);
         CommandTestKit.Activate(artillery);
-        var enemyHqSlot = match.Battlefield.PlayerBSupportLine[0];
+        var enemyHq = playerB.Hq; // W3-3：HQ 目标＝实体引用
 
-        // 守护者不可被守护（任何情形，含相邻另一守护者）；HQ 计入保护（槽 1 守护者 → HQ 被守护）。
+        // 守护者不可被守护（任何情形，含相邻另一守护者）；HQ 计入保护（槽 1 守护者 → HQ 被守护；Player 转发面／实体面双读）。
         Assert.False(match.CommandManager.IsUnitGuarded(guardian1));
         Assert.False(match.CommandManager.IsUnitGuarded(guardian2));
         Assert.True(match.CommandManager.IsHqGuarded(playerB));
+        Assert.True(match.CommandManager.IsHqGuarded(playerB.Hq));
 
         // 被守护 HQ：步/坦（前线）不可攻；炮/轰可攻。
         var infantryReport = match.CommandManager.GetCommandAvailability(infantry);
-        Assert.DoesNotContain(enemyHqSlot.Ref, infantryReport.Attack.Candidates);
+        Assert.DoesNotContain(enemyHq.Ref, infantryReport.Attack.Candidates);
         var artilleryReport = match.CommandManager.GetCommandAvailability(artillery);
-        Assert.Contains(enemyHqSlot.Ref, artilleryReport.Attack.Candidates);
+        Assert.Contains(enemyHq.Ref, artilleryReport.Attack.Candidates);
 
         // 守护者自身不受「被守护」影响：可被任意合法攻击者攻击（前线步兵 → 敌支援线守护者）。
         Assert.Contains(guardian1.Ref, infantryReport.Attack.Candidates);

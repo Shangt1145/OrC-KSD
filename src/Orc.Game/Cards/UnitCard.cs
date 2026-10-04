@@ -14,7 +14,10 @@ namespace Orc.Game.Cards;
 /// ②打出触发器（费用校验——外层复验；默认链＝打出宣告〔card.played〕→ 部署链 → 收尾〔扣费→离手→词条落点〔闪击＝扣费后〕〕）；
 /// ③部署触发器（默认链＝部署逻辑检查〔组件存在且 handler 非空〕→ 部署词条效果按序触发〔逐条异常隔离〕→ 单位化触发器 → unit.deployed）；
 /// ④加入触发器（默认链＝单位化触发器 → unit.joined；不扣费、不走部署词条）；
-/// ⑤单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位）。
+/// ⑤单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位＋建立修饰机制初始快照〔W2b〕）。
+/// 门户（W2b G3；单位数值受控变更面——防御语义）：伤害扣减 <see cref="ApplyDefenseDamageAsync"/>（损伤量增加）与
+/// 修复 <see cref="RepairDefenseAsync"/>（恢复到上限）＝运行期数值本体的合规变更入口（配合卡侧修饰容器＝修饰加值/撤销）；
+/// 变更一律经「门户 → 跑链（修饰机制管线）→ 有变更集中触发」。
 /// 触发数据约定：Card＝本卡、Player＝所有者（可缺省/可空——加入路径不要求归属）、Position＝目标槽位（Slot 对象）。
 /// 加载模板与其余装配沿用基类（<see cref="CardBase"/>）；持久化重建经基类扩展点。
 /// </summary>
@@ -72,8 +75,8 @@ public class UnitCard : CardBase
             return;
         }
 
-        // ① 打出宣告（card.played；空载荷——沿用既有常量契约）
-        await GameUpdates.EmitCardPlayed(_chainEngine, ct);
+        // ① 打出宣告（card.played；W4-1 升级版载荷＝{ Card, Player }——被使用卡实例＋使用方）
+        await GameUpdates.EmitCardPlayed(_chainEngine, unit, player, ct);
 
         // ② 内层部署链（部署词条 → 单位化 → unit.deployed）
         await unit.DeployTrigger.InvokeAsync(_chainEngine, BuildUnitData(unit, player, slot), ct);
@@ -82,8 +85,8 @@ public class UnitCard : CardBase
             return; // 部署链未完成（防御：单位化失败等）：不进入收尾（不扣费、不离手）
         }
 
-        // ③ 收尾：扣费（仅部署扣费——恰一次）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C）
-        player.Points -= unit.GetData<CommandPointCostData>().DeployCost;
+        // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C）
+        player.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
         player.Hand.Remove(unit);
         if (unit.TryGetData<KeywordLogicData>(out var keywordLogics))
         {
@@ -170,16 +173,17 @@ public class UnitCard : CardBase
 
     /// <summary>
     /// 单位化（部署/加入共用；链尾共用段）：加单位组件（位置＝槽位、已毁＝false、类型＝从定义填充〔2C 加性〕、三实时值＝对战组件值）
-    /// ＋指挥组件（初始 false/false）＋实际加入空槽位。
+    /// ＋指挥组件（初始 false/false）＋实际加入空槽位＋请求跑链一次（W2b：装配完成点建立修饰机制「初始快照」——
+    /// 无修饰/无损伤＝零变化、零发射；此后任何数值变更（伤害/修饰）均可被检测与集中触发）。
     /// 结构不变量（矛盾中间态防护）：仅空槽、未单位化的卡可单位化——违反＝链中止（不放置、不挂组件、零中间态残留）。
     /// </summary>
-    private Task HandleUnitizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    private async Task HandleUnitizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
         if (view.Card is not UnitCard unit || view.Position is not { } slot
             || !slot.IsEmpty || unit.TryGetData<UnitStateData>(out _))
         {
             ctx.Interrupt(); // 载荷缺失 / 槽位非空 / 二次单位化：链中止（留痕由 Interrupt 写入）
-            return Task.CompletedTask;
+            return;
         }
 
         var state = UnitStateData.CreateInitial(unit.GetData<BattleStatsData>());
@@ -188,8 +192,68 @@ public class UnitCard : CardBase
         unit.AddData(state);
         unit.AddData(new CommandData());
         slot.Place(unit);
-        return Task.CompletedTask;
+
+        // W2b G3 接线：装配完成点请求跑链一次（首轮——以基准状态建立比较基线；本时点无修饰/无损伤＝零变化、零发射）。
+        await unit.Modifiers.RequestRerunAsync(ct);
     }
+
+    // ---------- 门户（W2b G3；单位数值受控变更面——防御语义） ----------
+
+    /// <summary>
+    /// 门户：防御伤害扣减（受控变更——数值本体的运行期唯一合规入口之一；配合修饰容器＝修饰加值/撤销）：
+    /// 损伤量增加（伤害＝即时变更：只扣当前、不减上限；不经修饰器）→ 跑链（修饰机制管线）→ 有变更才发
+    /// （card.stat.changed——先落定、后发射）；返回即终态（致死时含死亡判定与死亡流程完成）。
+    /// 死亡后数值面冻结：已死亡/已毁＝明确拒绝（fail-fast、零副作用）；未单位化＝明确异常（装配性错误）。
+    /// </summary>
+    /// <param name="amount">伤害量（≥0；0＝合法——跑链无变化时零发射）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">amount 为负。</exception>
+    /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（死亡后数值面冻结——明确拒绝）。</exception>
+    public async Task ApplyDefenseDamageAsync(int amount, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        var state = RequireUnitState();
+        if (state.IsDestroyed)
+        {
+            throw new InvalidOperationException(
+                $"单位 '{Name}' 已死亡/已毁，不能进行伤害操作（死亡后数值面冻结——明确拒绝）。");
+        }
+
+        state.DefenseLoss += amount; // 受控写入（门户面；运行期直写收窄）
+        await Modifiers.RequestRerunAsync(ct); // 变更经门户 → 跑链 → 变化时集中触发
+    }
+
+    /// <summary>
+    /// 门户：修复（受控变更——恢复到上限）：损伤量清零（＝当前值恢复到有效上限）→ 跑链 → 有变更才发。
+    /// 仅对存活单位有效：已死亡/已毁＝明确拒绝（fail-fast）；满血（无损伤）＝幂等无变化（零发射）。
+    /// （G17 完整语义后续批次；本单＝动作面＋模拟验证。）
+    /// </summary>
+    /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（明确拒绝）。</exception>
+    public async Task RepairDefenseAsync(CancellationToken ct = default)
+    {
+        var state = RequireUnitState();
+        if (state.IsDestroyed)
+        {
+            throw new InvalidOperationException(
+                $"单位 '{Name}' 已死亡/已毁，不能修复（仅对存活单位有效——明确拒绝）。");
+        }
+
+        state.DefenseLoss = 0;
+        await Modifiers.RequestRerunAsync(ct);
+    }
+
+    /// <summary>
+    /// 读取「防御有效上限」（只读查询面；W2b）：有效上限＝对战组件基准＋Σ加防修饰（现算；只读、不落定不发射）。
+    /// 与有效值读取面并列；不提供任意写（变更仍经门户/修饰）。死亡后查询可用（数值本体保留、只读）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">未单位化（缺单位数据组件——基准来源未就绪）。</exception>
+    public int GetEffectiveDefenseCap() => Modifiers.GetEffectiveCapValue(CardStatFields.Defense);
+
+    /// <summary>单位数据组件就绪校验（门户操作前提；未单位化＝明确异常、不静默）。</summary>
+    private UnitStateData RequireUnitState()
+        => TryGetData<UnitStateData>(out var state)
+            ? state
+            : throw new InvalidOperationException(
+                $"单位 '{Name}' 尚未单位化（缺单位数据组件），不能执行数值变更操作（装配性错误）。");
 
     /// <summary>单位链触发数据（Card / Player / Position；Player 可缺省/可空——加入路径不要求归属）。</summary>
     private static Dictionary<string, object?> BuildUnitData(UnitCard unit, Player? player, Slot slot)
