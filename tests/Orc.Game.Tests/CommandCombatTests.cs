@@ -7,10 +7,11 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2C 验收③（攻击结算）：基础互伤（同时结算、以互扣前实时值为基准）；死亡清理最小口径
-/// （槽位释放 / IsDestroyed / Position 置空 / 实例保留可查询 / 不发 position.changed / card.died 恰一次）；
-/// 同归于尽（两枚 card.died、被攻击者在前）；HQ 掉血（钳制到 0、不反击、胜负后置）；攻击者死亡仍成功（照扣费、照清位）；
-/// 伏击改写（条件成立＝攻击者死·目标不受伤；不成立＝正常互伤；攻击者侧伏击不参与；死亡后不再改写）。
+/// 2C 验收③（攻击结算；后置项 A/B 适配后）：互伤（同时结算、以互扣前实时值为基准；豁免表全组合见 CommandImmunityTests）；
+/// 死亡清理最小口径（槽位释放 / IsDestroyed / Position 置空 / 实例保留可查询 / 不发 position.changed / card.died 恰一次）；
+/// 同归于尽（两枚 card.died、被攻击者在前）；HQ 归零＝立即终局（钳制到 0、不反击、状态置结束＋胜者；当次收尾照常）；
+/// 攻击者死亡仍成功（照扣费、照清位）；伏击改写（先资格〔反击豁免表〕后条件：成立＝攻击者死·目标不受伤；
+/// 不成立＝正常互伤与无资格；攻击者侧伏击不参与；死亡后不再改写）。
 /// </summary>
 public class CommandCombatTests
 {
@@ -22,7 +23,9 @@ public class CommandCombatTests
         await match.Initialize();
         var playerA = match.Players[0];
         var playerB = match.Players[1];
-        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.ArtilleryId, 0); // 攻 2 / 防 2
+        // 适配（后置项 A）：原「炮兵 × 炮兵」组合现属豁免表（攻击者＝炮兵不受任何反击、不会互伤）——
+        // 迁移为非豁免组合「战斗机（攻 3 / 防 2）× 炮兵（攻 2 / 防 2）」（覆盖语义保持：互伤同归）。
+        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.FighterId, 0); // 攻 3 / 防 2
         var target = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.ArtilleryId, 2); // 攻 2 / 防 2
         CommandTestKit.Activate(attacker);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
@@ -30,7 +33,8 @@ public class CommandCombatTests
 
         var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, target.Ref);
 
-        // 同时结算（互扣前实时值）→ 同归于尽：两枚 card.died 均发射，顺序＝被攻击者在前、攻击者在后。
+        // 同时结算（互扣前实时值）→ 同归于尽（战斗机攻 3 ≥ 炮兵防 2；炮兵反击 2 ≥ 战斗机防 2）：
+        // 两枚 card.died 均发射，顺序＝被攻击者在前、攻击者在后。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         var diedEvents = recorder.Updates.Where(u => u.Type == GameUpdates.CardDied).ToList();
         Assert.Equal(2, diedEvents.Count);
@@ -81,7 +85,9 @@ public class CommandCombatTests
         await match.Initialize();
         var playerA = match.Players[0];
         var playerB = match.Players[1];
-        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.ArtilleryId, 0);
+        // 适配（后置项 A）：原「炮兵 × 炮兵」组合现属豁免表（攻击者＝炮兵不受任何反击——攻击者不会死亡）——
+        // 迁移为非豁免组合「脆皮步兵（攻 1 / 防 2）× 炮兵（攻 2 / 防 2）」：以攻击者死亡告终（覆盖语义保持）。
+        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.WeakId, 0);
         var target = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.ArtilleryId, 2);
         CommandTestKit.Activate(attacker);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
@@ -111,12 +117,17 @@ public class CommandCombatTests
 
         var result = await CommandTestKit.RunCommandAsync(match, bridge, mega, enemyHqSlot.Ref);
 
-        // 伤害＝实时攻击力（20-30 → 钳制到 0）；HQ 不反击（攻击者不受伤害）；胜负后置（对局照常）。
+        // 伤害＝实时攻击力（20-30 → 钳制到 0）；HQ 不反击（攻击者不受伤害）；HQ 生命≤0 → 立即终局
+        // （状态＝结束＋胜者＝攻击方）——适配（后置项 B：原「胜负后置、对局照常」）。当次结算收尾照常完成（扣费＋清位）。
         Assert.Equal(CommandResultStatus.Success, result.Status);
         Assert.Equal(0, playerB.HqHealth);
         Assert.Equal(30, mega.GetData<UnitStateData>().Defense);
-        Assert.True(match.State == MatchState.InProgress);
+        Assert.Equal(MatchState.Ended, match.State);
+        Assert.Same(playerA, match.Winner);
         Assert.Same(playerB, enemyHqSlot.Occupant); // HQ 占位不变
+        Assert.Equal(0, playerA.Points); // 当次收尾照常：扣费恰一次
+        Assert.False(mega.GetData<CommandData>().CanAttack); // 清位照常
+        Assert.False(mega.GetData<CommandData>().CanMove);
     }
 
     [Fact]

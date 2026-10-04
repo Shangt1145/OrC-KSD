@@ -8,7 +8,7 @@ namespace Orc.Cards;
 /// ①单位放置后效果生效（被动：主触发器挂载至总线 ＋ OnMount 注入完成）；
 /// ②效果移除/卡牌销毁后清理完成（OnUnmount → 撤销注入登记 → 总线卸载 → 清宿主引用）；
 /// ③顺序：单位初始化逻辑先、效果注入后；④装载＝【挂主触发器 → OnMount】、卸载＝【OnUnmount → 撤销登记 → 总线卸载】。
-/// 主动效果（法术）**不参与装载/卸载**（不挂总线、不执行钩子；纯列表进出），其生效经 <see cref="ActiveEffect{TView}.CastAsync"/> 调用主触发器（施放）。
+/// 主动效果（指令）**不参与装载/卸载**（不挂总线、不执行钩子；纯列表进出），其生效经 <see cref="ActiveEffect{TView}.CastAsync"/> 调用主触发器（施放）。
 /// 作者逻辑统一写在 <see cref="OnMount"/> / <see cref="OnUnmount"/>（框架模板负责「何时触发」）；
 /// 注入经 <see cref="Inject{TView}"/> 登记，卸载时框架自动撤销全部登记项（作者不手写撤销）。
 /// 幂等边界（框架保证）：未装载不触 OnUnmount（重复移除幂等）；已装载不重复 OnMount（重复放置不重复装载）；同一效果实例可多次成对装载/卸载（移除后重新 Add 复装）。
@@ -239,9 +239,9 @@ public abstract class PassiveEffect : Effect
 }
 
 /// <summary>
-/// 主动效果（S4；法术）：施放语境效果——主触发器为作者声明的主动触发器（不挂总线、无装载/卸载、不执行钩子；S3 约束下主动触发器不可挂载）。
+/// 主动效果（S4；指令）：施放语境效果——主触发器为作者声明的主动触发器（不挂总线、无装载/卸载、不执行钩子；S3 约束下主动触发器不可挂载）。
 /// 施放＝主触发器被调用（<see cref="CastAsync"/>）→ 施放事件链（作者注册；最小形态：对目标调用伤害结算流程）。
-/// 实现 <see cref="ICastAction"/>（S5）：供引擎级共享施放流程（<see cref="SpellFlow"/>）在检查位通过后执行施放链。
+/// 实现 <see cref="ICastAction"/>（S5）：供引擎级共享指令流程（<see cref="OrderFlow"/>）在检查位通过后执行施放链。
 /// 放置/加入时无装载动作（仅存在于 Effects 列表）；一次性/消耗语义不在本期范围。
 /// </summary>
 /// <typeparam name="TView">施放载荷的视图类型（作者视图）。</typeparam>

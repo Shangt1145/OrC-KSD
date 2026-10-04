@@ -18,7 +18,7 @@ public class SnapshotJsonTests
         var engine = new LogicEngine();
         var card = new Card(engine, "法师");
         card.AddData(new HealthData { Hp = 7 });
-        card.AddData(new ShieldData { Shield = 2 });
+        card.AddData(new SampleData { Value = 2 });
 
         // 「引用/卡牌」两者皆支持：对象形态与引用形态（card.Ref）产出同构
         foreach (var json in new[] { SnapshotJson.Serialize(card), SnapshotJson.Serialize(card.Ref) })
@@ -30,7 +30,7 @@ public class SnapshotJsonTests
             Assert.True(root.GetProperty("alive").GetBoolean());
             var components = root.GetProperty("components");
             Assert.Equal(7, components.GetProperty("HealthData").GetProperty("Hp").GetInt32());
-            Assert.Equal(2, components.GetProperty("ShieldData").GetProperty("Shield").GetInt32());
+            Assert.Equal(2, components.GetProperty("SampleData").GetProperty("Value").GetInt32());
         }
     }
 

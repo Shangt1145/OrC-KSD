@@ -66,10 +66,25 @@ internal static class CommandTestKit
     /// <summary>混合体（坦克＋炮兵——多类型存在性判定：范围任意＋双动各规则独立成立）。</summary>
     public const string MixId = "u_mix";
 
+    /// <summary>混成空军（炮兵＋轰炸机——多类型豁免判定：炮兵绝对豁免优先于轰炸机例外）。</summary>
+    public const string MixAirId = "u_mixair";
+
+    /// <summary>伏击战斗机（战斗机＋伏击——轰炸机例外的反击资格＋伏击改写场景）。</summary>
+    public const string AmbushFighterId = "u_ambfgt";
+
+    /// <summary>伏击轰炸机（轰炸机＋伏击——目标轰炸机永不反击＋改写不成立场景）。</summary>
+    public const string AmbushBomberId = "u_ambbmb";
+
+    /// <summary>轻指令（部署费 1——打出链终局门禁用例）。</summary>
+    public const string CommandCardId = "u_cmd";
+
+    /// <summary>轻反制（部署费 1——反制终局门禁用例）。</summary>
+    public const string CounterCardId = "u_cnt";
+
     /// <summary>奋击坦克（坦克＋奋战——「移动一次＋攻击两次」叠加场景）。</summary>
     public const string FuryTankId = "u_furytank";
 
-    /// <summary>定制定义集（15 枚；数值入测试断言对照）。</summary>
+    /// <summary>定制定义集（22 枚；数值入测试断言对照。后置项补全批新增 5 枚：混成空军 / 伏击战斗机 / 伏击轰炸机 / 轻指令 / 轻反制）。</summary>
     public static IReadOnlyList<CardDefinitionEntry> CreateDefinitions() => new[]
     {
         new CardDefinitionEntry(InfantryId, new CardDefinition("步兵", 1, 1, 2, 5, unitTypes: new[] { UnitType.Infantry })),
@@ -88,6 +103,11 @@ internal static class CommandTestKit
         new CardDefinitionEntry(CostlyId, new CardDefinition("重费兵", 1, 2, 2, 5, unitTypes: new[] { UnitType.Infantry })),
         new CardDefinitionEntry(MegaId, new CardDefinition("巨炮", 1, 1, 30, 30, unitTypes: new[] { UnitType.Artillery })),
         new CardDefinitionEntry(MixId, new CardDefinition("混合体", 1, 1, 3, 4, unitTypes: new[] { UnitType.Tank, UnitType.Artillery })),
+        new CardDefinitionEntry(MixAirId, new CardDefinition("混成空军", 1, 1, 2, 5, unitTypes: new[] { UnitType.Artillery, UnitType.Bomber })),
+        new CardDefinitionEntry(AmbushFighterId, new CardDefinition("伏击战斗机", 1, 1, 5, 2, unitTypes: new[] { UnitType.Fighter }, keywords: new[] { KeywordIds.Ambush })),
+        new CardDefinitionEntry(AmbushBomberId, new CardDefinition("伏击轰炸机", 1, 1, 4, 2, unitTypes: new[] { UnitType.Bomber }, keywords: new[] { KeywordIds.Ambush })),
+        new CardDefinitionEntry(CommandCardId, new CardDefinition("轻指令", 1, 0, 0, 0, CardCategory.Command)),
+        new CardDefinitionEntry(CounterCardId, new CardDefinition("轻反制", 1, 0, 0, 0, CardCategory.Counter)),
         new CardDefinitionEntry(FuryTankId, new CardDefinition("奋击坦克", 1, 1, 2, 5, unitTypes: new[] { UnitType.Tank }, keywords: new[] { KeywordIds.Fury })),
     };
 

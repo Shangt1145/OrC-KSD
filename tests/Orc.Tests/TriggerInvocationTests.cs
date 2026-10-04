@@ -18,7 +18,7 @@ public class TriggerInvocationTests
             : base(name, TriggerKind.Active, typeof(DamageBands))
         {
             _trace = trace;
-            Register("护盾检查", OnShieldCheck, DamageBands.Prevent);
+            Register("数值修正", OnModifier, DamageBands.Prevent);
             Register("伤害生效", OnDamageApplied, DamageBands.Finalize);
         }
 
@@ -28,23 +28,23 @@ public class TriggerInvocationTests
             Ref<Entity> source,
             int amount,
             Ref<Entity> target,
-            int shield = 0,
+            int modifier = 0,
             CancellationToken ct = default)
         {
             var data = new Dictionary<string, object?>();
-            DamageView.Translate(engine, source, amount, target, shield, data);
+            DamageView.Translate(engine, source, amount, target, modifier, data);
             return InvokeAsync(engine, data, ct);
         }
 
-        private Task OnShieldCheck(DamageView view, Context ctx, CancellationToken ct)
+        private Task OnModifier(DamageView view, Context ctx, CancellationToken ct)
         {
             var before = view.Amount;
-            if (view.Shield > 0)
+            if (view.Modifier > 0)
             {
-                view.Amount = Math.Max(0, before - view.Shield);
+                view.Amount = Math.Max(0, before - view.Modifier);
             }
 
-            _trace.Add($"护盾检查:{before}->{view.Amount}");
+            _trace.Add($"数值修正:{before}->{view.Amount}");
             return Task.CompletedTask;
         }
 
@@ -64,12 +64,12 @@ public class TriggerInvocationTests
         var data = new Dictionary<string, object?>();
 
         var amount = 5;
-        DamageView.Translate(engine, source.Ref, amount, target.Ref, shield: 2, data);
+        DamageView.Translate(engine, source.Ref, amount, target.Ref, modifier: 2, data);
 
         Assert.Same(source.Ref, data["Source"]); // 引用类：同一 Ref 实例入（ReferenceEquals，不拷贝包装/目标）
         Assert.Same(target.Ref, data["Target"]);
         Assert.Equal(5, data["Amount"]);         // 值类：快照入（直接透传赋值，无包装 API）
-        Assert.Equal(2, data["Shield"]);
+        Assert.Equal(2, data["Modifier"]);
 
         amount = 999;                            // 调用方后续变化不影响已入值
         Assert.Equal(5, data["Amount"]);
@@ -87,9 +87,9 @@ public class TriggerInvocationTests
         var trace = new List<string>();
         var trigger = new DamageTrigger(trace, name: "火球伤害");
 
-        var stream = await trigger.InvokeAsync(engine, source.Ref, 5, target.Ref, shield: 2);
+        var stream = await trigger.InvokeAsync(engine, source.Ref, 5, target.Ref, modifier: 2);
 
-        Assert.Equal(new[] { "护盾检查:5->3", "伤害生效:3" }, trace); // band 排序执行 + 数据随执行演进
+        Assert.Equal(new[] { "数值修正:5->3", "伤害生效:3" }, trace); // band 排序执行 + 数据随执行演进
         Assert.Same(engine.RootStream, stream.Parent);                 // 经统一入口正常产出与挂载
     }
 

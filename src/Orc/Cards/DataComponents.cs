@@ -11,12 +11,3 @@ public sealed class HealthData
     public int Hp { get; set; }
 }
 
-/// <summary>
-/// 护盾数据组件（S4）：伤害结算「护盾检查结算」的最小数据约定。
-/// 承受方无该组件 ＝ 护盾 0（直接伤害）；有该组件时伤害先由护盾吸收（护盾扣减、余量作用于生命）。
-/// </summary>
-public sealed class ShieldData
-{
-    /// <summary>当前护盾值（吸收伤害、扣减于此）。</summary>
-    public int Shield { get; set; }
-}

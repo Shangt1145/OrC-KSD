@@ -21,9 +21,11 @@ namespace Orc.Game.Managers;
 /// ⑤反制（<see cref="UseCounterAsync"/>）：单入口状态翻转（激活 ↔ 取消；仅己方回合）。
 /// 结果统一经 <see cref="PlayResult"/>（不抛；失败原因类别化；取消＝<see cref="PlayResultStatus.Cancelled"/>）；
 /// 拒绝/失败/取消均不发任何游戏更新、不进入后续步骤。
+/// 终局门禁（后置项 B）：对局已结束＝全部入口拒绝（失败结果、零副作用、状态不推进）。
 /// 无效驱动（未加载卡等装配性错误）＝明确异常（fail-fast）；玩家动作级失败＝结果对象（不抛）。
 /// 依赖：引擎（发射/触发）、目标选择管理器（单位预打出的交互承载）、战场（候选计算）、
-/// 回合管理器（反制「仅己方回合」；可空——独立构造场景下反制不可用、使用将抛明确异常）。
+/// 回合管理器（反制「仅己方回合」；可空——独立构造场景下反制不可用、使用将抛明确异常）、
+/// 对局生命周期（终局门禁；可空＝独立构造场景无门禁）。
 /// </summary>
 public sealed class PlayManager
 {
@@ -31,18 +33,21 @@ public sealed class PlayManager
     private readonly TargeterManager _targeterManager;
     private readonly Battlefield _battlefield;
     private readonly TurnManager? _turnManager;
+    private readonly MatchLifecycle? _lifecycle;
 
     /// <summary>创建打出管理器。</summary>
     /// <param name="engine">对局引擎（发射更新 / 触发子触发器）。</param>
     /// <param name="targeterManager">目标选择管理器（单位预打出交互）。</param>
     /// <param name="battlefield">战场（部署候选＝己方支援线空槽位的计算源）。</param>
     /// <param name="turnManager">回合管理器（反制「仅己方回合」的当前行动方真源；可空——缺省＝独立构造场景，反制使用抛明确异常）。</param>
+    /// <param name="lifecycle">对局生命周期（终局门禁——后置项 B；缺省＝null＝独立构造场景无门禁）。</param>
     /// <exception cref="ArgumentNullException">engine / targeterManager / battlefield 为 null。</exception>
     public PlayManager(
         LogicEngine engine,
         TargeterManager targeterManager,
         Battlefield battlefield,
-        TurnManager? turnManager = null)
+        TurnManager? turnManager = null,
+        MatchLifecycle? lifecycle = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(targeterManager);
@@ -52,6 +57,7 @@ public sealed class PlayManager
         _targeterManager = targeterManager;
         _battlefield = battlefield;
         _turnManager = turnManager;
+        _lifecycle = lifecycle;
     }
 
     // ---------- ① 单位预打出（开始→交互→确认/取消；一次调用链） ----------
@@ -68,6 +74,12 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+
+        // 终局门禁（后置项 B）：对局已结束＝入口拒绝（不触发预打出、不发起 targeter 请求、零副作用）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return PlayResult.Failure(PlayFailureReason.GameEnded);
+        }
 
         // ① 开始：触发预打出触发器（验证＝指挥点检查；不足＝拒绝、不发起 targeter 请求、不发任何更新）。
         var preStream = await card.PrePlayTrigger.InvokeAsync(
@@ -137,6 +149,12 @@ public sealed class PlayManager
         ArgumentNullException.ThrowIfNull(target);
         var owner = RequireOwner(card);
 
+        // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return PlayResult.Failure(PlayFailureReason.GameEnded);
+        }
+
         if (!target.IsEmpty)
         {
             return PlayResult.Failure(PlayFailureReason.TargetSlotOccupied);
@@ -177,6 +195,12 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(target);
+
+        // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return PlayResult.Failure(PlayFailureReason.GameEnded);
+        }
 
         if (!target.IsEmpty)
         {
@@ -221,6 +245,12 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+
+        // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return PlayResult.Failure(PlayFailureReason.GameEnded);
+        }
 
         // ① 预打出段：验证＋handler 捕获集（默认无 handler＝无交互、零更新）。
         var captureBox = new CardCaptureBox();
@@ -282,6 +312,12 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+
+        // 终局门禁（后置项 B）：对局已结束＝入口拒绝（激活/取消均拒绝；零副作用、状态不推进）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return PlayResult.Failure(PlayFailureReason.GameEnded);
+        }
 
         if (_turnManager is null)
         {

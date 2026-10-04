@@ -32,10 +32,10 @@ public class CardContainerTests
         var engine = new LogicEngine();
         var card = new Card(engine, "战士");
         card.AddData(new HealthData { Hp = 10 });
-        card.AddData(new ShieldData { Shield = 3 });
+        card.AddData(new SampleData { Value = 3 });
 
         Assert.Equal(10, card.GetData<HealthData>().Hp);
-        Assert.Equal(3, card.GetData<ShieldData>().Shield);
+        Assert.Equal(3, card.GetData<SampleData>().Value);
     }
 
     [Fact]

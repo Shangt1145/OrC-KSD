@@ -94,7 +94,7 @@ public class KeywordSystemTests
         var playerA = match.Players[0];
         var playerB = match.Players[1];
         var fury = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.FuryId, 1); // 攻 2 / 防 6
-        var enemy = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.BeastId, 0); // 防 7
+        var enemy = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.GuardianId, 0); // 攻 0 / 防 6（零反击肉盾——专测记账）
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         await match.EndTurn(); // → B 回合
         await match.EndTurn(); // → A 回合 3（2 点；两 bool 恢复）
@@ -104,11 +104,14 @@ public class KeywordSystemTests
         Assert.Equal(CommandResultStatus.Success, first.Status);
         Assert.True(fury.GetData<CommandData>().CanAttack);
         Assert.False(fury.GetData<CommandData>().CanMove);
+        Assert.Equal(4, enemy.GetData<UnitStateData>().Defense); // 6-2=4
 
-        // 二攻：记账 +2 → CanAttack 置 false（二次后不可）。
+        // 二攻：记账 +2 → CanAttack 置 false（二次后不可）；双方均存活（肉盾无反伤）。
         var second = await CommandTestKit.RunCommandAsync(match, bridge, fury, enemy.Ref);
         Assert.Equal(CommandResultStatus.Success, second.Status);
         Assert.False(fury.GetData<CommandData>().CanAttack);
+        Assert.Equal(2, enemy.GetData<UnitStateData>().Defense); // 4-2=2（仍存活）
+        Assert.Equal(6, fury.GetData<UnitStateData>().Defense);  // 无反伤
     }
 
     [Fact]
@@ -155,7 +158,7 @@ public class KeywordSystemTests
         var playerA = match.Players[0];
         var playerB = match.Players[1];
         var fury = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.FuryId, 1);
-        var enemy = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.BeastId, 0); // 防 7
+        var enemy = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.GuardianId, 0); // 攻 0 / 防 6（零反击肉盾）
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         await match.EndTurn();
         await match.EndTurn(); // → A 回合 3（2 点）
@@ -172,7 +175,7 @@ public class KeywordSystemTests
         Assert.True(fury.GetData<CommandData>().CanAttack); // 跨回合恢复后可再次行动
         Assert.True(fury.GetData<CommandData>().CanMove);
 
-        // 记账清零验证：再攻一次后（本轮第二次＝count 1）仍保持可攻（若未清零将达 count 3 → 不可攻）。
+        // 记账清零验证：再攻一次后（本轮第一次＝count 1）仍保持可攻（若未清零将达 count 3 → 不可攻）。
         var again = await CommandTestKit.RunCommandAsync(match, bridge, fury, enemy.Ref);
         Assert.Equal(CommandResultStatus.Success, again.Status);
         Assert.True(fury.GetData<CommandData>().CanAttack);

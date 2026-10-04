@@ -55,12 +55,12 @@ public class EventStreamTests
         var parentStream = await parent.InvokeAsync(engine, new Dictionary<string, object?>());
         Assert.NotNull(childStream);
 
-        var e1 = childStream!.WriteLog("测试源", "第一条", keywords: new[] { "shield:2", "trace" });
+        var e1 = childStream!.WriteLog("测试源", "第一条", keywords: new[] { "sample:2", "trace" });
         var e2 = childStream.WriteLog("测试源", "第二条");
         var e3 = childStream.WriteUpdate("测试源", "更新载荷", data: new Dictionary<string, object?> { ["Amount"] = 3 });
 
         Assert.Equal(LogEntryKind.Log, e1.Kind);
-        Assert.Equal(new[] { "shield:2", "trace" }, e1.Keywords); // 条目含关键词（扁平列表，可含 key:value）
+        Assert.Equal(new[] { "sample:2", "trace" }, e1.Keywords); // 条目含关键词（扁平列表，可含 key:value）
         Assert.Equal(LogEntryKind.Update, e3.Kind);               // update 写入 API 就绪
         Assert.Equal(3, (int)e3.Data["Amount"]!);
 

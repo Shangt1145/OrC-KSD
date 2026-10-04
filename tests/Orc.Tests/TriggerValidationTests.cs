@@ -94,12 +94,12 @@ public class TriggerValidationTests
     {
         var engine = new LogicEngine();
         var executed = false;
-        var trigger = new RecordingTrigger<ShieldView>(
+        var trigger = new RecordingTrigger<SampleView>(
             name: "拒绝者",
-            events: new[] { new TriggerEvent<ShieldView>("不应执行", (v, c, ct) => { executed = true; return Task.CompletedTask; }) },
+            events: new[] { new TriggerEvent<SampleView>("不应执行", (v, c, ct) => { executed = true; return Task.CompletedTask; }) },
             behavior: _ => false);
 
-        // 空数据（ShieldView 必填缺失）：若执行绑定会以 KeyNotFound 契约兜底；验证拒绝发生在绑定之前 → 不应有绑定错误记录。
+        // 空数据（SampleView 必填缺失）：若执行绑定会以 KeyNotFound 契约兜底；验证拒绝发生在绑定之前 → 不应有绑定错误记录。
         var stream = await trigger.InvokeAsync(engine, new Dictionary<string, object?>());
 
         Assert.False(executed);                        // 不跑任何事件
@@ -208,7 +208,7 @@ public class TriggerValidationTests
             .InvokeAsync(engine, new Dictionary<string, object?>());
         Assert.Equal(ExecutionOutcome.ValidationRejected, rejectedStream.Outcome); // ②验证拒绝
 
-        var brokenStream = await new Trigger<ShieldView>(name: "绑定失败")
+        var brokenStream = await new Trigger<SampleView>(name: "绑定失败")
             .InvokeAsync(engine, new Dictionary<string, object?>());
         Assert.Equal(ExecutionOutcome.ContractFailure, brokenStream.Outcome); // ③契约兜底失败
 
@@ -229,7 +229,7 @@ public class TriggerValidationTests
     {
         var engine = new LogicEngine();
         var rejectedChild = new RecordingTrigger<CounterView>(name: "子拒绝", behavior: _ => false);
-        var failingChild = new Trigger<ShieldView>(name: "子失败");
+        var failingChild = new Trigger<SampleView>(name: "子失败");
 
         EventStream? rejectedStream = null;
         EventStream? failingStream = null;

@@ -1,5 +1,8 @@
 #pragma warning disable CS8618 // 视图属性值由框架在绑定时提供；声明期不做初始化（视图类不应写属性初始化器）。
 
+// 基础流程基座（BaseFlows）：攻击流程（AttackFlow）与伤害结算流程（DamageFlow）的 band 方案与视图（类名不变）。
+// 后续流程可在本基座上拓展（复用具名 band 扩展位机制）。
+
 using Orc.Core;
 
 namespace Orc.Cards;
@@ -22,14 +25,14 @@ public enum AttackFlowBands
 
 /// <summary>
 /// 伤害结算流程 band 方案（S4 具名 band 扩展位；命名自定）：
-/// Shield＝护盾检查结算（默认处理器）／Apply＝伤害生效（默认处理器）。
+/// PreApply＝结算前（默认处理器：中性记录待结算伤害）／Apply＝伤害生效（默认处理器）。
 /// </summary>
 public enum DamageFlowBands
 {
-    /// <summary>护盾检查结算（默认：读取承受方护盾数据组件并结算吸收，写回剩余伤害）。</summary>
-    Shield = 1,
+    /// <summary>结算前（默认：中性记录待结算伤害、不改动数值；效果/调用方可在本扩展位注入）。</summary>
+    PreApply = 1,
 
-    /// <summary>伤害生效（默认：按结算后的剩余伤害扣减承受方生命）。</summary>
+    /// <summary>伤害生效（默认：按伤害量扣减承受方生命）。</summary>
     Apply = 2,
 }
 
@@ -47,7 +50,7 @@ public class AttackFlowView
     public virtual int Amount { get; set; }
 }
 
-/// <summary>伤害结算流程视图（S4）：伤害的承受方视角载荷（Source＝来源、Target＝承受方、Amount＝伤害量；护盾结算写回剩余伤害）。</summary>
+/// <summary>伤害结算流程视图（S4）：伤害的承受方视角载荷（Source＝来源、Target＝承受方、Amount＝伤害量；扩展位可改写伤害量）。</summary>
 [ContextView]
 public class DamageFlowView
 {
@@ -112,9 +115,9 @@ public sealed class AttackFlow
 }
 
 /// <summary>
-/// 伤害结算流程（S4；承受方）：编排「护盾检查结算（Shield）→ 伤害生效（Apply）」。
+/// 伤害结算流程（S4；承受方）：编排「结算前（PreApply）→ 伤害生效（Apply）」。
 /// 引擎级共享实例（经 <see cref="LogicEngine.DamageFlow"/> 获取）；可被独立触发（不经攻击流程亦可执行）。
-/// 默认处理器：护盾读取承受方 <see cref="ShieldData"/>（无＝0）并结算吸收、写回剩余伤害；伤害按剩余量扣减 <see cref="HealthData"/>。
+/// 默认处理器：结算前中性记录待结算伤害（不改动数值）；伤害按量扣减 <see cref="HealthData"/>。
 /// </summary>
 public sealed class DamageFlow
 {
@@ -130,7 +133,7 @@ public sealed class DamageFlow
             bandType: typeof(DamageFlowBands),
             events: new[]
             {
-                new TriggerEvent<DamageFlowView>("护盾检查结算", OnShieldCheck, DamageFlowBands.Shield),
+                new TriggerEvent<DamageFlowView>("结算前", OnPreApply, DamageFlowBands.PreApply),
                 new TriggerEvent<DamageFlowView>("伤害生效", OnApply, DamageFlowBands.Apply),
             });
     }
@@ -139,7 +142,7 @@ public sealed class DamageFlow
     public Trigger<DamageFlowView> Trigger => _trigger;
 
     /// <summary>
-    /// 执行伤害结算（承受方）：护盾检查结算 → 伤害生效。
+    /// 执行伤害结算（承受方）：结算前 → 伤害生效。
     /// 顶层调用时挂总流；嵌套调用（如攻击流程内）时挂当前执行者流（攻击执行时伤害结算为其子流）。
     /// </summary>
     /// <exception cref="ArgumentNullException">source 或 target 为 null。</exception>
@@ -157,31 +160,20 @@ public sealed class DamageFlow
         return _trigger.InvokeAsync(_engine, data, ct);
     }
 
-    /// <summary>护盾检查结算（默认）：读取承受方护盾（无数据＝0），结算吸收并写回剩余伤害。</summary>
-    private Task OnShieldCheck(DamageFlowView view, Context ctx, CancellationToken ct)
+    /// <summary>结算前（默认）：中性记录待结算伤害，不改动数值（阶段次序留痕；效果可在此扩展位注入）。</summary>
+    private Task OnPreApply(DamageFlowView view, Context ctx, CancellationToken ct)
     {
-        var target = view.Target;
         var amount = Math.Max(0, view.Amount);
-        var shield = target.TryGetData<ShieldData>(out var shieldData) ? Math.Max(0, shieldData.Shield) : 0;
-        var absorbed = Math.Min(shield, amount);
-        if (shieldData is not null)
-        {
-            shieldData.Shield -= absorbed;
-        }
-
-        var remaining = amount - absorbed;
-        view.Amount = remaining; // 写回 ctx（Bind 直连）：Apply 读到结算后剩余伤害
-
         CardsLog.Write(
             _engine,
             "damage-flow",
-            $"护盾检查结算：护盾 {shield}，吸收 {absorbed}，剩余伤害 {remaining}。",
+            $"结算前：待结算伤害 {amount}。",
             LogLevel.Info,
-            new[] { "damage", "shield", target.Name });
+            new[] { "damage", "preapply", view.Target.Name });
         return Task.CompletedTask;
     }
 
-    /// <summary>伤害生效（默认）：按结算后剩余伤害扣减承受方生命。</summary>
+    /// <summary>伤害生效（默认）：按伤害量扣减承受方生命。</summary>
     private Task OnApply(DamageFlowView view, Context ctx, CancellationToken ct)
     {
         var target = view.Target;

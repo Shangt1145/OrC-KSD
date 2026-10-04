@@ -364,22 +364,22 @@ public class EffectLifecycleTests
     {
         var engine = new LogicEngine();
         var caster = new Card(engine, "法师");
-        var spell = new DamageSpell(engine.DamageFlow);
-        caster.AddEffect(spell);
+        var order = new DamageOrder(engine.DamageFlow);
+        caster.AddEffect(order);
 
         await S4TestHelpers.Place(engine, caster); // 放置处理：主动效果不做装载动作
 
-        Assert.False(spell.IsMounted);      // 主动效果无装载动作
-        Assert.Equal(0, spell.MountCount);  // 不执行钩子
+        Assert.False(order.IsMounted);      // 主动效果无装载动作
+        Assert.Equal(0, order.MountCount);  // 不执行钩子
         Assert.DoesNotContain("火球术", engine.Bus.GetSubscribers(Updates.EffectRemoved));
 
-        caster.RemoveEffect(spell);
-        Assert.Equal(0, spell.UnmountCount); // 移除时也不执行钩子（仅列表移除）
+        caster.RemoveEffect(order);
+        Assert.Equal(0, order.UnmountCount); // 移除时也不执行钩子（仅列表移除）
         Assert.Empty(caster.Effects);
 
-        caster.AddEffect(spell);             // 已放置后 Add（主动：仍无装载动作）
-        Assert.False(spell.IsMounted);
-        Assert.Equal(0, spell.MountCount);
+        caster.AddEffect(order);             // 已放置后 Add（主动：仍无装载动作）
+        Assert.False(order.IsMounted);
+        Assert.Equal(0, order.MountCount);
     }
 
     [Fact]

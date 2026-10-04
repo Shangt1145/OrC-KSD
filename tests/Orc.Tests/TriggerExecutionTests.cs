@@ -6,7 +6,7 @@ namespace Orc.Tests;
 /// <summary>
 /// 验收点②：嵌套触发与共享 ctx——同一执行会话内视图与全部事件共用同一 ctx 载体（Bind 直连、不拷贝）；
 /// 父子执行载体独立、数据流严格显式（不继承）；子流自动挂载到触发者流。
-/// 验收点③：伤害示例——同一主动触发器内两事件（护盾检查→伤害生效）按 band 排序执行、ctx 数据随执行演进。
+/// 验收点③：伤害示例——同一主动触发器内两事件（数值修正→伤害生效）按 band 排序执行、ctx 数据随执行演进。
 /// </summary>
 public class TriggerExecutionTests
 {
@@ -71,7 +71,7 @@ public class TriggerExecutionTests
     }
 
     [Fact]
-    public async Task Damage_Example_Shield_Check_Then_Apply_By_Band_Order_With_Evolving_Data()
+    public async Task Damage_Example_Modifier_Then_Apply_By_Band_Order_With_Evolving_Data()
     {
         var engine = new LogicEngine();
         var source = new Entity("法师");
@@ -85,16 +85,16 @@ public class TriggerExecutionTests
             bandType: typeof(DamageBands),
             events: new[]
             {
-                new TriggerEvent<DamageView>("护盾检查", (view, ctx, ct) =>
+                new TriggerEvent<DamageView>("数值修正", (view, ctx, ct) =>
                 {
                     captured = ctx;
                     var before = view.Amount;
-                    if (view.Shield > 0)
+                    if (view.Modifier > 0)
                     {
-                        view.Amount = Math.Max(0, before - view.Shield); // [Mutate] 改写：ctx 数据随执行演进
+                        view.Amount = Math.Max(0, before - view.Modifier); // [Mutate] 改写：ctx 数据随执行演进
                     }
 
-                    trace.Add($"护盾检查:{before}->{view.Amount}");
+                    trace.Add($"数值修正:{before}->{view.Amount}");
                     return Task.CompletedTask;
                 }, DamageBands.Prevent),
                 new TriggerEvent<DamageView>("伤害生效", (view, ctx, ct) =>
@@ -109,10 +109,10 @@ public class TriggerExecutionTests
             ["Source"] = source.Ref,
             ["Target"] = target.Ref,
             ["Amount"] = 5,
-            ["Shield"] = 2,
+            ["Modifier"] = 2,
         });
 
-        Assert.Equal(new[] { "护盾检查:5->3", "伤害生效:3" }, trace); // 按 band 排序执行 + 数据演进
+        Assert.Equal(new[] { "数值修正:5->3", "伤害生效:3" }, trace); // 按 band 排序执行 + 数据演进
         Assert.Equal(3, (int)captured!.Get("Amount")!);              // 最终数据经载体可见
         Assert.NotNull(stream);
     }

@@ -6,7 +6,7 @@ namespace Orc.Tests;
 
 /// <summary>贴设计文档形态的样例视图（S1 作者契约偏离：不声明 IContextView；属性为 virtual 供框架产物覆写）。</summary>
 [ContextView]
-public class ShieldView
+public class SampleView
 {
     [Read]
     public virtual Ref<Entity> Target { get; set; }
@@ -125,7 +125,7 @@ public class DamageView
 
     [Optional]
     [Read]
-    public virtual int Shield { get; set; }
+    public virtual int Modifier { get; set; }
 
     /// <summary>
     /// 手写转接（书写约定：作者视图类上的静态方法；框架不建立强制契约、不隐式调用；转接不依赖视图实例状态）。
@@ -137,7 +137,7 @@ public class DamageView
         Ref<Entity> source,
         int amount,
         Ref<Entity> target,
-        int shield,
+        int modifier,
         Dictionary<string, object?> data)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -148,7 +148,7 @@ public class DamageView
         data["Source"] = source;
         data["Amount"] = amount;
         data["Target"] = target;
-        data["Shield"] = shield;
+        data["Modifier"] = modifier;
     }
 }
 

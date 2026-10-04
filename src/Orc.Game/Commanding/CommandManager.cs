@@ -7,16 +7,21 @@ using Orc.Game.Targeting;
 namespace Orc.Game.Commanding;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2C 指挥管理器（指挥系统承载）：
+// 2C 指挥管理器（指挥系统承载；后置项 A/B/C 加性：反击豁免 / 胜负判定 / 前线阻挡）：
 // ①内置流程触发器（引擎侧创建——指挥触发器 / 单位移动触发器 / 单位攻击触发器 / 造成攻击伤害触发器；
 //   由对局装配期注册为底层触发器〔进注册表、可查询〕）；
 // ②指挥入口（BeginCommandAsync）：一次拖拽＝一次调用链、单一公开入口方法驱动；输入＝被拖动单位引用；
-//   发起判定（非己方回合 / 归属无效 / 已死亡 / 两动作均不可用）→ 指挥触发器（流程编排：读判定 → 交互 →
+//   发起判定（非己方回合 / 归属无效 / 已死亡 / 两动作均不可用 / 对局已结束）→ 指挥触发器（流程编排：读判定 → 交互 →
 //   分派〔空槽→移动；敌方单位/HQ→攻击〕→ 嵌套执行 → 外层收尾〔扣费＋两 bool 更新〕）；
 // ③动作可用性聚合判定公开面（GetCommandAvailability）：bool＋原因＋候选；与流程内部同源、纯查询；
-// ④移动执行（仅推进：支援线→前线；发射 unit.position.changed——恰一次）；
-// ⑤攻击执行（单位 vs 单位必经「造成攻击伤害」触发器中转；HQ 简路＝直接扣血）；攻击结算＝同时互伤 →
-//   HP≤0 死亡（统一死亡流程：清位＋置毁＋效果注销＋Position 置空＋card.died 恰一次）；反击豁免体系零特例（后置）；
+//   攻击目标筛选含轰炸机拦截（后置项 C：目标所在战线存在敌方战斗机时该战线非战斗机目标置黑——含 HQ）；
+// ④移动执行（仅推进：支援线→前线；前置＝前线不存在存活敌方单位〔后置项 C；候选＋执行复验双保险〕；
+//   候选＝前线空槽；无后撤/横移候选；发射 unit.position.changed——恰一次）；
+// ⑤攻击执行（单位 vs 单位必经「造成攻击伤害」触发器中转；HQ 简路＝直接扣血）；攻击结算＝按反击豁免判定表
+//   （后置项 A：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常；
+//   多类型逐条适用、豁免优先；同时互伤框架——豁免方不结算反击伤害）→ HP≤0 死亡（统一死亡流程：清位＋置毁＋
+//   效果注销＋Position 置空＋card.died 恰一次）；HQ≤0 → 立即终局（后置项 B：状态置结束＋胜者记录；其后动作入口
+//   拒绝，当次结算收尾照常完成）；
 // ⑥守护维护（被守护状态：相邻〔同线槽位索引差 1〕守护者 → 获被守护；仅能被炮/轰攻击；守护者自身不可被守护；
 //   由位置/入场/死亡更新驱动重算——底层链负责）；⑦回合恢复（turn.start 处理段：行动方在场单位重置两 bool）。
 // 「两 bool 只在外层更新」：内层（移动/攻击/伤害/词条）一律不写——法定写入点＝指挥收尾 / 部署链收尾（闪击）/ 回合恢复。
@@ -26,7 +31,8 @@ namespace Orc.Game.Commanding;
 /// 指挥管理器（2C；对局级服务）：指挥流程入口与编排、KARDS 规则矩阵、
 /// 攻击结算与统一死亡流程、守护维护、回合恢复。
 /// 依赖：引擎（发射/触发）、战场（候选计算与布局）、目标选择管理器（交互承载）、
-/// 玩家对（敌我判定）、当前行动方提供器（延迟读取——装配顺序：回合管理器后置）。
+/// 玩家对（敌我判定）、当前行动方提供器（延迟读取——装配顺序：回合管理器后置）、
+/// 对局生命周期（终局门禁与胜者记录——后置项 B；可空＝独立构造场景无门禁）。
 /// </summary>
 public sealed class CommandManager
 {
@@ -38,6 +44,7 @@ public sealed class CommandManager
     private readonly TargeterManager _targeterManager;
     private readonly IReadOnlyList<Player> _players;
     private readonly Func<Player?> _currentPlayerProvider;
+    private readonly MatchLifecycle? _lifecycle;
 
     private readonly HashSet<UnitCard> _guardedUnits = new();
     private readonly HashSet<Player> _guardedHqs = new();
@@ -50,6 +57,7 @@ public sealed class CommandManager
     /// <param name="targeterManager">目标选择管理器（指挥交互承载——一次拖拽＝一次请求）。</param>
     /// <param name="players">双玩家（敌我判定；行动方＋其对手）。</param>
     /// <param name="currentPlayerProvider">当前行动方提供器（延迟读取；缺省＝null＝回合未就绪——发起校验将拒绝）。</param>
+    /// <param name="lifecycle">对局生命周期（终局门禁＋胜者记录——后置项 B；缺省＝null＝独立构造场景无门禁）。</param>
     /// <exception cref="ArgumentNullException">engine / battlefield / targeterManager / players 为 null。</exception>
     /// <exception cref="ArgumentException">players 不是两名玩家。</exception>
     public CommandManager(
@@ -57,7 +65,8 @@ public sealed class CommandManager
         Battlefield battlefield,
         TargeterManager targeterManager,
         IReadOnlyList<Player> players,
-        Func<Player?>? currentPlayerProvider = null)
+        Func<Player?>? currentPlayerProvider = null,
+        MatchLifecycle? lifecycle = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -73,6 +82,7 @@ public sealed class CommandManager
         _targeterManager = targeterManager;
         _players = players;
         _currentPlayerProvider = currentPlayerProvider ?? (() => null);
+        _lifecycle = lifecycle;
 
         // ① 指挥触发器（内置；默认链＝指挥流程编排）
         CommandTrigger = new Trigger<CommandTriggerView>("指挥触发器");
@@ -141,6 +151,12 @@ public sealed class CommandManager
     {
         ArgumentNullException.ThrowIfNull(unit);
         RequireUnitized(unit);
+
+        // 终局门禁（后置项 B）：对局已结束＝动作入口拒绝（零副作用、状态不推进；只读查询面不经此入口）
+        if (_lifecycle?.IsEnded == true)
+        {
+            return CommandResult.Failure(CommandFailureReason.GameEnded);
+        }
 
         // 发起判定（纯查询、与流程内部同源）
         var availability = GetCommandAvailability(unit);
@@ -244,7 +260,13 @@ public sealed class CommandManager
             return CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates);
         }
 
-        // 移动候选＝前线任意空槽（不被邻位动态规则约束）
+        // 推进前置（后置项 C）：前线不存在存活敌方单位方可推进（空前线或己方已占；敌方清空后实时恢复）
+        if (HasLivingEnemyOnFrontLine(owner))
+        {
+            return CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates);
+        }
+
+        // 移动候选＝前线任意空槽（不被邻位动态规则约束；无后撤/横移候选）
         var candidates = new List<Ref<Entity>>();
         foreach (var slot in _battlefield.FrontLine)
         {
@@ -358,7 +380,14 @@ public sealed class CommandManager
             return false; // 被守护：仅能被炮/轰攻击
         }
 
-        return IsLineInRange(attacker, targetState.Position);
+        // 轰炸机拦截（后置项 C）：目标所在战线存在存活敌方战斗机时，该战线的非战斗机目标置黑
+        var targetPosition = targetState.Position!;
+        if (IsBlockedByEnemyFighter(attacker, targetPosition, HasUnitType(target, UnitType.Fighter)))
+        {
+            return false;
+        }
+
+        return IsLineInRange(attacker, targetPosition);
     }
 
     /// <summary>HQ 为目标的合法性（仍为敌方 HQ ∧ 被守护仅炮/轰可攻 ∧ 范围矩阵；HQ 无死亡/烟幕语义）。</summary>
@@ -373,6 +402,12 @@ public sealed class CommandManager
         if (_guardedHqs.Contains(enemy) && !CountsAsBombard(attacker))
         {
             return false; // HQ 被守护（相邻守护者）：仅能被炮/轰攻击
+        }
+
+        // 轰炸机拦截（后置项 C）：HQ 位于敌方支援线——该战线存在存活敌方战斗机时不可选（须先攻击战斗机）
+        if (IsBlockedByEnemyFighter(attacker, hqSlot, targetIsFighter: false))
+        {
+            return false;
         }
 
         return IsLineInRange(attacker, hqSlot);
@@ -758,9 +793,14 @@ public sealed class CommandManager
         var targetEntity = targetRef.Value;
         if (targetEntity is Slot hqSlot && hqSlot.Occupant is Player hq && !ReferenceEquals(hq, attacker.Owner))
         {
-            // HQ 简路：直接扣血（伤害＝攻击者实时攻击力；HQ 不反击、胜负担后置；钳制到 0；不走「造成攻击伤害」）
+            // HQ 简路：直接扣血（伤害＝攻击者实时攻击力；HQ 不反击；钳制到 0；不走「造成攻击伤害」）
+            // HQ 生命≤0 → 立即终局（后置项 B：当刻置状态结束＋记录胜者；当次结算收尾照常完成——内部步骤不经门禁）
             var damage = attacker.GetData<UnitStateData>().Attack;
             hq.HqHealth = Math.Max(0, hq.HqHealth - damage);
+            if (hq.HqHealth <= 0 && attacker.Owner is { } winner)
+            {
+                _lifecycle?.End(winner);
+            }
         }
         else if (targetEntity is UnitCard)
         {
@@ -804,14 +844,19 @@ public sealed class CommandManager
             return;
         }
 
-        // 默认基础互伤：同时结算——双方伤害以互扣前实时值为基准、同时生效（可同归于尽）
+        // 默认基础互伤：按反击豁免判定表（后置项 A）——同时结算、以互扣前实时值为基准；豁免方不结算反击伤害
+        // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常）
         var attackerState = attacker.GetData<UnitStateData>();
         var targetState = target.GetData<UnitStateData>();
         var damageToTarget = attackerState.Attack;
         var damageToAttacker = targetState.Attack;
+        var counterAttacks = CounterAttackRules.CanCounterAttack(attacker, target);
 
         targetState.Defense -= damageToTarget;
-        attackerState.Defense -= damageToAttacker;
+        if (counterAttacks)
+        {
+            attackerState.Defense -= damageToAttacker;
+        }
 
         // 死亡判定（互扣后实时值 ≤ 0）；同归于尽＝两枚 card.died 均发射，顺序：被攻击者在前、攻击者在后
         if (targetState.Defense <= 0)
@@ -819,7 +864,7 @@ public sealed class CommandManager
             await ProcessDeathAsync(target, ct);
         }
 
-        if (attackerState.Defense <= 0)
+        if (counterAttacks && attackerState.Defense <= 0)
         {
             await ProcessDeathAsync(attacker, ct);
         }
@@ -854,6 +899,11 @@ public sealed class CommandManager
         if (refs.Count != 3)
         {
             return false;
+        }
+
+        if (_lifecycle?.IsEnded == true)
+        {
+            return false; // 终局后移动流程拒绝（含触发器级对外入口；零副作用、状态不推进）
         }
 
         if (!refs[0].IsAlive || refs[0].Value is not UnitCard unit)
@@ -906,6 +956,11 @@ public sealed class CommandManager
             return false; // 目标须为前线空槽
         }
 
+        if (HasLivingEnemyOnFrontLine(owner))
+        {
+            return false; // 推进前置复验（后置项 C；防御性双保险）：前线存在存活敌方单位＝拒绝
+        }
+
         return true;
     }
 
@@ -914,6 +969,11 @@ public sealed class CommandManager
         if (refs.Count != 2)
         {
             return false;
+        }
+
+        if (_lifecycle?.IsEnded == true)
+        {
+            return false; // 终局后攻击流程拒绝（含触发器级对外入口；零副作用、状态不推进）
         }
 
         if (!refs[0].IsAlive || refs[0].Value is not UnitCard attacker)
@@ -999,6 +1059,83 @@ public sealed class CommandManager
     /// <summary>炮/轰组（炮兵/轰炸机任一——被守护攻击资格：不含战斗机）。</summary>
     private static bool CountsAsBombard(UnitCard unit)
         => HasUnitType(unit, UnitType.Artillery) || HasUnitType(unit, UnitType.Bomber);
+
+    /// <summary>
+    /// 推进前置判定（后置项 C）：前线是否存在存活敌方单位（空前线或己方已占＝false；敌方清空后实时恢复）。
+    /// </summary>
+    private bool HasLivingEnemyOnFrontLine(Player owner)
+    {
+        var enemy = EnemyOf(owner);
+        if (enemy is null)
+        {
+            return false;
+        }
+
+        foreach (var slot in _battlefield.FrontLine)
+        {
+            if (slot.Occupant is UnitCard unit && !IsDead(unit) && ReferenceEquals(unit.Owner, enemy))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 轰炸机拦截判定（后置项 C）：攻击者含轰炸机 ∧ 目标非战斗机 ∧ 目标所在战线存在存活敌方战斗机 → 拦截（置黑）。
+    /// 跨战线其他目标不受影响；以存活为限；多条战斗机共存＝无额外优先级（存在性判定）。
+    /// </summary>
+    private bool IsBlockedByEnemyFighter(UnitCard attacker, Slot targetSlot, bool targetIsFighter)
+    {
+        if (!HasUnitType(attacker, UnitType.Bomber) || targetIsFighter)
+        {
+            return false;
+        }
+
+        var enemy = attacker.Owner is { } owner ? EnemyOf(owner) : null;
+        if (enemy is null)
+        {
+            return false;
+        }
+
+        if (ResolveLineOf(targetSlot) is not { } line)
+        {
+            return false; // 异常布局（防御）
+        }
+
+        foreach (var slot in line)
+        {
+            if (slot.Occupant is UnitCard unit && !IsDead(unit)
+                && ReferenceEquals(unit.Owner, enemy) && HasUnitType(unit, UnitType.Fighter))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>槽位所属战线（三线判定；异常布局＝null——防御）。</summary>
+    private BattleLine? ResolveLineOf(Slot slot)
+    {
+        if (_battlefield.FrontLine.Contains(slot))
+        {
+            return _battlefield.FrontLine;
+        }
+
+        if (_battlefield.PlayerASupportLine.Contains(slot))
+        {
+            return _battlefield.PlayerASupportLine;
+        }
+
+        if (_battlefield.PlayerBSupportLine.Contains(slot))
+        {
+            return _battlefield.PlayerBSupportLine;
+        }
+
+        return null;
+    }
 
     private static bool IsDead(UnitCard unit)
         => !unit.TryGetData<UnitStateData>(out var state) || state.IsDestroyed;

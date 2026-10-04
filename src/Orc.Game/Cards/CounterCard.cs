@@ -22,7 +22,8 @@ internal enum CounterUseRejection
 /// 已激活＝取消流程（退点〔无条件、同额〕→ 取消激活 ＋ 取消注册）；仅己方回合（该卡所属玩家是当前行动方）。
 /// 效果 handler 集经 <see cref="AddEffectHandler"/> 装配注册；激活时注册进「使用反制的触发器」、取消时注销
 /// （在册可经 <see cref="RegisteredEffectHandlerNames"/> 查询断言）。
-/// 使用反制不执行 targeter 交互、不发任何游戏更新；位置语义（手牌要求/激活后去向）本批后置。
+/// 使用反制不执行 targeter 交互、不发任何游戏更新；位置语义＝不做激活区——激活/取消＝状态翻转＋费用
+/// （卡保持手牌位置不变）；可重复激活（激活↔取消可反复、无次数上限，费用各恰一次；仅限己方回合）。
 /// 加载模板与其余装配沿用基类（<see cref="CardBase"/>）。
 /// </summary>
 public class CounterCard : CardBase

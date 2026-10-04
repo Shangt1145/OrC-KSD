@@ -77,7 +77,7 @@ public class LifetimeRefTests
             ["Source"] = entity.Ref,
             ["Amount"] = 1,
         });
-        var view = ContextViewBinder.Create<ShieldView>(ctx);
+        var view = ContextViewBinder.Create<SampleView>(ctx);
         Assert.True(view.Target.IsAlive);
 
         entity.Destroy(); // 绑定后目标失效
@@ -91,9 +91,9 @@ public class LifetimeRefTests
     {
         var entity = new Entity("E");
         var engine = new LogicEngine();
-        var trigger = new Trigger<ShieldView>(name: "失效联动", events: new[]
+        var trigger = new Trigger<SampleView>(name: "失效联动", events: new[]
         {
-            new TriggerEvent<ShieldView>("读引用", (view, ctx, ct) =>
+            new TriggerEvent<SampleView>("读引用", (view, ctx, ct) =>
             {
                 _ = view.Target; // 读取失效引用 → 当刻抛（StaleReferenceException）
                 return Task.CompletedTask;

@@ -30,6 +30,13 @@ public sealed class TargeterManager
     /// <summary>留痕目标（注入优先；未注入时＝内存留痕〔<see cref="InMemoryTargetingTrace"/>，可查询面〕）。</summary>
     public ITargetingTraceSink TraceSink { get; }
 
+    /// <summary>
+    /// 终局门禁提供器（后置项 B 加性；装配方〔对局〕注入——读取对局是否已结束）：
+    /// 已结束＝发起（新入队）即时失败（<see cref="TargetingEndReason.GameEnded"/>）、零副作用（不进队列、不调桥接）。
+    /// null＝无门禁（独立构造场景，行为不变）。
+    /// </summary>
+    internal Func<bool>? GameEndedProvider { get; set; }
+
     /// <summary>创建请求对象（便捷入口；与直接构造 <see cref="Targeter"/> 等价）。</summary>
     public Targeter CreateTargeter(TargetFilter? filter = null, IEnumerable<TargetSlot>? slots = null)
         => new(this, filter, slots);
@@ -37,9 +44,15 @@ public sealed class TargeterManager
     /// <summary>
     /// 入队（Targeter 发起入口；框架内部）。FIFO＝发起顺序；终局（成功/取消/失败）后出队下一条。
     /// 返回的 Task 永不故障——三态结局经结果对象表达。
+    /// 终局门禁（后置项 B）：对局已结束＝即时失败（不进队列、不调桥接、零副作用）。
     /// </summary>
     internal Task<TargetingResult> Enqueue(Targeter targeter)
     {
+        if (GameEndedProvider?.Invoke() == true)
+        {
+            return Task.FromResult(TargetingResult.Failed(TargetingEndReason.GameEnded));
+        }
+
         lock (_sync)
         {
             var request = new Request(targeter);

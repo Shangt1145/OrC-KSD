@@ -10,19 +10,26 @@ namespace Orc.Game.Managers;
 /// 未接线＝跳过）、抽牌＝玩家管理器（先手第 1 回合不抽、其余照抽 1；抽时所发 card.drawn 位于 start 与 after 之间）；
 /// 回合结束序列＝turn.end.before → turn.end →（结束处理：结束方点数清零；静默）→ 切换当前方、回合数 +1。
 /// 所有 turn 系列更新经总线 Emit（载荷＝{ 玩家, 回合数 }）；全部顺序 await 完结（调用返回即结算与更新完结）。
+/// 终局门禁（后置项 B）：对局已结束＝EndTurn 拒绝（可空生命周期；缺省＝独立构造场景无门禁）。
 /// </summary>
 public sealed class TurnManager
 {
     private readonly LogicEngine _engine;
     private readonly PlayerManager _playerManager;
     private readonly ResourceManager _resourceManager;
+    private readonly MatchLifecycle? _lifecycle;
     private Player? _currentPlayer;
 
-    internal TurnManager(LogicEngine engine, PlayerManager playerManager, ResourceManager resourceManager)
+    internal TurnManager(
+        LogicEngine engine,
+        PlayerManager playerManager,
+        ResourceManager resourceManager,
+        MatchLifecycle? lifecycle = null)
     {
         _engine = engine;
         _playerManager = playerManager;
         _resourceManager = resourceManager;
+        _lifecycle = lifecycle;
     }
 
     /// <summary>
@@ -60,9 +67,14 @@ public sealed class TurnManager
     /// <summary>
     /// 结束当前方回合：turn.end.before → turn.end →（结束方点数清零）→ 切换当前方、回合数 +1 → 回合开始序列（双人对局轮流）。
     /// </summary>
-    /// <exception cref="InvalidOperationException">回合尚未开始，不能结束回合。</exception>
+    /// <exception cref="InvalidOperationException">对局已结束（终局，不能推进回合）；或回合尚未开始，不能结束回合。</exception>
     public async Task EndTurn(CancellationToken ct = default)
     {
+        if (_lifecycle?.IsEnded == true)
+        {
+            throw new InvalidOperationException("对局已结束（终局），不能推进回合。");
+        }
+
         if (_currentPlayer is null)
         {
             throw new InvalidOperationException("回合尚未开始，不能结束回合。");

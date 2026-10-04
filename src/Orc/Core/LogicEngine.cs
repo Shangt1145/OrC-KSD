@@ -7,7 +7,7 @@ namespace Orc.Core;
 /// 逻辑引擎（S5 形态）。公开面按用途组织：
 /// ①事件流：<see cref="RootStream"/>（总流；树根，引擎域一切因果记录最终可达）与 <see cref="EventStreamJson"/>（树形 JSON 导出）；
 /// ②总线：<see cref="Bus"/>（S3；更新广播；一对一双向绑定）与 <see cref="Emit"/>（便捷转发）；
-/// ③流程：<see cref="AttackFlow" /> / <see cref="DamageFlow"/>（S4）与 <see cref="SpellFlow"/>（S5；承载引擎级共享的施放检查位）；
+/// ③流程：<see cref="AttackFlow" /> / <see cref="DamageFlow"/>（S4）与 <see cref="OrderFlow"/>（S5；承载引擎级共享的施放检查位）；
 /// ④卡牌：<see cref="Cards"/>（S5 登记读面：创建即注册、销毁清理响应时移除）与 <see cref="DestroyCard"/>（一步式销毁辅助）；
 /// ⑤宿主集成（S5 骨架）：<see cref="Bridge"/>（编译期强类型桥）与 <see cref="Subscribe"/>（运行期回调）——两通道均在更新广播（Emit）时通知；
 /// ⑥快照：<see cref="SnapshotJson"/>（单实体/全量 JSON）。
@@ -26,7 +26,7 @@ public sealed class LogicEngine
         Bus = new Bus(this);
         AttackFlow = new AttackFlow(this);
         DamageFlow = new DamageFlow(this);
-        SpellFlow = new SpellFlow(this);
+        OrderFlow = new OrderFlow(this);
     }
 
     // ---------- ①事件流 ----------
@@ -44,11 +44,11 @@ public sealed class LogicEngine
     /// <summary>攻击流程（S4；发起方：反制检查 → 伤害结算调用 → 收尾；band 扩展位与注入载体）。</summary>
     public AttackFlow AttackFlow { get; }
 
-    /// <summary>伤害结算流程（S4；承受方：护盾检查结算 → 伤害生效；可独立触发）。</summary>
+    /// <summary>伤害结算流程（S4；承受方：结算前 → 伤害生效；可独立触发）。</summary>
     public DamageFlow DamageFlow { get; }
 
-    /// <summary>施放流程（S5；引擎级共享：反制检查 → 施放结算（执行法术施放链）→ 收尾；承载反制类效果接入的具名检查位）。</summary>
-    public SpellFlow SpellFlow { get; }
+    /// <summary>指令流程（S5；引擎级共享：反制检查 → 施放结算（执行指令施放链）→ 收尾；承载反制类效果接入的具名检查位）。</summary>
+    public OrderFlow OrderFlow { get; }
 
     /// <summary>更新广播便捷转发（与 <see cref="Bus.Emit"/> 行为完全一致）。</summary>
     public Task Emit(

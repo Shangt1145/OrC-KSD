@@ -49,6 +49,9 @@ public enum CommandFailureReason
 
     /// <summary>指挥流程结构故障（契约兜底；不应发生的结构性错误，防御类别）。</summary>
     CommandFlowFault,
+
+    /// <summary>发起拒绝：对局已结束（终局后所有游戏动作入口拒绝——零副作用、状态不推进）。</summary>
+    GameEnded,
 }
 
 /// <summary>

@@ -192,21 +192,24 @@ public class CommandRulesTests
         var playerB = match.Players[1];
         var infantry = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 2);
-        var smokeOwnerSide = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.SmokeId, 3); // 我方烟幕兵（自身行动不受限）
-        var enemySmoke = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.SmokeId, 0); // 敌方烟幕兵（不可被攻击）
+        var smokeOwnerSide = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.SmokeId, 3); // 我方烟幕兵
         CommandTestKit.Activate(infantry);
         CommandTestKit.Activate(artillery);
+        CommandTestKit.Activate(smokeOwnerSide);
+
+        // 本批只做被攻击面：烟幕单位自身移动/攻击能力不受词条限制。
+        // （适配〔后置项 C〕：先于敌方上线前验证——敌方前线占位将触发推进前置、与本断言语义无关。）
+        var selfReport = match.CommandManager.GetCommandAvailability(smokeOwnerSide);
+        Assert.True(selfReport.Move.CanUse);
+
+        // 敌方烟幕兵（不可被攻击）：放入敌方前线（对步兵/炮兵均在可达范围内——区分度保留）。
+        var enemySmoke = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.SmokeId, 0);
 
         // 烟幕：不可被攻击（对一切攻击者生效——含炮/轰；不进任何攻击目标候选、置黑）。
         var infantryReport = match.CommandManager.GetCommandAvailability(infantry);
         Assert.DoesNotContain(enemySmoke.Ref, infantryReport.Attack.Candidates);
         var artilleryReport = match.CommandManager.GetCommandAvailability(artillery);
         Assert.DoesNotContain(enemySmoke.Ref, artilleryReport.Attack.Candidates);
-
-        // 本批只做被攻击面：烟幕单位自身移动/攻击能力不受词条限制。
-        CommandTestKit.Activate(smokeOwnerSide);
-        var selfReport = match.CommandManager.GetCommandAvailability(smokeOwnerSide);
-        Assert.True(selfReport.Move.CanUse);
     }
 
     // ---------- 守护 ----------

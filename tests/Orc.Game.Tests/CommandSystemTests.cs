@@ -149,7 +149,7 @@ public class CommandSystemTests
     }
 
     [Fact]
-    public async Task Move_Is_Blocked_For_Front_Line_Unit_And_Rejects_When_No_Action()
+    public async Task Move_Is_Blocked_For_Front_Line_Unit()
     {
         var bridge = new MockTargeterBridge();
         var match = CommandTestKit.CreateCommandMatch(bridge);
@@ -159,13 +159,41 @@ public class CommandSystemTests
         CommandTestKit.Activate(unit);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
-        // 仅推进：前线单位无移动候选；且无合法攻击目标 → 两动作均不可用 → 发起拒绝（不进入交互）。
+        // 仅推进：前线单位无移动候选（动作级不可用——NoCandidates、候选空）。
+        var report = match.CommandManager.GetCommandAvailability(unit);
+        Assert.False(report.Move.CanUse);
+        Assert.Equal(CommandBlockReason.NoCandidates, report.Move.BlockReason);
+        Assert.Empty(report.Move.Candidates);
+
+        // 对照：移动缺位不改变攻击面——前线单位对敌方 HQ 的攻击资格正常（前线→敌 HQ 允许）。
+        Assert.True(report.Attack.CanUse);
+        Assert.Contains(match.Battlefield.PlayerBSupportLine[0].Ref, report.Attack.Candidates);
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_When_No_Action_Available_By_Candidates()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        // 两动作均不可用（候选均空）：支援线单位（攻击无可达目标；敌无场上单位、HQ 不可达）
+        // ＋前线占满（移动无空槽——占位用己方单位，不作为攻击目标）。
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        for (var i = 0; i < match.Battlefield.FrontLineCapacity; i++)
+        {
+            await CommandTestKit.PrepareOnFrontAsync(match, player, CommandTestKit.InfantryId, i);
+        }
+
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var report = match.CommandManager.GetCommandAvailability(unit);
         Assert.False(report.Move.CanUse);
         Assert.Equal(CommandBlockReason.NoCandidates, report.Move.BlockReason);
         Assert.False(report.Attack.CanUse);
         Assert.Equal(CommandBlockReason.NoCandidates, report.Attack.BlockReason);
 
+        // 发起拒绝：不进入交互、零副作用（无 targeter 请求）。
         var result = await match.CommandManager.BeginCommandAsync(unit);
         Assert.Equal(CommandResultStatus.Failed, result.Status);
         Assert.Equal(CommandFailureReason.NoActionAvailable, result.FailureReason);
@@ -342,14 +370,15 @@ public class CommandSystemTests
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
         var player = match.Players[0];
+        // 移动候选＝前线任意空槽（不被邻位动态规则约束）；已占槽不在。
+        // 适配〔后置项 C〕：占位单位改为己方（无敌人占线——推进前置满足；保持原覆盖语义）。
         var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
-        await CommandTestKit.PrepareOnFrontAsync(match, match.Players[1], CommandTestKit.InfantryId, 0); // 占一个前线槽
+        await CommandTestKit.PrepareOnFrontAsync(match, player, CommandTestKit.InfantryId, 0); // 占一个前线槽（己方）
         CommandTestKit.Activate(unit);
         var front = match.Battlefield.FrontLine;
 
         var report = match.CommandManager.GetCommandAvailability(unit);
 
-        // 移动候选＝前线任意空槽（不被邻位动态规则约束）；已占槽不在。
         Assert.True(report.Move.CanUse);
         var expected = new[] { front[1].Ref, front[2].Ref, front[3].Ref, front[4].Ref };
         Assert.Equal(expected, report.Move.Candidates);
@@ -373,13 +402,13 @@ public class CommandSystemTests
         var task = match.CommandManager.BeginCommandAsync(unit);
         var (description, responder) = await bridge.WaitForNextBeginAsync();
 
-        // 候选＝可用动作的并集：移动（前线全部空槽）＋攻击（步兵视角＝仅敌前线单位；敌支援线不计、HQ（支援线）不可达）。
-        var expected = front.Where(slot => slot.IsEmpty).Select(slot => slot.Ref)
-            .Concat(new[] { enemyOnFront.Ref })
-            .ToArray();
+        // 候选＝可用动作的并集：移动（推进前置不满足〔敌占前线〕＝整类剔除、不进入候选面——后置项 C 适配）
+        // ＋攻击（步兵视角＝仅敌前线单位；敌支援线不计、HQ（支援线）不可达）。
+        var expected = new[] { enemyOnFront.Ref };
         Assert.Equal(expected, description.AllowedTargets);
         Assert.DoesNotContain(enemyOnSupport.Ref, description.AllowedTargets);
         Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, description.AllowedTargets);
+        Assert.DoesNotContain(front[0].Ref, description.AllowedTargets); // 移动剔除（前线空槽不作为移动候选）
 
         // 无效目标点击不构成确认（交互请求继续等待）——提交候选面之外引用被拒绝。
         var rejected = responder.Complete(

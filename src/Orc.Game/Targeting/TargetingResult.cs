@@ -17,7 +17,7 @@ public enum TargetingStatus
 
 /// <summary>
 /// 结局原因（类别化；成功＝null）：
-/// 取消＝<see cref="PlayerCancelled"/>；失败＝系统原因类别（无可用候选、候选收集失败、桥接交互异常、筛选回调异常、未装配、其他/未知兜底）。
+/// 取消＝<see cref="PlayerCancelled"/>；失败＝系统原因类别（无可用候选、候选收集失败、桥接交互异常、筛选回调异常、未装配、对局已结束、其他/未知兜底）。
 /// 类别命名以本枚举为契约；不支持自由文本判断（调用方需要程序化判断与提示分流）。
 /// </summary>
 public enum TargetingEndReason
@@ -39,6 +39,9 @@ public enum TargetingEndReason
 
     /// <summary>未装配桥接（允许无桥接装配，调用时以失败结局暴露；归"未装配/其他配置"类）。</summary>
     BridgeNotAssembled,
+
+    /// <summary>对局已结束（终局门禁：targeter 发起即时失败、零副作用——不进队列、不调桥接；后置项 B）。</summary>
+    GameEnded,
 
     /// <summary>其他/未知（兜底）。</summary>
     Other,

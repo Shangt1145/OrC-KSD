@@ -113,8 +113,9 @@ public sealed class BlitzKeywordLogic : KeywordLogic
 
 /// <summary>
 /// 伏击（主动词条）逻辑组件：加载时向「造成攻击伤害」触发器注册改写逻辑；死亡清理时注销。
-/// 改写判定：被攻击单位（目标侧，＝本卡）含伏击 && 被攻击单位实时攻击力 ＞ 攻击者实时防御力（互扣前实时值）
-/// → 置改写标志（攻击者死亡、被攻击者不受伤）；条件不成立＝正常基础互伤。不区分攻击者类型；HQ 攻击不走该流程。
+/// 改写判定（先资格、后条件）：被攻击单位（目标侧，＝本卡）含伏击 ∧ 目标方按反击豁免判定表具有反击资格
+/// （豁免约束改写——无资格＝不发生反击、改写不成立、按表单方结算）∧ 条件命中（被攻击单位实时攻击力 ＞ 攻击者实时防御力，互扣前实时值）
+/// → 置改写标志（攻击者死亡、被攻击者不受伤）；资格通过但条件不成立＝正常基础互伤。不区分攻击者类型；HQ 攻击不走该流程。
 /// </summary>
 public sealed class AmbushKeywordLogic : KeywordLogic
 {
@@ -177,6 +178,13 @@ public sealed class AmbushKeywordLogic : KeywordLogic
             return Task.CompletedTask; // 目标侧单命中（多源不叠加；已改写＝跳过）
         }
 
+        // 先资格：目标方（本卡）按反击豁免判定表具有反击资格（后置项 A——豁免约束改写；无资格＝不发生反击、改写不成立）。
+        if (!CounterAttackRules.CanCounterAttack(attacker, self))
+        {
+            return Task.CompletedTask;
+        }
+
+        // 后条件：伏击条件命中（被攻击单位实时攻击力 ＞ 攻击者实时防御力）＝改写成立。
         if (selfState.Attack > attackerState.Defense)
         {
             resolution.MarkRewritten();

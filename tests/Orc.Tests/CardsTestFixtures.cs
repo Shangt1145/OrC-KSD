@@ -115,9 +115,9 @@ public sealed class FailingUnmountEffect : PassiveEffect
     protected override void OnUnmount() => throw new InvalidOperationException("OnUnmount 故意爆炸");
 }
 
-/// <summary>法术视图（施放用例）：施法者/目标/伤害量。</summary>
+/// <summary>指令视图（施放用例）：来源/目标/伤害量。</summary>
 [ContextView]
-public class SpellView
+public class OrderView
 {
     [Read]
     public virtual Card Source { get; set; }
@@ -129,8 +129,8 @@ public class SpellView
     public virtual int Amount { get; set; }
 }
 
-/// <summary>伤害法术（主动效果施放用例）：施放事件 → 对目标调用伤害结算流程（复用同一伤害结算）。</summary>
-public sealed class DamageSpell : ActiveEffect<SpellView>
+/// <summary>伤害指令（主动效果施放用例）：施放事件 → 对目标调用伤害结算流程（复用同一伤害结算）。</summary>
+public sealed class DamageOrder : ActiveEffect<OrderView>
 {
     private readonly DamageFlow _damageFlow;
 
@@ -138,7 +138,7 @@ public sealed class DamageSpell : ActiveEffect<SpellView>
     public int MountCount;   // 主动效果不应被调用（恒 0）
     public int UnmountCount; // 主动效果不应被调用（恒 0）
 
-    public DamageSpell(DamageFlow damageFlow, string name = "火球术")
+    public DamageOrder(DamageFlow damageFlow, string name = "火球术")
         : base(name)
     {
         _damageFlow = damageFlow;
@@ -149,11 +149,18 @@ public sealed class DamageSpell : ActiveEffect<SpellView>
 
     protected override void OnUnmount() => UnmountCount++;
 
-    private Task OnCast(SpellView view, Context ctx, CancellationToken ct)
+    private Task OnCast(OrderView view, Context ctx, CancellationToken ct)
     {
         CastCount++;
         return _damageFlow.ResolveAsync(view.Source, view.Target, view.Amount, ct);
     }
+}
+
+/// <summary>样例数据组件（数据组件共存/快照用例）：中性示范——任意作者类皆可作数据组件。</summary>
+public sealed class SampleData
+{
+    /// <summary>样例数值。</summary>
+    public int Value { get; set; }
 }
 
 /// <summary>S4 测试共享工具。</summary>

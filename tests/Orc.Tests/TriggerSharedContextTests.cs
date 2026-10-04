@@ -143,9 +143,9 @@ public class TriggerSharedContextTests
         // 新「绑定失败被捕获处理：记录（与隔离记录同构）＋失败标记＋安全结束（返回流）」。
         var engine = new LogicEngine();
         var executed = false;
-        var trigger = new Trigger<ShieldView>(events: new[]
+        var trigger = new Trigger<SampleView>(events: new[]
         {
-            new TriggerEvent<ShieldView>("x", (v, c, t) => { executed = true; return Task.CompletedTask; }),
+            new TriggerEvent<SampleView>("x", (v, c, t) => { executed = true; return Task.CompletedTask; }),
         });
 
         // 空数据：Target / Source / Amount 均缺失 → 绑定失败（执行前）→ 捕获处理、安全结束（不外传）
@@ -159,7 +159,7 @@ public class TriggerSharedContextTests
         var record = Assert.Single(stream.Entries, e => e.Level == LogLevel.Error);
         Assert.Equal(LogEntryKind.Log, record.Kind);
         Assert.Contains("exception:KeyNotFoundException", record.Keywords);
-        Assert.Equal("ShieldView", record.Source);
+        Assert.Equal("SampleView", record.Source);
         Assert.Equal(typeof(KeyNotFoundException).FullName, record.Data["exceptionType"]);
 
         // 失败标记：契约兜底失败

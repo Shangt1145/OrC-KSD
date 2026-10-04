@@ -11,11 +11,13 @@ using Orc.Game.Triggers;
 namespace Orc.Game;
 
 /// <summary>
-/// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
+/// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条＋后置项补全）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
 /// 与对局级触发器注册表（2A 机制：登记本体＋分层分类；2C 起内置流程触发器注册为底层）。
 /// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）。
-/// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）。
-/// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）。
+/// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）→〔HQ≤0 时〕"结束"态（立即终局：状态置结束＋胜者记录）。
+/// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）；
+/// 终局后（"结束"态）：所有游戏动作入口拒绝（指挥/打出/移动/攻击/回合推进/初始化等——对外面拒绝、零副作用）、
+/// 只读查询面（状态/胜者/玩家与 HQ/战场/管理器/集合）保持可用、更新流不再增长（其后所有效果不再处理）。
 /// 失败模式：无效创建参数 → 创建期抛参数校验异常；初始化中异常直接传播（不承诺回滚；失败可重建对局）。
 /// 初始化流程（2A 固定链＋2C 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 指挥管理器〔2C：流程触发器创建＋底层注册〕）→
 /// 双方卡组洗牌（传对局随机源）→ 加载（逐张 card.load；含词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→ 起手装载（静默、不发更新；先手 4 / 后手 5）→
@@ -42,6 +44,7 @@ public sealed class Match
     private PlayManager? _playManager;
     private CommandManager? _commandManager;
     private readonly ITargeterBridge? _targeterBridge;
+    private readonly MatchLifecycle _lifecycle = new();
 
     /// <summary>
     /// 创建对局（准备态；内部新建 LogicEngine 并公开）。装配校验：卡组名单非 null、非空、不含 null/空白 id；
@@ -115,8 +118,14 @@ public sealed class Match
     /// <summary>对局引擎（公开；外部经此访问总线/总流以订阅更新——订阅须在 <see cref="Initialize"/> 前挂接）。</summary>
     public LogicEngine Engine { get; }
 
-    /// <summary>对局状态（准备 / 进行）。</summary>
-    public MatchState State { get; private set; } = MatchState.Preparing;
+    /// <summary>对局状态（准备 / 进行 / 结束——经生命周期对象读；"结束"＝HQ≤0 立即终局，不可逆）。</summary>
+    public MatchState State => _lifecycle.State;
+
+    /// <summary>
+    /// 胜者（只读面；仅终局后非 null：＝使对方 HQ 归零的一方；非终局＝null）。
+    /// 平局不处理（本批无同时归零路径、不定义平局值）。
+    /// </summary>
+    public Player? Winner => _lifecycle.Winner;
 
     /// <summary>本次实际使用的随机种子（传入则＝传入值；未传入则＝自动生成值，支撑事后复现）。</summary>
     public int Seed { get; }
@@ -226,16 +235,20 @@ public sealed class Match
 
         // 第六员（加性，随管理器群生成）：目标选择管理器——桥接可选注入（缺省 null＝允许无桥接装配，
         // Targeting 被调用时以失败结局暴露、不抛）；留痕经引擎既有渠道（总流）。
+        // 终局门禁（后置项 B）：装配终局读取提供器——对局已结束＝发起（新入队）即时失败、零副作用。
         _targeterManager = new TargeterManager(_targeterBridge, new EventStreamTargetingTrace(Engine.RootStream));
+        _targeterManager.GameEndedProvider = () => _lifecycle.IsEnded;
 
         // 2C 加性：指挥管理器（引擎侧创建四个内置流程触发器——指挥 / 单位移动 / 单位攻击 / 造成攻击伤害）
         // ＋注册为底层触发器（进注册表、分层可查询）；创建时点＝卡牌加载之前（词条装载依赖「造成攻击伤害」就绪）。
+        // 后置项 B 加性：注入对局生命周期（终局门禁＋HQ≤0 胜者记录）。
         _commandManager = new CommandManager(
             Engine,
             _battlefieldManager.Battlefield,
             _targeterManager,
             _playerManager.Players,
-            () => _turnManager?.CurrentPlayer);
+            () => _turnManager?.CurrentPlayer,
+            _lifecycle);
         TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
@@ -256,20 +269,26 @@ public sealed class Match
         _playerManager.LoadOpeningHand(secondPlayer, OpeningHandSizeSecondPlayer);
 
         // 先手回合开始序列（3 条更新；第 1 回合不抽牌＝无 card.drawn；顺序 await 完结后返回）
-        _turnManager = new TurnManager(Engine, _playerManager, _resourceManager);
+        _turnManager = new TurnManager(Engine, _playerManager, _resourceManager, _lifecycle);
         // 2C 接线：单位行动状态恢复（回合开始处理段——行动方在场单位重置两 bool＋词条运行态清零）
         _turnManager.ActionStateRefresher = _commandManager.RefreshActionStates;
-        // 打出管理器（2B 加性：随管理器群生成——打出链服务与交互入口；回合管理器为反制「仅己方回合」真源）
-        _playManager = new PlayManager(Engine, _targeterManager, _battlefieldManager.Battlefield, _turnManager);
+        // 打出管理器（2B 加性：随管理器群生成——打出链服务与交互入口；回合管理器为反制「仅己方回合」真源；
+        // 后置项 B 加性：注入对局生命周期——终局门禁）
+        _playManager = new PlayManager(Engine, _targeterManager, _battlefieldManager.Battlefield, _turnManager, _lifecycle);
         await _turnManager.StartFirstTurn(firstPlayer, ct);
 
-        State = MatchState.InProgress;
+        _lifecycle.MarkInProgress();
     }
 
-    /// <summary>结束回合（主路径；无参、自动取当前行动方；仅"进行"态可调用）。</summary>
-    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态（准备态推进被拒绝）。</exception>
+    /// <summary>结束回合（主路径；无参、自动取当前行动方；仅"进行"态可调用；终局后拒绝）。</summary>
+    /// <exception cref="InvalidOperationException">对局已结束（终局，不能推进回合）；或对局尚未进入"进行"态（准备态推进被拒绝）。</exception>
     public async Task EndTurn(CancellationToken ct = default)
     {
+        if (State == MatchState.Ended)
+        {
+            throw new InvalidOperationException("对局已结束（终局），不能推进回合。");
+        }
+
         if (State != MatchState.InProgress)
         {
             throw new InvalidOperationException("对局尚未进入'进行'态，不能推进回合（须先成功完成 Initialize）。");
@@ -278,10 +297,12 @@ public sealed class Match
         await TurnManager.EndTurn(ct);
     }
 
-    /// <summary>管理器/转发读面的就绪门禁：仅"进行"态且管理器已生成时可用，否则抛错（准备态访问口径一致）。</summary>
+    /// <summary>
+    /// 管理器/转发读面的就绪门禁：准备态不可用（抛错）；"进行"与"结束"态均可读（终局后只读查询面保持可用）。
+    /// </summary>
     private T RequireReady<T>(T? manager)
         where T : class
-        => manager is not null && State == MatchState.InProgress
+        => manager is not null && State != MatchState.Preparing
             ? manager
             : throw new InvalidOperationException("对局尚未进入'进行'态：管理器群不可用（须先成功完成 Initialize）。");
 

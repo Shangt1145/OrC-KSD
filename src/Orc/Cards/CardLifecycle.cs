@@ -36,8 +36,8 @@ public static class PayloadKeys
     /// <summary>数量载荷键："Amount"。</summary>
     public const string Amount = "Amount";
 
-    /// <summary>法术载荷键："Spell"（值＝<see cref="ICastAction"/> 法术接线面；施放流程（S5）携带）。</summary>
-    public const string Spell = "Spell";
+    /// <summary>指令载荷键："Order"（值＝<see cref="ICastAction"/> 指令接线面；指令流程（S5）携带）。</summary>
+    public const string Order = "Order";
 }
 
 /// <summary>装载链留痕与错误记录工具（内部）：写「当前执行者流（无则总流）」，与会话内留痕一致冒泡。</summary>
