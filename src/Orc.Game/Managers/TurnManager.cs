@@ -5,8 +5,9 @@ namespace Orc.Game.Managers;
 
 /// <summary>
 /// 回合管理器（回合领域真源：回合数、当前行动方）：回合推进编排（"信号先行、处理随后"模型）。
-/// 回合开始序列＝turn.start.before → turn.start →（开始处理：结算 → 抽牌）→ turn.start.after；
-/// 结算＝资源管理器（槽 +1 至上限 → 点数＝槽值；静默）、抽牌＝玩家管理器（先手第 1 回合不抽、其余照抽 1；抽时所发 card.drawn 位于 start 与 after 之间）；
+/// 回合开始序列＝turn.start.before → turn.start →（开始处理：结算 → 单位行动状态恢复〔2C 加性〕→ 抽牌）→ turn.start.after；
+/// 结算＝资源管理器（槽 +1 至上限 → 点数＝槽值；静默）、行动状态恢复＝注入钩子（指挥管理器：行动方在场单位重置两 bool＋词条运行态清零；
+/// 未接线＝跳过）、抽牌＝玩家管理器（先手第 1 回合不抽、其余照抽 1；抽时所发 card.drawn 位于 start 与 after 之间）；
 /// 回合结束序列＝turn.end.before → turn.end →（结束处理：结束方点数清零；静默）→ 切换当前方、回合数 +1。
 /// 所有 turn 系列更新经总线 Emit（载荷＝{ 玩家, 回合数 }）；全部顺序 await 完结（调用返回即结算与更新完结）。
 /// </summary>
@@ -23,6 +24,13 @@ public sealed class TurnManager
         _playerManager = playerManager;
         _resourceManager = resourceManager;
     }
+
+    /// <summary>
+    /// 单位行动状态恢复钩子（2C 加性；装配方注入——对局 Initialize 内接线指挥管理器的恢复逻辑；
+    /// 未接线（独立构造场景）＝null＝跳过）。调用时点＝回合开始处理段（turn.start.after 前完成；
+    /// 与段内其他步骤〔指挥点结算、抽牌〕无顺序依赖）。
+    /// </summary>
+    internal Action<Player>? ActionStateRefresher { get; set; }
 
     /// <summary>回合数（全局递增；回合 1＝先手首回合）。</summary>
     public int TurnNumber { get; private set; }
@@ -74,15 +82,16 @@ public sealed class TurnManager
         await BeginTurnAsync(ct);
     }
 
-    /// <summary>回合开始序列：before → start →（开始处理：结算 → 抽牌）→ after（全部顺序 await 完结）。</summary>
+    /// <summary>回合开始序列：before → start →（开始处理：结算 → 单位行动状态恢复〔2C〕→ 抽牌）→ after（全部顺序 await 完结）。</summary>
     private async Task BeginTurnAsync(CancellationToken ct)
     {
         var current = CurrentPlayer;
         await EmitTurnAsync(GameUpdates.TurnStartBefore, current, TurnNumber, ct);
         await EmitTurnAsync(GameUpdates.TurnStart, current, TurnNumber, ct);
 
-        // 回合开始处理（静默）：资源结算（槽 +1 至上限 → 点数＝槽值）→ 抽牌（需抽时发 card.drawn）
+        // 回合开始处理（静默）：资源结算（槽 +1 至上限 → 点数＝槽值）→ 单位行动状态恢复 → 抽牌（需抽时发 card.drawn）
         _resourceManager.Settle(current);
+        ActionStateRefresher?.Invoke(current);
         if (ShouldDrawForTurn(TurnNumber))
         {
             await _playerManager.DrawCard(current, ct);

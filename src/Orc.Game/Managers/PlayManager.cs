@@ -1,0 +1,325 @@
+using Orc.Core;
+using Orc.Game.Board;
+using Orc.Game.Cards;
+using Orc.Game.Players;
+using Orc.Game.Targeting;
+using Orc.Game.Triggers;
+
+namespace Orc.Game.Managers;
+
+/// <summary>
+/// 打出管理器（2B 打出链服务与交互入口）：
+/// ①单位预打出（<see cref="BeginUnitPrePlayAsync"/>）——开始＝触发预打出触发器（内含指挥点合法性验证；不足＝拒绝）
+///   ＋候选检查（候选＝己方支援线空槽位〔邻位规则计算〕；为空＝拒绝、不进入交互）；
+///   交互＝targeter 请求（候选＝空槽位引用）；确认（前端/mock 经交互完成路径提交选中槽位）＝自动衔接打出链；
+///   取消（经交互取消路径）＝终止预打出（零副作用——不发更新、卡留手、无费用扣除、无槽位/组件变化）。
+///   「开始/取消/确认」形态：开始＝本入口；取消/确认＝交互完成路径（桥接 Complete/Cancel 驱动，等价于前端拖回/释放手势）。
+/// ②单位打出链直接驱动（<see cref="PlayUnitAsync"/>）：外层复验＋部署链＋收尾扣费（部署路径）。
+/// ③加入路径（<see cref="JoinUnitAsync"/>）：加入触发器 → 共用单位化触发器；不扣费、不走部署词条（后端入口、不问来源）。
+/// ④指令（<see cref="PlayCommandAsync"/>）：预打出段（验证＋handler 捕获；默认无交互、零更新）自动衔接打出段
+///   （card.played → 主动 handler 集 → 收尾扣费/离手）；捕获结果自动移交为打出触发器 object? 参数。
+/// ⑤反制（<see cref="UseCounterAsync"/>）：单入口状态翻转（激活 ↔ 取消；仅己方回合）。
+/// 结果统一经 <see cref="PlayResult"/>（不抛；失败原因类别化；取消＝<see cref="PlayResultStatus.Cancelled"/>）；
+/// 拒绝/失败/取消均不发任何游戏更新、不进入后续步骤。
+/// 无效驱动（未加载卡等装配性错误）＝明确异常（fail-fast）；玩家动作级失败＝结果对象（不抛）。
+/// 依赖：引擎（发射/触发）、目标选择管理器（单位预打出的交互承载）、战场（候选计算）、
+/// 回合管理器（反制「仅己方回合」；可空——独立构造场景下反制不可用、使用将抛明确异常）。
+/// </summary>
+public sealed class PlayManager
+{
+    private readonly LogicEngine _engine;
+    private readonly TargeterManager _targeterManager;
+    private readonly Battlefield _battlefield;
+    private readonly TurnManager? _turnManager;
+
+    /// <summary>创建打出管理器。</summary>
+    /// <param name="engine">对局引擎（发射更新 / 触发子触发器）。</param>
+    /// <param name="targeterManager">目标选择管理器（单位预打出交互）。</param>
+    /// <param name="battlefield">战场（部署候选＝己方支援线空槽位的计算源）。</param>
+    /// <param name="turnManager">回合管理器（反制「仅己方回合」的当前行动方真源；可空——缺省＝独立构造场景，反制使用抛明确异常）。</param>
+    /// <exception cref="ArgumentNullException">engine / targeterManager / battlefield 为 null。</exception>
+    public PlayManager(
+        LogicEngine engine,
+        TargeterManager targeterManager,
+        Battlefield battlefield,
+        TurnManager? turnManager = null)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(targeterManager);
+        ArgumentNullException.ThrowIfNull(battlefield);
+
+        _engine = engine;
+        _targeterManager = targeterManager;
+        _battlefield = battlefield;
+        _turnManager = turnManager;
+    }
+
+    // ---------- ① 单位预打出（开始→交互→确认/取消；一次调用链） ----------
+
+    /// <summary>
+    /// 单位预打出（一次调用链：开始 → 交互 → 确认/取消 →〔确认时〕自动衔接打出链）：
+    /// ①开始：触发预打出触发器（内含指挥点验证——不足＝拒绝〔预打出阶段〕）；候选检查（己方支援线空槽位〔邻位规则〕——为空＝拒绝）；
+    /// ②交互：发起 targeter 请求（候选＝空槽位引用；单选）；等待结局（前端/mock 经桥接完成或取消）；
+    /// ③确认：取出选中槽位 → 自动衔接 <see cref="PlayUnitAsync"/>；取消：终止（零副作用）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
+    public async Task<PlayResult> BeginUnitPrePlayAsync(UnitCard card, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        var owner = RequireOwner(card);
+
+        // ① 开始：触发预打出触发器（验证＝指挥点检查；不足＝拒绝、不发起 targeter 请求、不发任何更新）。
+        var preStream = await card.PrePlayTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = owner,
+            },
+            ct);
+
+        if (preStream.Outcome == ExecutionOutcome.ValidationRejected)
+        {
+            return PlayResult.Failure(PlayFailureReason.PrePlayPointShortage);
+        }
+
+        if (preStream.Outcome != ExecutionOutcome.Normal)
+        {
+            return PlayResult.Failure(PlayFailureReason.PlayChainFault);
+        }
+
+        // ① 候选：己方支援线空槽位（邻位规则计算）——为空＝预打出不可开始（不进入交互）。
+        var candidates = _battlefield.GetSupportLine(owner).GetAdjacentEmptySlots();
+        if (candidates.Count == 0)
+        {
+            return PlayResult.Failure(PlayFailureReason.PrePlayNoAvailableSlots);
+        }
+
+        // ② 交互：targeter 请求（候选＝空槽位引用；前端提交集合经粗筛收敛到候选面）。
+        var allowedSet = new HashSet<Ref<Entity>>(candidates.Select(slot => slot.Ref));
+        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
+        var targeter = _targeterManager.CreateTargeter(filter, new TargetSlot[] { new SingleSelectSlot() });
+        var targeting = await targeter.Targeting();
+
+        if (targeting.Status == TargetingStatus.Cancelled)
+        {
+            return PlayResult.Cancelled(targeting);
+        }
+
+        if (targeting.Status != TargetingStatus.Success)
+        {
+            return PlayResult.Failure(PlayFailureReason.TargetingFailed, targeting);
+        }
+
+        // ③ 确认：选中空槽位（身份可判）→ 自动衔接打出链。
+        var selected = targeting.Outcome!.Single;
+        if (selected?.Value is not Slot slot)
+        {
+            return PlayResult.Failure(PlayFailureReason.TargetingFailed, targeting);
+        }
+
+        return await PlayUnitAsync(card, slot, ct);
+    }
+
+    // ---------- ② 单位打出链（直接驱动；部署路径） ----------
+
+    /// <summary>
+    /// 单位打出链（部署路径）：外层复验（指挥点）→ 打出链（card.played → 部署链 → 收尾扣费/离手）。
+    /// 前置（防御性、明确失败结果、零副作用）：目标槽位须为空槽、单位未单位化——违反＝拒绝。
+    /// 复验失败＝打出链中止（仅本次取消语义＋留痕；不部署、不扣费、不发更新、不离手）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card / target 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
+    public async Task<PlayResult> PlayUnitAsync(UnitCard card, Slot target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        ArgumentNullException.ThrowIfNull(target);
+        var owner = RequireOwner(card);
+
+        if (!target.IsEmpty)
+        {
+            return PlayResult.Failure(PlayFailureReason.TargetSlotOccupied);
+        }
+
+        if (card.TryGetData<UnitStateData>(out _))
+        {
+            return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
+        }
+
+        var stream = await card.PlayTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = owner,
+                [GameUpdates.PayloadPosition] = target,
+            },
+            ct);
+
+        return stream.Outcome switch
+        {
+            ExecutionOutcome.Normal => PlayResult.Success(),
+            ExecutionOutcome.ValidationRejected => PlayResult.Failure(PlayFailureReason.PlayVerificationRejected),
+            _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
+        };
+    }
+
+    // ---------- ③ 加入路径 ----------
+
+    /// <summary>
+    /// 加入路径（后端入口；不问来源、非交互路径）：加入触发器 → 共用单位化触发器；不扣费、不走部署词条；
+    /// 单位化完成后发 unit.joined。目标槽位由调用方给定、须为空槽（非空＝拒绝、可观测；邻位规则不适用）。
+    /// 归属不要求（加入不涉及手牌/扣费）；单位化装配失败不留矛盾中间态。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card / target 为 null。</exception>
+    public async Task<PlayResult> JoinUnitAsync(UnitCard card, Slot target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (!target.IsEmpty)
+        {
+            return PlayResult.Failure(PlayFailureReason.TargetSlotOccupied);
+        }
+
+        if (card.TryGetData<UnitStateData>(out _))
+        {
+            return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
+        }
+
+        var stream = await card.JoinTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = card.Owner,
+                [GameUpdates.PayloadPosition] = target,
+            },
+            ct);
+
+        return stream.Outcome switch
+        {
+            ExecutionOutcome.Normal => PlayResult.Success(),
+            _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
+        };
+    }
+
+    // ---------- ④ 指令（预打出→打出；一次调用链，自动衔接） ----------
+
+    /// <summary>
+    /// 指令打出（一次调用链，自动衔接）：
+    /// ①预打出段：触发预打出触发器（内含指挥点验证——不足＝拒绝）；执行预打出 handler 集（装配期注册；登记序；
+    ///   异常沿用引擎隔离；捕获经 <see cref="CardCaptureBox"/> 提交；取消经 <see cref="CardCaptureBox.CancelPrePlay"/> 显式请求）；
+    /// ②打出段：触发打出触发器（复验指挥点）——card.played → 主动 handler 集（登记序）→ 收尾（扣费→离手）；
+    ///   捕获结果自动移交为 object? 参数（单引用/列表/targeter 皆可承载）。
+    /// 预打出段失败/取消 ⇒ 打出不发生（零副作用——不发更新、卡留手、无扣费/离手）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
+    public async Task<PlayResult> PlayCommandAsync(CommandCard card, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        var owner = RequireOwner(card);
+
+        // ① 预打出段：验证＋handler 捕获集（默认无 handler＝无交互、零更新）。
+        var captureBox = new CardCaptureBox();
+        var preStream = await card.PrePlayTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = owner,
+                [nameof(CardTriggerView.CaptureBox)] = captureBox,
+            },
+            ct);
+
+        if (preStream.Outcome == ExecutionOutcome.ValidationRejected)
+        {
+            return PlayResult.Failure(PlayFailureReason.PrePlayPointShortage);
+        }
+
+        if (preStream.Outcome != ExecutionOutcome.Normal)
+        {
+            return PlayResult.Failure(PlayFailureReason.PlayChainFault);
+        }
+
+        if (captureBox.IsPrePlayCancelled)
+        {
+            return PlayResult.Cancelled();
+        }
+
+        // ② 打出段：复验＋宣告＋主动 handler 集＋收尾；捕获结果自动移交为 object? 参数。
+        var playStream = await card.PlayTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = owner,
+                [nameof(CardTriggerView.Argument)] = captureBox.Result,
+            },
+            ct);
+
+        return playStream.Outcome switch
+        {
+            ExecutionOutcome.Normal => PlayResult.Success(),
+            ExecutionOutcome.ValidationRejected => PlayResult.Failure(PlayFailureReason.PlayVerificationRejected),
+            _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
+        };
+    }
+
+    // ---------- ⑤ 反制（单入口状态翻转） ----------
+
+    /// <summary>
+    /// 反制使用（单入口状态翻转）：未激活＝激活流程（验证〔指挥点〕→ 扣点 → 置激活 ＋ 注册效果 handler）；
+    /// 已激活＝取消流程（退点〔无条件、同额〕→ 取消激活 ＋ 取消注册）。
+    /// 仅己方回合（该卡所属玩家是当前行动方）；拒绝＝明确失败结果（不改变状态、不扣点、不注册、不发任何游戏更新）。
+    /// 使用反制不执行 targeter 交互、不发射任何游戏更新。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌未加载归属；或本管理器未装配回合上下文（反制使用需要「当前行动方」）。</exception>
+    public async Task<PlayResult> UseCounterAsync(CounterCard card, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        var owner = RequireOwner(card);
+
+        if (_turnManager is null)
+        {
+            throw new InvalidOperationException(
+                "反制使用需要回合上下文（当前行动方），本管理器未装配回合管理器（独立构造场景不支持反制使用）。");
+        }
+
+        // 前置判定（与验证同源；用于失败原因的可辨识映射）。
+        var rejection = card.EvaluateUse(_turnManager.CurrentPlayer);
+        if (rejection is not null)
+        {
+            return PlayResult.Failure(rejection switch
+            {
+                CounterUseRejection.NotOwnerTurn => PlayFailureReason.CounterNotOwnerTurn,
+                CounterUseRejection.NotEnoughPoints => PlayFailureReason.CounterPointShortage,
+                _ => PlayFailureReason.PlayChainFault,
+            });
+        }
+
+        var stream = await card.UseCounterTrigger.InvokeAsync(
+            _engine,
+            new Dictionary<string, object?>
+            {
+                [GameUpdates.PayloadCard] = card,
+                [GameUpdates.PayloadPlayer] = owner,
+            },
+            ct);
+
+        return stream.Outcome switch
+        {
+            ExecutionOutcome.Normal => PlayResult.Success(),
+            ExecutionOutcome.ValidationRejected => PlayResult.Failure(PlayFailureReason.PlayChainFault), // 防御（同源判定已前置）
+            _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
+        };
+    }
+
+    /// <summary>归属要求（装配性错误：未加载卡不可驱动打出链——fail-fast）。</summary>
+    private static Player RequireOwner(CardBase card)
+        => card.Owner ?? throw new InvalidOperationException(
+            $"卡牌 '{card.Name}' 未加载归属（未完成 LoadAsync），不能驱动打出链。");
+}

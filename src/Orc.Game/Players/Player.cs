@@ -5,8 +5,10 @@ namespace Orc.Game.Players;
 /// <summary>
 /// 玩家（对局数据类；本批不继承引擎 Entity——无引用/生命周期需求，实体化留后续批次评估）：
 /// 资源（指挥点数 / 指挥点槽）＋ 卡组（名单）＋ 手牌（实例集）＋ HQ（血量数据）。
-/// 读面直接可读（供测试断言与展示）；写面经管理器（资源结算＝资源管理器；卡组消耗/手牌装载＝玩家管理器），无旁路修改入口。
-/// HQ＝纯数据（初始 20 血、可读、本批无修改入口、不落位——"占支援线一格"为设计预留）；归零判定与胜负逻辑后置。
+/// 读面直接可读（供测试断言与展示）；写面经管理器（资源结算＝资源管理器；卡组消耗/手牌装载＝玩家管理器；
+/// HQ 扣血＝指挥管理器〔2C 受控变更：攻击 HQ 结算入口〕），无旁路修改入口。
+/// HQ＝纯数据＋占位（初始 20 血、可读、2C 起经内部写入口受控扣血〔钳制到 0〕、占支援线槽 0——"占支援线一格"落地）；
+/// 归零判定与胜负逻辑后置（本批只扣血、不判胜负）。
 /// </summary>
 public sealed class Player
 {
@@ -37,6 +39,9 @@ public sealed class Player
     /// <summary>指挥点槽（回合开始 +1、至上限封顶；保留于回合结束）。</summary>
     public int PointSlots { get; internal set; }
 
-    /// <summary>HQ 血量（初始 20；本批无修改入口）。</summary>
-    public int HqHealth { get; } = InitialHqHealth;
+    /// <summary>
+    /// HQ 血量（初始 20）。〔2C 受控变更〕由「纯数据、无修改入口」改为带内部写入口：
+    /// 攻击 HQ 结算经指挥管理器写入（实时攻击力扣减、钳制到 0；HQ 不反击、胜负判定后置）。
+    /// </summary>
+    public int HqHealth { get; internal set; } = InitialHqHealth;
 }

@@ -4,7 +4,7 @@ namespace Orc.Game.Tests;
 
 /// <summary>
 /// 验收锚点⑤：骨架场景"双人对局·两回合循环"端到端——
-/// 初始化（3 条更新）→ 回合 1 开始 → EndTurn → 回合 2（6 条更新）→ 更新序列与资源数值断言；
+/// 初始化（2A：40 张 card.load ＋ 3 条回合开始）→ 回合 1 开始 → EndTurn → 回合 2（7 条更新：含 drawn → hand.add 连发）→ 更新序列与资源数值断言；
 /// 附：回合 3（先手第二次回合）照抽（唯一例外为先手第 1 回合）、同种子＋同参数逐位一致复现。
 /// </summary>
 public class ScenarioTests
@@ -15,11 +15,14 @@ public class ScenarioTests
         var match = GameTestData.CreateStandardMatch(seed: 2026);
         using var recorder = new UpdateRecorder(match.Engine); // 订阅在 Initialize 前挂接
 
-        // ---- 初始化＝回合 1 开始（3 条更新；先手第 1 回合不抽）----
+        // ---- 初始化＝洗牌 → 加载（40 张 card.load）→ 起手装载（静默）→ 回合 1 开始（3 条；先手第 1 回合不抽）----
         await match.Initialize();
+        var expectedLoads = GameTestData.StandardDeckSize * 2;
+        Assert.Equal(expectedLoads + 3, recorder.Types.Count);
+        Assert.Equal(expectedLoads, recorder.Types.Count(t => t == GameUpdates.CardLoad));
         Assert.Equal(
             new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
-            recorder.Types);
+            recorder.Types.Skip(expectedLoads));
 
         var first = match.Players[0];
         var second = match.Players[1];
@@ -29,7 +32,7 @@ public class ScenarioTests
         Assert.Equal(5, second.Hand.Count); // 后手 5
         Assert.Equal((1, 1), (first.PointSlots, first.Points)); // 第 1 回合＝1 点
 
-        // ---- 第一循环：回合 1 先手结束 → 回合 2 后手（6 条更新）----
+        // ---- 第一循环：回合 1 先手结束 → 回合 2 后手（7 条更新：抽牌位＝drawn → hand.add 连发）----
         recorder.Clear();
         await match.EndTurn();
         Assert.Equal(
@@ -40,6 +43,7 @@ public class ScenarioTests
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
                 GameUpdates.CardDrawn,
+                GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,
             },
             recorder.Types);
@@ -64,6 +68,7 @@ public class ScenarioTests
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
                 GameUpdates.CardDrawn,
+                GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,
             },
             recorder.Types);

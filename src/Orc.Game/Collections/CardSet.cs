@@ -65,6 +65,16 @@ public sealed class CardSet : IReadOnlyList<Card>
         _items.Insert(index, card);
     }
 
+    /// <summary>
+    /// 移除指定实例（2B 加性面；离手链路使用）：存在＝移除并返回 true；不存在＝false、不抛错（幂等语义）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    public bool Remove(Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return _items.Remove(card);
+    }
+
     /// <summary>取首张并移除；返回该卡牌实例。</summary>
     /// <exception cref="InvalidOperationException">空集合（明确失败优于静默）。</exception>
     public Card Draw()

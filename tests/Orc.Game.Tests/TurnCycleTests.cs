@@ -4,7 +4,7 @@ namespace Orc.Game.Tests;
 
 /// <summary>
 /// 验收锚点②：回合循环——5 个 turn 系列更新按序广播（可订阅断言）。
-/// 覆盖：EndTurn 完整观测序列（含 card.drawn 硬性插入位置：turn.start 之后、turn.start.after 之前）、
+/// 覆盖：EndTurn 完整观测序列（含 card.drawn → card.hand.add 连发硬性插入位置：turn.start 之后、turn.start.after 之前）、
 /// 仅 turn 系列的相对顺序、抽牌例外（先手第 1 回合不抽；其余照抽）、card.drawn 载荷（{ 玩家, 卡牌实例 }）。
 /// </summary>
 public class TurnCycleTests
@@ -27,6 +27,7 @@ public class TurnCycleTests
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
                 GameUpdates.CardDrawn, // 硬性位置：turn.start 之后、turn.start.after 之前
+                GameUpdates.CardHandAdd, // 2A：drawn → hand.add 连发（粒度不同、并存；顺序 drawn 先）
                 GameUpdates.TurnStartAfter,
             },
             recorder.Types);
@@ -72,11 +73,13 @@ public class TurnCycleTests
         recorder.Clear();
         await match.EndTurn(); // 回合 2（后手首回合）：照抽 1
         Assert.Contains(GameUpdates.CardDrawn, recorder.Types);
+        Assert.Contains(GameUpdates.CardHandAdd, recorder.Types); // 2A：抽牌链路连发 drawn → hand.add
         Assert.Equal(6, match.Players[1].Hand.Count);
 
         recorder.Clear();
         await match.EndTurn(); // 回合 3（先手第二次回合）：照抽 1
         Assert.Contains(GameUpdates.CardDrawn, recorder.Types);
+        Assert.Contains(GameUpdates.CardHandAdd, recorder.Types);
         Assert.Equal(5, match.Players[0].Hand.Count);
     }
 
@@ -93,9 +96,15 @@ public class TurnCycleTests
         var drawnUpdate = recorder.Updates.Single(u => u.Type == GameUpdates.CardDrawn);
         var payload = drawnUpdate.Payload!;
         Assert.Same(match.Players[1], payload[GameUpdates.PayloadPlayer]); // 抽牌方＝后手（当前回合方）
-        var card = Assert.IsType<Orc.Cards.Card>(payload[GameUpdates.PayloadCard]);
+        // 2A 迁移：载荷 Card 实例＝三大类卡基类实例（UnitCard 等；不再是精确的引擎 Card 基类实例）
+        var card = Assert.IsAssignableFrom<Orc.Cards.Card>(payload[GameUpdates.PayloadCard]);
         Assert.Contains(card, match.Players[1].Hand); // 抽到的卡已入手牌
         Assert.StartsWith("卡", card.Name);
+
+        // 2A：hand.add 与 drawn 并存、粒度不同——载荷同卡同玩家（drawn 之后连发）
+        var handAddUpdate = recorder.Updates.Single(u => u.Type == GameUpdates.CardHandAdd);
+        Assert.Same(match.Players[1], handAddUpdate.Payload![GameUpdates.PayloadPlayer]);
+        Assert.Same(card, handAddUpdate.Payload[GameUpdates.PayloadCard]);
     }
 
     [Fact]

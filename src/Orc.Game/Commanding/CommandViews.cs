@@ -1,0 +1,103 @@
+using Orc.Core;
+
+namespace Orc.Game.Commanding;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2C 指挥系统触发器视图（数据键约定＝属性名；实体类值统一为引用形态 Ref<Entity>）：
+// ①指挥触发器视图（Card＝指挥单位引用、Player＝行动方、FlowBox＝流程箱）；
+// ②单位移动触发器视图（Unit / OldPosition / NewPosition——均引用、与 unit.position.changed 载荷同口径）；
+// ③单位攻击触发器视图（Attacker / Target——目标引用：单位目标＝单位引用、HQ 目标＝HQ 占位槽位引用）；
+// ④造成攻击伤害触发器视图（Attacker / Target / Resolution——同一承载供伏击判定读取）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// 指挥触发器视图（2C；一次指挥流程编排的载荷引用面）：
+/// <see cref="Card"/>＝被拖动单位引用（<c>Ref&lt;Entity&gt;</c>）、<see cref="Player"/>＝行动方（＝单位所有者＝当前回合方）、
+/// <see cref="FlowBox"/>＝流程箱（结局出参载体；框架内部）。
+/// 全可选（可从任意载荷绑定）；数据键＝属性名。
+/// </summary>
+[ContextView]
+public class CommandTriggerView
+{
+    /// <summary>指挥单位引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向单位卡实例）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Card { get; set; }
+
+    /// <summary>行动方（可选；值＝Player 对象引用）。</summary>
+    [Optional]
+    [Read]
+    public virtual object? Player { get; set; }
+
+    /// <summary>指挥流程箱（可选；值＝<see cref="CommandFlowBox"/>——结局出参承载）。</summary>
+    [Optional]
+    [Read]
+    public virtual object? FlowBox { get; set; }
+}
+
+/// <summary>
+/// 单位移动触发器视图（2C）：<see cref="Unit"/>＝移动单位引用；<see cref="OldPosition"/>＝原槽位引用；
+/// <see cref="NewPosition"/>＝目标槽位引用（分派时选中的目标空槽）——均引用形态、与 unit.position.changed 载荷同口径。
+/// 全可选；数据键＝属性名。
+/// </summary>
+[ContextView]
+public class UnitMoveTriggerView
+{
+    /// <summary>移动单位引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向单位卡实例）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Unit { get; set; }
+
+    /// <summary>原槽位引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向 Slot）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? OldPosition { get; set; }
+
+    /// <summary>目标槽位引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向 Slot）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? NewPosition { get; set; }
+}
+
+/// <summary>
+/// 单位攻击触发器视图（2C）：<see cref="Attacker"/>＝攻击者引用；<see cref="Target"/>＝攻击目标引用
+/// （单位目标＝单位引用；HQ 目标＝HQ 占位槽位引用〔可解析出玩家〕——两分支可判别、与候选引用面同源）。
+/// 全可选；数据键＝属性名。
+/// </summary>
+[ContextView]
+public class UnitAttackTriggerView
+{
+    /// <summary>攻击者引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向单位卡实例）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Attacker { get; set; }
+
+    /// <summary>攻击目标引用（可选；值＝<c>Ref&lt;Entity&gt;</c>——单位引用或 HQ 占位槽位引用）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Target { get; set; }
+}
+
+/// <summary>
+/// 「造成攻击伤害」触发器视图（2C；与对局同生的内置共享流程触发器——每次单位 vs 单位攻击结算必经其执行）：
+/// <see cref="Attacker"/>＝攻击者引用；<see cref="Target"/>＝被攻击单位引用（同一承载——与攻击触发器数据同源，
+/// 供伏击判定读取）；<see cref="Resolution"/>＝结算记录（伏击改写标志）。全可选；数据键＝属性名。
+/// </summary>
+[ContextView]
+public class AttackDamageTriggerView
+{
+    /// <summary>攻击者引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向单位卡实例）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Attacker { get; set; }
+
+    /// <summary>被攻击单位引用（可选；值＝<c>Ref&lt;Entity&gt;</c> 指向单位卡实例）。</summary>
+    [Optional]
+    [Read]
+    public virtual Ref<Entity>? Target { get; set; }
+
+    /// <summary>攻击伤害结算记录（可选；值＝<see cref="AttackDamageResolution"/>）。</summary>
+    [Optional]
+    [Read]
+    public virtual object? Resolution { get; set; }
+}

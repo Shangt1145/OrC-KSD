@@ -6,7 +6,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 卡牌库与名单实例化：注册/查询读面、重复注册拒绝、实例化装配（名称＋基础数据组件）、
+/// 卡牌库与名单实例化：注册/查询读面、重复注册拒绝、实例化装配（名称＋拆分数据组件〔指挥点花费＋对战〕）、
 /// 边界清单④（Instantiate 三情形：空→空集 / 未注册→抛错 / 重复 id→独立实例并保序）。
 /// </summary>
 public class CardLibraryTests
@@ -103,17 +103,24 @@ public class CardLibraryTests
     }
 
     [Fact]
-    public void Instantiate_Assigns_Name_And_Base_Stats_Component_From_Definition()
+    public void Instantiate_Assigns_Name_And_Split_Data_Components_From_Definition() // 2A 迁移：四合一 → 拆分两组件（指挥点花费＋对战）
     {
         var library = CreateLibrary(out _);
         var set = new CardList(new[] { "c03" }).Instantiate(library);
 
         var card = set[0];
         Assert.Equal("卡03", card.Name); // 名称取自定义
-        var stats = card.GetData<CardStatsData>(); // 基础数据组件（引擎 AddData/GetData 体系）
-        Assert.Equal(3, stats.DeployCost);
+        var cost = card.GetData<CommandPointCostData>(); // 指挥点花费（单列）
+        Assert.Equal(3, cost.DeployCost);
+        var stats = card.GetData<BattleStatsData>(); // 对战（行动费 / 攻 / 防——初始值）
         Assert.Equal(4, stats.OperateCost);
         Assert.Equal(5, stats.Attack);
         Assert.Equal(6, stats.Defense);
+    }
+
+    [Fact]
+    public void Four_In_One_Stats_Type_Is_Retired() // 2A：四合一退役（类型不再存在——同一数据无双真源）
+    {
+        Assert.Null(Type.GetType("Orc.Game.Cards.CardStatsData, Orc.Game"));
     }
 }

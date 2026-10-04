@@ -1,0 +1,90 @@
+using Orc.Core;
+using Orc.Game.Players;
+using Orc.Game.Triggers;
+
+namespace Orc.Game.Cards;
+
+/// <summary>
+/// 指令卡（三大类之一）：打出即生效的主动效果载体（2B 打出链就绪）。
+/// 数据组件装配（E 区差异化）：＝指挥点花费（基类）；「指令无其他组件」——不装配对战/单位/指挥组件。
+/// 触发器（2B）：
+/// ①预打出触发器（费用校验）：默认无交互、零更新；装配方可经 <see cref="AddPrePlayHandler"/> 加 handler 捕获引用
+///   （以 targeter 产出为主要场景、不强制唯一；捕获经 <see cref="CardTriggerView.CaptureBox"/> 提交；
+///   可经捕获箱 CancelPrePlay 请求取消预打出——预打出段失败/取消 ⇒ 打出不发生）；
+/// ②打出触发器（费用校验——外层复验）：默认链事件＝【打出宣告〔card.played〕→（主动 handler 集，装配期注册）
+///   → 打出收尾〔扣费→离手〕】；object? 参数（<see cref="CardTriggerView.Argument"/>）承载预打出捕获结果
+///   （单引用/列表/targeter 皆可）；主动 handler 集经 <see cref="AddActiveHandler"/> 装配注册
+///   （登记序触发；异常沿用引擎隔离——记录并继续）。
+/// 加载模板与其余装配沿用基类（<see cref="CardBase"/>）；持久化重建经基类扩展点。
+/// </summary>
+public class CommandCard : CardBase
+{
+    /// <summary>打出收尾事件优先级（默认区段）：主动 handler 用默认 0——位于「打出宣告」与「打出收尾」之间。</summary>
+    private const int PlayFinalizePriority = 100;
+
+    private readonly LogicEngine _chainEngine;
+
+    /// <summary>创建指令卡（触发器与默认链事件在构造期装配）。</summary>
+    /// <exception cref="ArgumentNullException">engine 或 definition 为 null。</exception>
+    public CommandCard(LogicEngine engine, CardDefinition definition)
+        : base(engine, definition)
+    {
+        _chainEngine = engine;
+
+        PrePlayTrigger = new CostCheckTrigger("预打出触发器", this);
+        PlayTrigger = new CostCheckTrigger("打出触发器", this);
+
+        // 默认链事件：宣告（优先 0）→（主动 handler 集按注册序）→ 收尾（优先 100）。
+        PlayTrigger.Register("打出宣告", HandlePlayAnnounceAsync);
+        PlayTrigger.Register("打出收尾", HandlePlayFinalizeAsync, PlayFinalizePriority);
+    }
+
+    /// <summary>预打出触发器（费用校验：指挥点验证；装配方 handler 捕获集经此挂载）。</summary>
+    public Trigger<CardTriggerView> PrePlayTrigger { get; }
+
+    /// <summary>打出触发器（费用校验＋默认链：复验＋宣告＋主动 handler 集＋收尾）。</summary>
+    public Trigger<CardTriggerView> PlayTrigger { get; }
+
+    /// <summary>
+    /// 预打出 handler 装配入口（增强入口；装配/加载阶段注册——本批不设运行期动态注册）：
+    /// 注册为预打出触发器事件（登记序触发；异常沿用引擎隔离）；handler 经视图 <c>CaptureBox</c> 提交捕获值
+    /// （或经 targeter 交互后提交）。返回注册句柄（可用于撤销）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">handler 为 null。</exception>
+    /// <exception cref="ArgumentException">name 为 null/空白。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">priority 越界。</exception>
+    public TriggerRegistration AddPrePlayHandler(
+        string name, Func<CardTriggerView, Context, CancellationToken, Task> handler, int priority = 0)
+        => PrePlayTrigger.Register(name, handler, priority);
+
+    /// <summary>
+    /// 主动 handler 集装配入口（增强入口；装配/加载阶段注册——本批不设运行期动态注册）：
+    /// 注册为打出触发器事件（登记序触发；默认优先级——位于「打出宣告」与「打出收尾」之间；
+    /// 异常沿用引擎隔离〔记录并继续〕）；handler 经视图 <c>Argument</c> 读取预打出捕获结果。
+    /// 返回注册句柄（可用于撤销）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">handler 为 null。</exception>
+    /// <exception cref="ArgumentException">name 为 null/空白。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">priority 越界。</exception>
+    public TriggerRegistration AddActiveHandler(
+        string name, Func<CardTriggerView, Context, CancellationToken, Task> handler, int priority = 0)
+        => PlayTrigger.Register(name, handler, priority);
+
+    /// <summary>打出宣告（默认链首步）：发 card.played（空载荷；先于主动 handler 集）。</summary>
+    private Task HandlePlayAnnounceAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+        => GameUpdates.EmitCardPlayed(_chainEngine, ct);
+
+    /// <summary>打出收尾（默认链末步）：扣费（恰一次）→ 离手（扣费之后；失败/取消时留手——由链前验证保证）。</summary>
+    private Task HandlePlayFinalizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    {
+        if (view.Card is not CommandCard card || view.Player is not Player player)
+        {
+            ctx.Interrupt(); // 载荷缺失（结构性错误）：收尾不发生
+            return Task.CompletedTask;
+        }
+
+        player.Points -= card.GetData<CommandPointCostData>().DeployCost;
+        player.Hand.Remove(card);
+        return Task.CompletedTask;
+    }
+}

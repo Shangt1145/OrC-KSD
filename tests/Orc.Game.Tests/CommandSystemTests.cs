@@ -1,0 +1,459 @@
+using Orc.Core;
+using Orc.Game;
+using Orc.Game.Cards;
+using Orc.Game.Commanding;
+using Orc.Game.Players;
+using Orc.Game.Targeting;
+using Xunit;
+
+namespace Orc.Game.Tests;
+
+/// <summary>
+/// 2C 验收①（指挥系统）：移动（仅推进：支援线→前线＋扣行动费＋两 bool 外层更新）；取消＝零副作用；
+/// 发起拒绝全集（非己方回合 / 归属无效 / 已死亡 / 两动作均不可用——含费用不足动作级置黑）；
+/// 「两 bool 只在外层更新」的可观测窗口（更新发射时 bool 未更新、费未扣）；内层触发器直接执行不写 bool/不扣费；
+/// 可用性查询纯函数语义；发起拒绝不进入交互（无 targeter 请求）。
+/// </summary>
+public class CommandSystemTests
+{
+    [Fact]
+    public async Task Move_Advances_To_Front_Line_Deducts_Cost_And_Updates_Flags()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        var support = match.Battlefield.PlayerASupportLine;
+        var front = match.Battlefield.FrontLine;
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, front[0].Ref);
+
+        // 成功：旧槽移除 → 放入目标空槽（原槽变为空槽）；扣 1 点行动费；两 bool 外层更新（步兵：二选一全清）。
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        Assert.True(support[1].IsEmpty);
+        Assert.Same(unit, front[0].Occupant);
+        Assert.Same(front[0], unit.GetData<UnitStateData>().Position);
+        Assert.Equal(0, player.Points);
+        Assert.False(unit.GetData<CommandData>().CanMove);
+        Assert.False(unit.GetData<CommandData>().CanAttack);
+    }
+
+    [Fact]
+    public async Task Move_Emits_PositionChanged_Once_With_Frozen_Payload()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        using var recorder = new UpdateRecorder(match.Engine);
+        var oldSlot = match.Battlefield.PlayerASupportLine[1];
+        var newSlot = match.Battlefield.FrontLine[2];
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, newSlot.Ref);
+
+        // unit.position.changed 恰一次（移动专属）；载荷 {Unit, OldPosition, NewPosition}——均槽位引用。
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        Assert.Equal(new[] { GameUpdates.UnitPositionChanged }, recorder.Types);
+        var payload = recorder.Updates[0].Payload!;
+        Assert.Same(unit, payload[GameUpdates.PayloadUnit]);
+        Assert.Same(oldSlot, payload[GameUpdates.PayloadOldPosition]);
+        Assert.Same(newSlot, payload[GameUpdates.PayloadNewPosition]);
+    }
+
+    [Fact]
+    public async Task Move_Observation_Window_Shows_Flags_And_Points_Not_Yet_Updated()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        // 更新回调内的中间态探针：槽位已变更，但「两 bool 未更新、行动费未扣」（只在外层更新的预期观测窗口）。
+        var probes = new List<(bool CanMove, bool CanAttack, int Points)>();
+        using var probe = match.Engine.Subscribe((type, _, _) =>
+        {
+            if (type == GameUpdates.UnitPositionChanged)
+            {
+                var command = unit.GetData<CommandData>();
+                probes.Add((command.CanMove, command.CanAttack, player.Points));
+            }
+
+            return Task.CompletedTask;
+        });
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, match.Battlefield.FrontLine[0].Ref);
+
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        var state = Assert.Single(probes);
+        Assert.True(state.CanMove);   // 发射时点：bool 尚未更新
+        Assert.True(state.CanAttack); // 同上
+        Assert.Equal(1, state.Points); // 发射时点：行动费尚未扣
+        // 流程返回后：外层收尾已完成。
+        Assert.False(unit.GetData<CommandData>().CanMove);
+        Assert.Equal(0, player.Points);
+    }
+
+    [Fact]
+    public async Task Move_By_Tank_Clears_Only_CanMove()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.TankId, 1);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, match.Battlefield.FrontLine[0].Ref);
+
+        // 坦克双动：移动仅清 CanMove；CanAttack 保留（两动作独立清位）。
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        Assert.False(unit.GetData<CommandData>().CanMove);
+        Assert.True(unit.GetData<CommandData>().CanAttack);
+    }
+
+    [Fact]
+    public async Task Move_Cancel_Leaves_Zero_Side_Effects()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        using var recorder = new UpdateRecorder(match.Engine);
+        var support = match.Battlefield.PlayerASupportLine;
+
+        var result = await CommandTestKit.CancelCommandAsync(match, bridge, unit);
+
+        // 取消（拖回）＝零副作用：不发更新、不扣费、不清位、槽位不变。
+        Assert.Equal(CommandResultStatus.Cancelled, result.Status);
+        Assert.Null(result.FailureReason);
+        Assert.Same(unit, support[1].Occupant);
+        Assert.Equal(1, player.Points);
+        Assert.True(unit.GetData<CommandData>().CanMove);
+        Assert.True(unit.GetData<CommandData>().CanAttack);
+        Assert.Empty(recorder.Updates);
+        Assert.Single(bridge.Begins); // 一次拖拽＝一次请求、一次终局
+        Assert.Single(bridge.CollectCalls);
+    }
+
+    [Fact]
+    public async Task Move_Is_Blocked_For_Front_Line_Unit_And_Rejects_When_No_Action()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnFrontAsync(match, player, CommandTestKit.InfantryId, 0);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        // 仅推进：前线单位无移动候选；且无合法攻击目标 → 两动作均不可用 → 发起拒绝（不进入交互）。
+        var report = match.CommandManager.GetCommandAvailability(unit);
+        Assert.False(report.Move.CanUse);
+        Assert.Equal(CommandBlockReason.NoCandidates, report.Move.BlockReason);
+        Assert.False(report.Attack.CanUse);
+        Assert.Equal(CommandBlockReason.NoCandidates, report.Attack.BlockReason);
+
+        var result = await match.CommandManager.BeginCommandAsync(unit);
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.NoActionAvailable, result.FailureReason);
+        Assert.Empty(bridge.Begins);
+        Assert.Empty(bridge.CollectCalls);
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_NonOwnerTurn_Without_Interaction()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var playerA = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        await match.EndTurn(); // 切到玩家 B 回合
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        var report = match.CommandManager.GetCommandAvailability(unit);
+        Assert.Equal(CommandBlockReason.NonOwnerTurn, report.IneligibleReason);
+
+        var result = await match.CommandManager.BeginCommandAsync(unit);
+
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.NonOwnerTurn, result.FailureReason);
+        Assert.Empty(bridge.Begins); // 发起拒绝：不进入交互、零副作用
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_Owner_Missing()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        // 加入路径不要求归属：构造无主已单位化单位（Owner＝null）。
+        var unit = (UnitCard)match.CardLibrary.Instantiate(CommandTestKit.InfantryId);
+        var joinResult = await match.PlayManager.JoinUnitAsync(unit, match.Battlefield.PlayerASupportLine[2]);
+        Assert.Equal(PlayResultStatus.Success, joinResult.Status);
+        CommandTestKit.Activate(unit);
+
+        var result = await match.CommandManager.BeginCommandAsync(unit);
+
+        // 无归属单位不可被指挥（Owner=null → 指挥发起校验拒绝）。
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.OwnerInvalid, result.FailureReason);
+        Assert.Empty(bridge.Begins);
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_Dead_Unit()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var playerA = match.Players[0];
+        var playerB = match.Players[1];
+
+        // A 的脆皮（攻 1 / 防 2）攻击 B 的巨兽（攻 6 / 防 7）→ 被反击致死。
+        var weak = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1);
+        var beast = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.BeastId, 0);
+        CommandTestKit.Activate(weak);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        var killResult = await CommandTestKit.RunCommandAsync(match, bridge, weak, beast.Ref);
+        Assert.Equal(CommandResultStatus.Success, killResult.Status);
+        Assert.True(weak.GetData<UnitStateData>().IsDestroyed);
+
+        var result = await match.CommandManager.BeginCommandAsync(weak);
+
+        // 已死亡＝发起拒绝（尸体不可被指挥）。
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.UnitDead, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_When_Both_Actions_Unavailable_By_Flags()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        // 常态初值：部署/加入时 false/false（本回合不可行动）。
+
+        var result = await match.CommandManager.BeginCommandAsync(unit);
+
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.NoActionAvailable, result.FailureReason);
+        Assert.Empty(bridge.Begins);
+    }
+
+    [Fact]
+    public async Task Begin_Rejects_Point_Shortage_As_Action_Level_Block()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0]; // 1 点
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.CostlyId, 1); // 行动费 2
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        // 费用不足＝动作级拒绝（整体置黑；非逐目标筛选）——两动作均不可用 → 发起拒绝。
+        var report = match.CommandManager.GetCommandAvailability(unit);
+        Assert.False(report.Move.CanUse);
+        Assert.Equal(CommandBlockReason.PointShortage, report.Move.BlockReason);
+        Assert.False(report.Attack.CanUse);
+        Assert.Equal(CommandBlockReason.PointShortage, report.Attack.BlockReason);
+
+        var result = await match.CommandManager.BeginCommandAsync(unit);
+
+        Assert.Equal(CommandResultStatus.Failed, result.Status);
+        Assert.Equal(CommandFailureReason.NoActionAvailable, result.FailureReason);
+        Assert.Empty(bridge.Begins);
+        Assert.Equal(1, player.Points); // 零副作用
+    }
+
+    [Fact]
+    public async Task Move_Inner_Trigger_Does_Not_Write_Flags_Or_Deduct_Cost()
+    {
+        var match = CommandTestKit.CreateCommandMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        using var recorder = new UpdateRecorder(match.Engine);
+        var oldSlot = match.Battlefield.PlayerASupportLine[1];
+        var newSlot = match.Battlefield.FrontLine[0];
+
+        // 直接驱动内层移动触发器（越层）：执行段＝槽位变更＋发射更新；「两 bool 不写、费用不扣」——只在外层更新。
+        var stream = await match.CommandManager.UnitMoveTrigger.InvokeAsync(
+            match.Engine,
+            new Dictionary<string, object?>
+            {
+                [CommandDataKeys.Unit] = unit.Ref,
+                [CommandDataKeys.OldPosition] = oldSlot.Ref,
+                [CommandDataKeys.NewPosition] = newSlot.Ref,
+            });
+
+        Assert.Equal(ExecutionOutcome.Normal, stream.Outcome);
+        Assert.Same(unit, newSlot.Occupant);
+        Assert.True(unit.GetData<CommandData>().CanMove);  // 内层不写
+        Assert.True(unit.GetData<CommandData>().CanAttack); // 内层不写
+        Assert.Equal(1, player.Points);                     // 内层不扣费
+        Assert.Equal(new[] { GameUpdates.UnitPositionChanged }, recorder.Types);
+    }
+
+    [Fact]
+    public async Task Availability_Query_Is_Pure_And_Shares_Source_With_Flow()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        CommandTestKit.Activate(unit);
+        using var recorder = new UpdateRecorder(match.Engine);
+
+        // 纯查询：无副作用、不发更新、不启动交互、不改变任何状态（可被 UI 预览高频调用）。
+        var first = match.CommandManager.GetCommandAvailability(unit);
+        var second = match.CommandManager.GetCommandAvailability(unit);
+
+        Assert.True(first.AnyActionAvailable);
+        Assert.Equal(second.Move.Candidates, first.Move.Candidates); // 与流程内部同源（稳定）
+        Assert.Empty(recorder.Updates);
+        Assert.Empty(bridge.Begins);
+        Assert.Equal(1, player.Points);
+        Assert.True(unit.GetData<CommandData>().CanMove);
+    }
+
+    [Fact]
+    public async Task Move_Candidates_Are_All_Front_Line_Empty_Slots()
+    {
+        var match = CommandTestKit.CreateCommandMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, player, CommandTestKit.InfantryId, 1);
+        await CommandTestKit.PrepareOnFrontAsync(match, match.Players[1], CommandTestKit.InfantryId, 0); // 占一个前线槽
+        CommandTestKit.Activate(unit);
+        var front = match.Battlefield.FrontLine;
+
+        var report = match.CommandManager.GetCommandAvailability(unit);
+
+        // 移动候选＝前线任意空槽（不被邻位动态规则约束）；已占槽不在。
+        Assert.True(report.Move.CanUse);
+        var expected = new[] { front[1].Ref, front[2].Ref, front[3].Ref, front[4].Ref };
+        Assert.Equal(expected, report.Move.Candidates);
+    }
+
+    [Fact]
+    public async Task Interaction_Candidates_Are_Union_And_Off_Candidates_Are_Rejected_Until_Valid()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var playerA = match.Players[0];
+        var playerB = match.Players[1];
+        var unit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
+        var enemyOnFront = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 3);
+        var enemyOnSupport = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 2);
+        CommandTestKit.Activate(unit);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        var front = match.Battlefield.FrontLine;
+
+        var task = match.CommandManager.BeginCommandAsync(unit);
+        var (description, responder) = await bridge.WaitForNextBeginAsync();
+
+        // 候选＝可用动作的并集：移动（前线全部空槽）＋攻击（步兵视角＝仅敌前线单位；敌支援线不计、HQ（支援线）不可达）。
+        var expected = front.Where(slot => slot.IsEmpty).Select(slot => slot.Ref)
+            .Concat(new[] { enemyOnFront.Ref })
+            .ToArray();
+        Assert.Equal(expected, description.AllowedTargets);
+        Assert.DoesNotContain(enemyOnSupport.Ref, description.AllowedTargets);
+        Assert.DoesNotContain(match.Battlefield.PlayerBSupportLine[0].Ref, description.AllowedTargets);
+
+        // 无效目标点击不构成确认（交互请求继续等待）——提交候选面之外引用被拒绝。
+        var rejected = responder.Complete(
+            description.RequestId,
+            TargeterTestKit.Selection(TargetSlot.DefaultName, enemyOnSupport.Ref));
+        Assert.False(rejected);
+
+        // 纠正后提交合法目标（敌方前线单位）→ 确认 → 攻击链执行。
+        var accepted = responder.Complete(
+            description.RequestId,
+            TargeterTestKit.Selection(TargetSlot.DefaultName, enemyOnFront.Ref));
+        Assert.True(accepted);
+        var result = await task;
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+    }
+
+    [Fact]
+    public async Task Attack_Unit_Resolves_Mutual_Damage_And_Finalizes_Flags()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var playerA = match.Players[0];
+        var playerB = match.Players[1];
+        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 1);
+        var target = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 2);
+        CommandTestKit.Activate(attacker);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, target.Ref);
+
+        // 互伤（同时结算、以互扣前实时值为基准）：目标 5-2=3、攻击者 5-2=3；收尾：扣费＋两 bool（步兵二选一全清）。
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        Assert.Equal(3, target.GetData<UnitStateData>().Defense);
+        Assert.Equal(3, attacker.GetData<UnitStateData>().Defense);
+        Assert.False(attacker.GetData<CommandData>().CanAttack);
+        Assert.False(attacker.GetData<CommandData>().CanMove);
+        Assert.Equal(0, playerA.Points);
+    }
+
+    [Fact]
+    public async Task Attack_Hq_Deducts_Health_Without_Counterattack()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = CommandTestKit.CreateCommandMatch(bridge);
+        await match.Initialize();
+        var playerA = match.Players[0];
+        var playerB = match.Players[1];
+        var attacker = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0);
+        CommandTestKit.Activate(attacker);
+        bridge.CollectScript = CommandTestKit.AllRefsScript(match);
+        var enemyHqSlot = match.Battlefield.PlayerBSupportLine[0];
+
+        var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, enemyHqSlot.Ref);
+
+        // HQ 简路：伤害＝攻击者实时攻击力；HQ 不反击（攻击者不受伤害）；收尾照常。
+        Assert.Equal(CommandResultStatus.Success, result.Status);
+        Assert.Equal(Player.InitialHqHealth - 2, playerB.HqHealth);
+        Assert.Equal(5, attacker.GetData<UnitStateData>().Defense);
+        Assert.False(attacker.GetData<CommandData>().CanAttack);
+        Assert.Equal(0, playerA.Points);
+    }
+
+    [Fact]
+    public async Task Ununitized_Card_Fails_Fast_On_Command()
+    {
+        var match = CommandTestKit.CreateCommandMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = (UnitCard)match.CardLibrary.Instantiate(CommandTestKit.InfantryId);
+        await unit.LoadAsync(player); // 未单位化（未加入战场）
+
+        // 装配性错误：未单位化卡不能驱动指挥（fail-fast 明确异常）。
+        await Assert.ThrowsAsync<InvalidOperationException>(() => match.CommandManager.BeginCommandAsync(unit));
+        Assert.Throws<InvalidOperationException>(() => match.CommandManager.GetCommandAvailability(unit));
+    }
+}

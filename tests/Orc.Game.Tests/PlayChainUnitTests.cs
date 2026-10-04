@@ -1,0 +1,242 @@
+using Orc.Core;
+using Orc.Game;
+using Orc.Game.Cards;
+using Orc.Game.Targeting;
+using Orc.Game.Triggers;
+using Xunit;
+
+namespace Orc.Game.Tests;
+
+/// <summary>
+/// 2B 验收①②（单位）：预打出（合法性/交互成功/取消；拒绝不发起请求、不进入交互、不发更新）、
+/// 出链（验证/部署/单位化/扣费；仅部署扣费）、复验失败（零副作用＋留痕）、直接驱动防御（占槽/重复单位化）、
+/// 未加载卡 fail-fast。断言对象＝被选中的空槽位（槽位对象断言）。
+/// </summary>
+public class PlayChainUnitTests
+{
+    [Fact]
+    public async Task Unit_PrePlay_Rejected_When_Not_Enough_Points()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = PlayChainTestKit.CreatePlayMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0]; // 回合 1 先手（点数 1）
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player, PlayChainTestKit.UnitCostlyId); // 花费 5
+        using var recorder = new UpdateRecorder(match.Engine);
+
+        var result = await match.PlayManager.BeginUnitPrePlayAsync(unit);
+
+        // 点数不足＝开始拒绝：不发起 targeter 请求、不进入交互、不发任何更新、卡留手。
+        Assert.Equal(PlayResultStatus.Failed, result.Status);
+        Assert.Equal(PlayFailureReason.PrePlayPointShortage, result.FailureReason);
+        Assert.Empty(bridge.CollectCalls);
+        Assert.Empty(bridge.Begins);
+        Assert.Empty(recorder.Updates);
+        Assert.Contains(unit, player.Hand);
+        Assert.False(unit.TryGetData<UnitStateData>(out _));
+        Assert.Equal(1, player.Points);
+    }
+
+    [Fact]
+    public async Task Unit_PrePlay_Rejected_When_No_Available_Slots()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = PlayChainTestKit.CreatePlayMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player); // 花费 1（点数足够）
+        var line = match.Battlefield.PlayerASupportLine;
+        for (var i = 1; i < line.Count; i++)
+        {
+            line[i].Place(new object()); // 占满己方支援线空槽 → 邻位候选为空
+        }
+
+        using var recorder = new UpdateRecorder(match.Engine);
+        var result = await match.PlayManager.BeginUnitPrePlayAsync(unit);
+
+        // 无可用空槽＝预打出不可开始（原因可区分于点数不足）：不进入交互、不发任何更新。
+        Assert.Equal(PlayResultStatus.Failed, result.Status);
+        Assert.Equal(PlayFailureReason.PrePlayNoAvailableSlots, result.FailureReason);
+        Assert.Empty(bridge.Begins);
+        Assert.Empty(recorder.Updates);
+        Assert.Contains(unit, player.Hand);
+        Assert.Equal(1, player.Points);
+    }
+
+    [Fact]
+    public async Task Unit_PrePlay_Confirm_Deploys_Through_Interaction()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = PlayChainTestKit.CreatePlayMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var line = match.Battlefield.PlayerASupportLine;
+        bridge.CollectScript = PlayChainTestKit.AllSlotsCandidatesScript(match); // 前端提交超集（全槽位）；后端收敛
+        using var recorder = new UpdateRecorder(match.Engine);
+
+        var task = match.PlayManager.BeginUnitPrePlayAsync(unit);
+        var (description, responder) = await bridge.WaitForNextBeginAsync();
+
+        // 候选＝己方支援线空槽位（邻位规则计算；初始＝HQ 邻位槽 1）；单选槽。
+        Assert.Equal(new[] { line[1].Ref }, description.AllowedTargets);
+        Assert.Equal(TargetSlot.DefaultName, description.Slots[0].Name);
+        Assert.Equal(1, description.Slots[0].Min);
+        Assert.Equal(1, description.Slots[0].Max);
+
+        // 确认（选中空槽位）→ 自动衔接打出链。
+        var target = line[1];
+        Assert.True(responder.Complete(description.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, target.Ref)));
+        var result = await task;
+
+        Assert.Equal(PlayResultStatus.Success, result.Status);
+        // 部署链：单位化（组件挂载：位置＝槽位、已毁＝false、类型空列表、三实时值＝对战组件值）＋槽位占用。
+        var state = unit.GetData<UnitStateData>();
+        Assert.Same(target, state.Position);
+        Assert.False(state.IsDestroyed);
+        Assert.Empty(state.UnitTypes);
+        Assert.Equal(1, state.OperateCost);
+        Assert.Equal(2, state.Attack);
+        Assert.Equal(3, state.Defense);
+        var command = unit.GetData<CommandData>();
+        Assert.False(command.CanMove);
+        Assert.False(command.CanAttack);
+        Assert.Same(unit, target.Occupant);
+        // 收尾：仅部署扣费（恰一次）＋离手。
+        Assert.Equal(0, player.Points);
+        Assert.DoesNotContain(unit, player.Hand);
+        Assert.NotEmpty(recorder.Updates);
+    }
+
+    [Fact]
+    public async Task Unit_PrePlay_Cancel_Leaves_Zero_Side_Effects()
+    {
+        var bridge = new MockTargeterBridge();
+        var match = PlayChainTestKit.CreatePlayMatch(bridge);
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var line = match.Battlefield.PlayerASupportLine;
+        bridge.CollectScript = PlayChainTestKit.AllSlotsCandidatesScript(match);
+        using var recorder = new UpdateRecorder(match.Engine);
+
+        var task = match.PlayManager.BeginUnitPrePlayAsync(unit);
+        var (description, responder) = await bridge.WaitForNextBeginAsync();
+
+        // 拖回取消（交互取消路径）→ 终止预打出。
+        Assert.True(responder.Cancel(description.RequestId));
+        var result = await task;
+
+        // 取消后可观测要求：不发任何游戏更新、卡仍在手牌、无费用扣除、无槽位/组件变化。
+        Assert.Equal(PlayResultStatus.Cancelled, result.Status);
+        Assert.Null(result.FailureReason);
+        Assert.NotNull(result.Targeting);
+        Assert.Empty(recorder.Updates);
+        Assert.Contains(unit, player.Hand);
+        Assert.Equal(1, player.Points);
+        Assert.True(line[1].IsEmpty);
+        Assert.False(unit.TryGetData<UnitStateData>(out _));
+    }
+
+    [Fact]
+    public async Task Unit_Play_Direct_Drive_Rejects_Occupied_Slot()
+    {
+        var match = PlayChainTestKit.CreatePlayMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var occupied = match.Battlefield.FrontLine[2];
+        occupied.Place(new object());
+        using var recorder = new UpdateRecorder(match.Engine);
+
+        var result = await match.PlayManager.PlayUnitAsync(unit, occupied);
+
+        // 防御性前置（直接驱动）：目标槽位非空＝拒绝、零副作用。
+        Assert.Equal(PlayResultStatus.Failed, result.Status);
+        Assert.Equal(PlayFailureReason.TargetSlotOccupied, result.FailureReason);
+        Assert.Empty(recorder.Updates);
+        Assert.Contains(unit, player.Hand);
+        Assert.False(unit.TryGetData<UnitStateData>(out _));
+        Assert.Equal(1, player.Points);
+    }
+
+    [Fact]
+    public async Task Unit_Play_Direct_Drive_Rejects_Already_Unitized()
+    {
+        var match = PlayChainTestKit.CreatePlayMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var line = match.Battlefield.PlayerASupportLine;
+
+        var first = await match.PlayManager.PlayUnitAsync(unit, line[1]);
+        Assert.Equal(PlayResultStatus.Success, first.Status);
+
+        using var recorder = new UpdateRecorder(match.Engine);
+        var again = await match.PlayManager.PlayUnitAsync(unit, line[2]);
+
+        // 已单位化（重复部署被拒绝）：目标槽未动、无新更新。
+        Assert.Equal(PlayResultStatus.Failed, again.Status);
+        Assert.Equal(PlayFailureReason.UnitAlreadyUnitized, again.FailureReason);
+        Assert.True(line[2].IsEmpty);
+        Assert.Empty(recorder.Updates);
+    }
+
+    [Fact]
+    public async Task Unit_Play_Verification_Rejected_On_Point_Drift_Leaves_Zero_Side_Effects()
+    {
+        var match = PlayChainTestKit.CreatePlayMatch();
+        await match.Initialize();
+        var player = match.Players[0];
+        var first = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var second = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
+        var line = match.Battlefield.PlayerASupportLine;
+
+        // 第一张正常部署（点数 1 → 0）
+        Assert.Equal(PlayResultStatus.Success, (await match.PlayManager.PlayUnitAsync(first, line[1])).Status);
+
+        using var recorder = new UpdateRecorder(match.Engine);
+        var result = await match.PlayManager.PlayUnitAsync(second, line[2]);
+
+        // 复验失败（打出段；原因与预打出阶段拒绝在阶段上可区分）：仅本次取消语义＋留痕；
+        // 零副作用——不部署、不扣费、不发更新、不离手。
+        Assert.Equal(PlayResultStatus.Failed, result.Status);
+        Assert.Equal(PlayFailureReason.PlayVerificationRejected, result.FailureReason);
+        Assert.True(line[2].IsEmpty);
+        Assert.False(second.TryGetData<UnitStateData>(out _));
+        Assert.Empty(recorder.Updates);
+        Assert.Contains(second, player.Hand);
+        Assert.Equal(0, player.Points);
+        Assert.Contains(
+            match.Engine.RootStream.Entries,
+            entry => entry.Keywords.Contains("validation:rejected"));
+    }
+
+    [Fact]
+    public async Task Unit_Play_Requires_Loaded_Owner_FailFast()
+    {
+        var match = PlayChainTestKit.CreatePlayMatch();
+        await match.Initialize();
+        var raw = (UnitCard)match.CardLibrary.Instantiate(PlayChainTestKit.UnitCheapId); // 未加载（无归属）
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => match.PlayManager.PlayUnitAsync(raw, match.Battlefield.FrontLine[0]));
+    }
+
+    [Fact]
+    public void Unit_Card_Declares_Chain_Triggers_InPlace()
+    {
+        var unit = new UnitCard(new LogicEngine(), new CardDefinition("单位", 1, 1, 1, 1));
+
+        // 2B 链触发器声明位：部署/加入/单位化（对象在位、名称/类型可断言）。
+        Assert.NotNull(unit.DeployTrigger);
+        Assert.NotNull(unit.JoinTrigger);
+        Assert.NotNull(unit.UnitizeTrigger);
+        Assert.Equal("部署触发器", unit.DeployTrigger.Name);
+        Assert.Equal("加入触发器", unit.JoinTrigger.Name);
+        Assert.Equal("单位化触发器", unit.UnitizeTrigger.Name);
+        Assert.IsAssignableFrom<Trigger<CardTriggerView>>(unit.DeployTrigger);
+        Assert.IsAssignableFrom<Trigger<CardTriggerView>>(unit.JoinTrigger);
+        Assert.IsAssignableFrom<Trigger<CardTriggerView>>(unit.UnitizeTrigger);
+    }
+}
