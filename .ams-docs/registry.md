@@ -13,7 +13,7 @@
 | 8aa8c7aa-3a93-47e7-9a29-f7c4a7a00198 | S4 组件与效果 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\8aa8c7aa-3a93-47e7-9a29-f7c4a7a00198\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | a3fdac3d-1dd8-4d51-a52e-0dad8d164ecf | S5 数据序列化、输出与测试集 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\a3fdac3d-1dd8-4d51-a52e-0dad8d164ecf\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | a23cc2f2-c9f4-4e8f-bd12-998fc3b66fa0 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\a23cc2f2-c9f4-4e8f-bd12-998fc3b66fa0\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| 游戏环境 | 需求 — 游戏环境第二批（卡牌与指挥） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\游戏环境\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 游戏环境 | 需求 — 游戏环境（KARDS 模仿） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\游戏环境\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | d4819185-df66-43bc-acef-1fbd93a2dc1b | 游戏环境第一批（对局骨架）— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\d4819185-df66-43bc-acef-1fbd93a2dc1b\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 触发器验证与Targeter | 需求 Grill 计划 — 触发器验证与 Targeter（架构改进） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器验证与Targeter\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | ffac8cc5-d756-4161-945c-21d8d7390dfa | 触发器合法性验证 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\ffac8cc5-d756-4161-945c-21d8d7390dfa\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
@@ -23,12 +23,12 @@
 | 67068e40-6143-4ca9-867d-f95843ac63b8 | 2C 指挥与词条（需求阐明记录） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\67068e40-6143-4ca9-867d-f95843ac63b8\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 25692f82-88dc-4949-9202-e64e34b1f231 | 后置项补全（Orc.Game）—— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\25692f82-88dc-4949-9202-e64e34b1f231\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 135c6dd2-072c-419b-a7ae-c84a32c9206c | 清理与术语统一（护盾删除 / 法术→指令 / BaseFlows 重命名）——需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| exp1 | 项目级业务规则 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\COMMUNICATION.md | isolate |
-| docs | 卡牌游戏触发器引擎架构文档 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\docs\初始设计文档.md | exp1 |
+| exp1 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\COMMUNICATION.md | isolate |
+| docs | kards-diy 可参考语料报告 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\docs\初始设计文档.md | exp1 |
 | kards-research | KARDS（The WWII Card Game）核心游戏规则与对局逻辑基线 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\outputs\kards-research\KARDS核心规则基线.md | outputs |
-| web-research | All rights reserved. | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\outputs\web-research\evaluate-readme.md | outputs |
+| web-research | Filament | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\outputs\web-research\evaluate-readme.md | outputs |
 | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 | 项目工作交接文档（OrC-KSD） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\工作交接.md | - |
-| 表达力缺口补全 | 实施委托链方案（第 2 批）— 阶段一（场 1-4＋X4） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\表达力缺口补全\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 表达力缺口补全 | Requirements — Orc 引擎表达力缺口补全 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\表达力缺口补全\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 07716feb-dad1-480e-bbd9-892373c9c0bf | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\07716feb-dad1-480e-bbd9-892373c9c0bf\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | ec8ea00b-448e-4127-a829-72e46954d7b8 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\ec8ea00b-448e-4127-a829-72e46954d7b8\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | bc8a820a-3ff0-429b-890a-5479c74c3083 | W1-1 G12 卡牌元数据维度 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\bc8a820a-3ff0-429b-890a-5479c74c3083\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
@@ -48,3 +48,12 @@
 | 535dfcf2-fb9e-49b4-ad2c-2867bf9299dd | 需求阐明记录 — X4 handler moding（D1 实施委托） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\535dfcf2-fb9e-49b4-ad2c-2867bf9299dd\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | e0ce9413-3f8a-40d0-ad2c-84c50ae1c5ef | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e0ce9413-3f8a-40d0-ad2c-84c50ae1c5ef\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | d5fc77d4-2efc-4abe-8135-40f12651eaec | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| verify-worktree | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\COMMUNICATION.md | d5fc77d4-2efc-4abe-8135-40f12651eaec |
+| context | 卡牌引擎（触发器系统） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\CONTEXT-MAP.md | .ams |
+| card-engine | Context | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\card-engine\CONTEXT.md | context |
+| game-environment | 游戏环境（KARDS 模仿） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\game-environment\CONTEXT.md | context |
+| github-init | Requirements — GitHub 仓库初始化与进度同步 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\github-init\implementation-grill-plan.md | context |
+| github | GitHub 同步工作 · 交接说明 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\github\交接说明.md | context |
+| orc-engine | OrcEngine（触发器引擎原型） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\orc-engine\CONTEXT.md | context |
+| targeter | Targeter 指示器（目标选择） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\targeter\CONTEXT.md | context |
+| a2546c77-266e-483d-a1fe-ebc2209648ce | A3 运行时装载修复 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\a2546c77-266e-483d-a1fe-ebc2209648ce\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
