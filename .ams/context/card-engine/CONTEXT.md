@@ -105,3 +105,9 @@
 
 
 - **验证公开面定型**（2026-10-03 · 验证委托 grill 第 3 轮确认）：命名＝Validate（public virtual bool；外部可调用；默认恒合法）；输入类型＝IReadOnlyList<Ref<Entity>>（唯一可达引用形态＝Entity.Ref；不引入接口化抽象、未来扩展走受控变更）；XML 注释同步新契约（验证调用点／绑定失败不上抛／失败标记三态／记录形态），受控变更以「旧→新」逐条汇报；注释须含无副作用与覆写约束。
+
+- **G2 术语统一映射与残留口径**（2026-10-04 · 清理委托 grill 第 2 轮确认）：『法术』/`Spell` → 『指令』/`Order`——类型族三枚（OrderFlow／OrderFlowView／OrderFlowBands）、成员（`SpellFlowView.Spell`→`Order`／`CurrentOrder`〔实现层定〕；`PayloadKeys.Spell`→`Order`〔含字面值〕）、文件名（SpellFlow.cs→OrderFlow.cs）、展示名（『施放流程』→『指令流程』）。保留层＝动作词『施放／Cast／施放链／施放结算／ICastAction』；『施法者』改中性来源表述（推荐『来源/持有者』）。残留口径＝范围内『法术』与 `Spell` 零命中（含文件名/字面值/大小写）；`CommandCard` 与 Orc 库『指令』为同一 KARDS 概念（Order），英文不齐列范围外待同步遗留。
+
+
+
+- **术语更新（2026-10-04 · 清理与术语统一委托 grill 确认）**：S4/S5 决策文本中「施放流程/SpellFlow」现名「指令流程/OrderFlow」；「法术」统一为「指令」；护盾减伤示例已自库与测试删除（S4「护盾减伤用例可选」、S5 场景 1 原含护盾的提法不再适用——场景 1 改「火球〔直接伤害〕/反制/中断」）。

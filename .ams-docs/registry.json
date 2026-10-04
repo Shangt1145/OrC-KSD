@@ -1,7 +1,7 @@
 [
   {
     "agentId": "\u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B",
-    "title": "\u9700\u6C42 Grill \u8BA1\u5212 \u2014 \u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B\u5F00\u53D1\u9636\u6BB5",
+    "title": "\u539F\u578B\u5B8C\u6210\u603B\u7ED3\u62A5\u544A\uFF08\u7528\u6237\u79BB\u7EBF\u671F\u95F4\u81EA\u4E3B\u63A8\u8FDB\u6210\u679C\uFF09",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\\u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
   },
@@ -67,7 +67,7 @@
   },
   {
     "agentId": "\u6E38\u620F\u73AF\u5883",
-    "title": "\u9700\u6C42 Grill \u8BA1\u5212 \u2014 \u6E38\u620F\u73AF\u5883\uFF08KARDS \u6A21\u4EFF\uFF09",
+    "title": "\u9700\u6C42 \u2014 \u6E38\u620F\u73AF\u5883\u7B2C\u4E8C\u6279\u00B7\u540E\u7F6E\u9879\u8865\u5168",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\\u6E38\u620F\u73AF\u5883\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
   },
@@ -112,5 +112,65 @@
     "title": "2C \u6307\u6325\u4E0E\u8BCD\u6761\uFF08\u9700\u6C42\u9610\u660E\u8BB0\u5F55\uFF09",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\67068e40-6143-4ca9-867d-f95843ac63b8\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
+  },
+  {
+    "agentId": "25692f82-88dc-4949-9202-e64e34b1f231",
+    "title": "\u540E\u7F6E\u9879\u8865\u5168\uFF08Orc.Game\uFF09\u2014\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\25692f82-88dc-4949-9202-e64e34b1f231\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
+  },
+  {
+    "agentId": "135c6dd2-072c-419b-a7ae-c84a32c9206c",
+    "title": "\u6E05\u7406\u4E0E\u672F\u8BED\u7EDF\u4E00 \u5B9E\u73B0\u8BB0\u5F55\uFF08G1 \u62A4\u76FE\u5220\u9664 / G2 \u6CD5\u672F\u2192\u6307\u4EE4 / G3 BaseFlows \u91CD\u547D\u540D\uFF09",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
+  },
+  {
+    "agentId": "exp1",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\COMMUNICATION.md",
+    "parentAgentId": "isolate"
+  },
+  {
+    "agentId": "docs",
+    "title": "\u5361\u724C\u6E38\u620F\u89E6\u53D1\u5668\u5F15\u64CE\u67B6\u6784\u6587\u6863",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\docs\\\u521D\u59CB\u8BBE\u8BA1\u6587\u6863.md",
+    "parentAgentId": "exp1"
+  },
+  {
+    "agentId": "kards-research",
+    "title": "KARDS\uFF08The WWII Card Game\uFF09\u6838\u5FC3\u6E38\u620F\u89C4\u5219\u4E0E\u5BF9\u5C40\u903B\u8F91\u57FA\u7EBF",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\outputs\\kards-research\\KARDS\u6838\u5FC3\u89C4\u5219\u57FA\u7EBF.md",
+    "parentAgentId": "outputs"
+  },
+  {
+    "agentId": "web-research",
+    "title": "Filament",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\outputs\\web-research\\evaluate-readme.md",
+    "parentAgentId": "outputs"
+  },
+  {
+    "agentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632",
+    "title": "\u9879\u76EE\u5DE5\u4F5C\u4EA4\u63A5\u6587\u6863\uFF08OrC-KSD\uFF09",
+    "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\\u5DE5\u4F5C\u4EA4\u63A5.md",
+    "parentAgentId": null
+  },
+  {
+    "agentId": "\u8868\u8FBE\u529B\u7F3A\u53E3\u8865\u5168",
+    "title": "Implementation \u2014 Orc \u5F15\u64CE\u8868\u8FBE\u529B\u7F3A\u53E3\u8865\u5168",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\\u8868\u8FBE\u529B\u7F3A\u53E3\u8865\u5168\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "07716feb-dad1-480e-bbd9-892373c9c0bf",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\07716feb-dad1-480e-bbd9-892373c9c0bf\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "ec8ea00b-448e-4127-a829-72e46954d7b8",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\ec8ea00b-448e-4127-a829-72e46954d7b8\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   }
 ]
