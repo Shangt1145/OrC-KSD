@@ -9,7 +9,7 @@ namespace Orc.Game.Collections;
 /// （<see cref="AttachInstanceAt"/> 装配 / <see cref="DrawInstance"/> 取件——「加载时实例化的卡＝对局后续使用的实例」）。
 /// 纯容器：不校验 id 格式（空白 id 的创建期校验由对局装配层负责）。
 /// 方法语义：Add / AddRange 尾部装填；Insert 指定位置插入（越界抛错）；Draw 取首张并移除（空集合抛错）；
-/// Shuffle 以传入的对局级随机源就地打乱（Fisher–Yates；集合自身不持有随机源）；
+/// Shuffle 以传入的确定性随机源（受控源形态 <see cref="IRandomSource"/>）就地打乱（Fisher–Yates；集合自身不持有随机源）；
 /// Instantiate 经卡牌库把名单转换为卡牌实例集（纯转换，不含洗牌/抽取等副作用）。
 /// </summary>
 public sealed class CardList : IReadOnlyList<string>
@@ -132,15 +132,15 @@ public sealed class CardList : IReadOnlyList<string>
         entry.Instance = instance;
     }
 
-    /// <summary>以给定随机源就地打乱（Fisher–Yates；对局级随机源经此传入、可复现）。</summary>
-    /// <exception cref="ArgumentNullException">random 为 null。</exception>
-    public void Shuffle(Random random)
+    /// <summary>以给定确定性随机源就地打乱（Fisher–Yates；对局路径经对局随机服务〔受控源形态〕传入、可复现——G8：集合不持有随机源）。</summary>
+    /// <exception cref="ArgumentNullException">source 为 null。</exception>
+    public void Shuffle(IRandomSource source)
     {
-        ArgumentNullException.ThrowIfNull(random);
+        ArgumentNullException.ThrowIfNull(source);
 
         for (var i = _items.Count - 1; i > 0; i--)
         {
-            var j = random.Next(i + 1);
+            var j = source.Next(i + 1);
             (_items[i], _items[j]) = (_items[j], _items[i]);
         }
     }

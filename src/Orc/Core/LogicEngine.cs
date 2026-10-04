@@ -10,7 +10,8 @@ namespace Orc.Core;
 /// ③流程：<see cref="AttackFlow" /> / <see cref="DamageFlow"/>（S4）与 <see cref="OrderFlow"/>（S5；承载引擎级共享的施放检查位）；
 /// ④卡牌：<see cref="Cards"/>（S5 登记读面：创建即注册、销毁清理响应时移除）与 <see cref="DestroyCard"/>（一步式销毁辅助）；
 /// ⑤宿主集成（S5 骨架）：<see cref="Bridge"/>（编译期强类型桥）与 <see cref="Subscribe"/>（运行期回调）——两通道均在更新广播（Emit）时通知；
-/// ⑥快照：<see cref="SnapshotJson"/>（单实体/全量 JSON）。
+/// ⑥快照：<see cref="SnapshotJson"/>（单实体/全量 JSON）；
+/// ⑦卡牌装载处理（S4 懒创建）：<see cref="CardPlacedTrigger"/> / <see cref="CardCleanupTrigger"/>（内置事件注册句柄供给面）。
 /// 允许并主张多实例（每实例独立总线、总流与卡牌登记）；无全局单例；链上执行恒随「调用时显式传入的引擎引用」。
 /// engine.Emit 为 <see cref="Bus.Emit"/> 的便捷转发（完全一致、纯转发：含入流目标流判定）。
 /// </summary>
@@ -70,6 +71,18 @@ public sealed class LogicEngine
 
     /// <summary>移除卡牌登记（S5；销毁清理响应调用；幂等——重复移除＝无操作；内部使用）。</summary>
     internal void UnregisterCard(Card card) => _cards.Remove(card);
+
+    /// <summary>
+    /// 「卡牌放置处理器」触发器（S4 装载链内置件；懒创建——首次创建卡牌时装配，null＝尚未创建）。
+    /// 用途：内置事件（「放置处理」）的寻址面——注册项句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（moding（逻辑替换）/撤销等场景）。
+    /// </summary>
+    public Trigger<CardEventView>? CardPlacedTrigger => _cardLoadout?.PlacedTrigger;
+
+    /// <summary>
+    /// 「卡牌清理处理器」触发器（S4 装载链内置件；懒创建——首次创建卡牌时装配，null＝尚未创建）。
+    /// 用途：内置事件（「清理处理」）的寻址面——注册项句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（moding（逻辑替换）/撤销等场景）。
+    /// </summary>
+    public Trigger<CardEventView>? CardCleanupTrigger => _cardLoadout?.CleanupTrigger;
 
     // ---------- ⑤宿主集成（S5 骨架） ----------
 

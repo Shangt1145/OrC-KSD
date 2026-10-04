@@ -8,6 +8,34 @@ public enum TargetSlotKind
 
     /// <summary>多选（min..max 范围约束）。</summary>
     MultiSelect,
+
+    /// <summary>选项（抉择：声明条目集＝非引用候选；单选语义 1..1；产出＝选中选项标识）。</summary>
+    OptionSelect,
+
+    /// <summary>手牌选择（候选＝己方手牌卡引用〔构造方允许集〕；min..max；引用类；专属呈现）。</summary>
+    HandSelect,
+
+    /// <summary>卡牌选择器（载荷两形态：名单〔非引用·产出标识〕/ 引用集〔引用·产出卡引用〕；min..max）。</summary>
+    CardPicker,
+}
+
+/// <summary>
+/// 呈现形态标注（随请求描述交付前端：前端据此区分呈现形态——"手牌选择"与"场上目标点选"等）。
+/// 呈现提示、非策略指令（前端仍自行维护选择策略；不影响后端校验）。
+/// </summary>
+public enum TargetSlotPresentation
+{
+    /// <summary>场上目标点选（既有形态：场上引用候选的点选）。</summary>
+    TargetPoints,
+
+    /// <summary>选项列表（选项槽位：按"选项列表"渲染——标识＋文本、声明序）。</summary>
+    OptionList,
+
+    /// <summary>手牌选择（专属形态：区别于场上目标点选的手牌呈现）。</summary>
+    HandSelect,
+
+    /// <summary>卡牌阵列（卡牌选择器：屏幕中央呈现多张卡牌 → 选择 → 确认）。</summary>
+    CardArray,
 }
 
 /// <summary>
@@ -37,6 +65,12 @@ public abstract class TargetSlot
 
     /// <summary>完成/确认时至多可选的个数（SingleSelect＝1；MultiSelect＝构造 max）。</summary>
     internal abstract int MaxSelection { get; }
+
+    /// <summary>槽位是否引用类（提交/产出元素＝引擎引用 <see cref="Orc.Core.Ref{T}"/>；非引用类＝标识元素）。</summary>
+    internal abstract bool IsReferenceKind { get; }
+
+    /// <summary>呈现形态标注（随请求描述交付前端；呈现提示、非策略指令）。</summary>
+    internal abstract TargetSlotPresentation Presentation { get; }
 }
 
 /// <summary>单选槽位（"选 1 个"的语义特化：min＝max＝1，必选恰 1 个）。</summary>
@@ -54,6 +88,10 @@ public sealed class SingleSelectSlot : TargetSlot
     internal override int MinSelection => 1;
 
     internal override int MaxSelection => 1;
+
+    internal override bool IsReferenceKind => true;
+
+    internal override TargetSlotPresentation Presentation => TargetSlotPresentation.TargetPoints;
 }
 
 /// <summary>
@@ -101,4 +139,8 @@ public sealed class MultiSelectSlot : TargetSlot
     internal override int MinSelection => Min;
 
     internal override int MaxSelection => Max;
+
+    internal override bool IsReferenceKind => true;
+
+    internal override TargetSlotPresentation Presentation => TargetSlotPresentation.TargetPoints;
 }

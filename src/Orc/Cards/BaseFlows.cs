@@ -73,6 +73,7 @@ public sealed class AttackFlow
 {
     private readonly LogicEngine _engine;
     private readonly Trigger<AttackFlowView> _trigger;
+    private readonly TriggerRegistration _resolveRegistration;
 
     internal AttackFlow(LogicEngine engine)
     {
@@ -80,16 +81,18 @@ public sealed class AttackFlow
         _trigger = new Trigger<AttackFlowView>(
             name: "攻击流程",
             kind: TriggerKind.Active,
-            bandType: typeof(AttackFlowBands),
-            events: new[]
-            {
-                // 攻击结算＝调用伤害结算流程（默认事件；效果注入以 band 内优先级排于其后，即「攻击结算完成时」）。
-                new TriggerEvent<AttackFlowView>("伤害结算", OnResolve, AttackFlowBands.Resolve),
-            });
+            bandType: typeof(AttackFlowBands));
+
+        // 攻击结算＝调用伤害结算流程（默认事件；效果注入以 band 内优先级排于其后，即「攻击结算完成时」）。
+        // 经注册面装配（等价通道）：内置处理器为普通注册项、注册句柄直接可得（供 moding（逻辑替换）等经句柄寻址）。
+        _resolveRegistration = _trigger.Register("伤害结算", OnResolve, AttackFlowBands.Resolve);
     }
 
     /// <summary>攻击流程触发器（band 扩展位载体；效果经 Register 注入具名 band，经 Unregister 撤销）。</summary>
     public Trigger<AttackFlowView> Trigger => _trigger;
+
+    /// <summary>「伤害结算」处理器（内置默认事件）的注册句柄（供 moding（逻辑替换）等经句柄寻址）。</summary>
+    public TriggerRegistration ResolveRegistration => _resolveRegistration;
 
     /// <summary>
     /// 执行攻击流程（发起方）：反制检查 → 伤害结算调用 → 收尾。
@@ -123,6 +126,8 @@ public sealed class DamageFlow
 {
     private readonly LogicEngine _engine;
     private readonly Trigger<DamageFlowView> _trigger;
+    private readonly TriggerRegistration _preApplyRegistration;
+    private readonly TriggerRegistration _applyRegistration;
 
     internal DamageFlow(LogicEngine engine)
     {
@@ -130,16 +135,21 @@ public sealed class DamageFlow
         _trigger = new Trigger<DamageFlowView>(
             name: "伤害结算",
             kind: TriggerKind.Active,
-            bandType: typeof(DamageFlowBands),
-            events: new[]
-            {
-                new TriggerEvent<DamageFlowView>("结算前", OnPreApply, DamageFlowBands.PreApply),
-                new TriggerEvent<DamageFlowView>("伤害生效", OnApply, DamageFlowBands.Apply),
-            });
+            bandType: typeof(DamageFlowBands));
+
+        // 经注册面装配（等价通道）：内置处理器为普通注册项、注册句柄直接可得（供 moding（逻辑替换）等经句柄寻址）。
+        _preApplyRegistration = _trigger.Register("结算前", OnPreApply, DamageFlowBands.PreApply);
+        _applyRegistration = _trigger.Register("伤害生效", OnApply, DamageFlowBands.Apply);
     }
 
     /// <summary>伤害结算流程触发器（band 扩展位载体；效果经 Register 注入具名 band，经 Unregister 撤销）。</summary>
     public Trigger<DamageFlowView> Trigger => _trigger;
+
+    /// <summary>「结算前」处理器（内置默认事件）的注册句柄（供 moding（逻辑替换）等经句柄寻址）。</summary>
+    public TriggerRegistration PreApplyRegistration => _preApplyRegistration;
+
+    /// <summary>「伤害生效」处理器（内置默认事件）的注册句柄（供 moding（逻辑替换）等经句柄寻址）。</summary>
+    public TriggerRegistration ApplyRegistration => _applyRegistration;
 
     /// <summary>
     /// 执行伤害结算（承受方）：结算前 → 伤害生效。

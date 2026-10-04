@@ -13,14 +13,14 @@ namespace Orc.Game;
 /// <summary>
 /// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条＋后置项补全）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
 /// 与对局级触发器注册表（2A 机制：登记本体＋分层分类；2C 起内置流程触发器注册为底层）。
-/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）。
+/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）。
 /// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）→〔HQ≤0 时〕"结束"态（立即终局：状态置结束＋胜者记录）。
 /// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）；
 /// 终局后（"结束"态）：所有游戏动作入口拒绝（指挥/打出/移动/攻击/回合推进/初始化等——对外面拒绝、零副作用）、
 /// 只读查询面（状态/胜者/玩家与 HQ/战场/管理器/集合）保持可用、更新流不再增长（其后所有效果不再处理）。
 /// 失败模式：无效创建参数 → 创建期抛参数校验异常；初始化中异常直接传播（不承诺回滚；失败可重建对局）。
 /// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 指挥管理器〔2C：流程触发器创建＋底层注册〕）→
-/// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机源、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
+/// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机服务〔G8：确定性单流〕、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
 /// ID 水位线快照〔W1-1：起手装载之前〕→ 起手装载（静默、不发更新；先手 4 / 后手 5）→
 /// 〔2C 接线：回合恢复钩子〕→ 先手回合开始序列（3 条更新入总流）→ 置"进行"。
 /// </summary>
@@ -32,7 +32,7 @@ public sealed class Match
     private readonly CardList _deckForPlayerA;
     private readonly CardList _deckForPlayerB;
     private readonly IReadOnlyList<CardDefinitionEntry> _cardDefinitions;
-    private readonly Random _random;
+    private readonly MatchRandomService _randomService;
     private readonly int _firstPlayerIndex;
     private readonly MatchOptions _options;
 
@@ -112,8 +112,8 @@ public sealed class Match
         _deckForPlayerA = deckForPlayerA;
         _deckForPlayerB = deckForPlayerB;
         _cardDefinitions = definitions;
-        Seed = seed ?? Random.Shared.Next();
-        _random = new Random(Seed);
+        Seed = seed ?? Random.Shared.Next(); // 创建期一次性种子生成（未显式传入时）——不构成对局内随机消费（对局内统一经随机服务）
+        _randomService = new MatchRandomService(Seed, () => _lifecycle.State);
         _firstPlayerIndex = first;
         _options = resolvedOptions;
         _targeterBridge = targeterBridge;
@@ -202,12 +202,28 @@ public sealed class Match
     /// <exception cref="InvalidOperationException">card 未分配对局级 ID；或水位线尚未快照；或对局尚未进入"进行"态。</exception>
     public bool IsOutsideDeck(CardBase card) => PlayerManager.IsOutsideDeck(card);
 
+    // ---------- 随机服务（第 2 批 G8） ----------
+
+    /// <summary>
+    /// 随机服务（对外取用面；第 2 批 G8 加性）：数值/取样原语（Next / PickOne / PickN——确定性 PRNG、
+    /// 单流、顺序确定；效果运行期经「卡 → 玩家 → 服务」接入面取用）。**仅"进行"态可用**：准备态对外请求
+    /// 与终局后取用＝明确拒绝（抛错——风格与既有管理器门禁对齐）；对局内部链路（初始化洗切等）不经本属性、
+    /// 直接经服务本体消费（准备态合法）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态；或对局已结束（终局）。</exception>
+    public MatchRandomService RandomService => State switch
+    {
+        MatchState.InProgress => _randomService,
+        MatchState.Ended => throw new InvalidOperationException("对局已结束（终局），随机服务对外取用被拒绝。"),
+        _ => throw new InvalidOperationException("对局尚未进入'进行'态：随机服务对外取用不可用（须先成功完成 Initialize）。"),
+    };
+
     // ---------- 对局受控动作面（W4-1 G14 收尾） ----------
 
     /// <summary>
     /// 洗切动作（G14 收尾；对指定玩家卡组执行一次洗切＋发射 <see cref="GameUpdates.DeckShuffled"/> 信号——恰一次）；
     /// 「统一经此」的最小公共受控入口：初始化路径（双方卡组自动洗切）与后续「洗切卡组」类效果路径共用本动作面。
-    /// 随机源＝对局随机源（可复现）；发射时机＝洗切动作生效处（就地打乱之后）。
+    /// 随机源＝对局随机服务（G8：确定性 PRNG、单流——与效果取样共流；同种子可复现）；发射时机＝洗切动作生效处（就地打乱之后）。
     /// 拒绝：player 为 null；玩家管理器尚未创建（未进入初始化）；指定玩家不属于本对局；对局已结束（终局后动作入口拒绝）。
     /// 初始化链内调用（"准备"态）＝合法（对局内部动作面）；对外调用仍受终局门禁。
     /// </summary>
@@ -230,7 +246,7 @@ public sealed class Match
             throw new ArgumentException("指定玩家不属于本对局（洗切动作被拒绝）。", nameof(player));
         }
 
-        player.Deck.Shuffle(_random);
+        player.Deck.Shuffle(_randomService);
         await GameUpdates.EmitDeckShuffled(Engine, player, player.Deck, ct);
     }
 
@@ -306,6 +322,13 @@ public sealed class Match
             player.ConfigureEnvironment(_environment);
         }
 
+        // G8 加性：对局随机服务注入各玩家——「卡 → 玩家 → 服务」读取路径的玩家环节（效果运行期取用）；
+        // 时序与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureRandomService(_randomService);
+        }
+
         // 第六员（加性，随管理器群生成）：目标选择管理器——桥接可选注入（缺省 null＝允许无桥接装配，
         // Targeting 被调用时以失败结局暴露、不抛）；留痕经引擎既有渠道（总流）。
         // 终局门禁（后置项 B）：装配终局读取提供器——对局已结束＝发起（新入队）即时失败、零副作用。
@@ -336,7 +359,7 @@ public sealed class Match
         }
 
         // 双方卡组洗切（初始化内自动；W4-1 G14 收尾：经统一「洗切动作」面——每副各发恰一条 deck.shuffled 信号〔就地打乱之后〕；
-        // 固定顺序＝玩家索引升序，保证可复现）
+        // 固定顺序＝玩家索引升序，保证可复现；G8：随机源＝对局随机服务——洗切与效果取样共用同一流〔单流〕）
         await ShuffleDeckAsync(_playerManager.Players[0], ct);
         await ShuffleDeckAsync(_playerManager.Players[1], ct);
 

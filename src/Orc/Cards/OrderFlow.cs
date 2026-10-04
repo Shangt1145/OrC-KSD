@@ -57,6 +57,7 @@ public sealed class OrderFlow
 {
     private readonly LogicEngine _engine;
     private readonly Trigger<OrderFlowView> _trigger;
+    private readonly TriggerRegistration _resolveRegistration;
 
     internal OrderFlow(LogicEngine engine)
     {
@@ -64,16 +65,18 @@ public sealed class OrderFlow
         _trigger = new Trigger<OrderFlowView>(
             name: "指令流程",
             kind: TriggerKind.Active,
-            bandType: typeof(OrderFlowBands),
-            events: new[]
-            {
-                // 施放结算＝调用当前指令的施放链（默认事件；被中断时跳过）。
-                new TriggerEvent<OrderFlowView>("施放结算", OnResolve, OrderFlowBands.Resolve),
-            });
+            bandType: typeof(OrderFlowBands));
+
+        // 施放结算＝调用当前指令的施放链（默认事件；被中断时跳过）。
+        // 经注册面装配（等价通道）：内置处理器为普通注册项、注册句柄直接可得（供 moding（逻辑替换）等经句柄寻址）。
+        _resolveRegistration = _trigger.Register("施放结算", OnResolve, OrderFlowBands.Resolve);
     }
 
     /// <summary>指令流程触发器（band 扩展位载体；效果经 Register 注入具名 band，经 Unregister 撤销）。</summary>
     public Trigger<OrderFlowView> Trigger => _trigger;
+
+    /// <summary>「施放结算」处理器（内置默认事件）的注册句柄（供 moding（逻辑替换）等经句柄寻址）。</summary>
+    public TriggerRegistration ResolveRegistration => _resolveRegistration;
 
     /// <summary>
     /// 执行指令流程（规范施放入口）：反制检查 → 施放结算（执行指令施放链）→ 收尾。

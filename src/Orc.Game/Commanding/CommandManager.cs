@@ -189,6 +189,14 @@ public sealed class CommandManager
     /// <summary>词条装载上下文（卡牌加载时取用；经对局装配注入卡牌库）。</summary>
     public KeywordLoadContext KeywordLoadContext { get; }
 
+    /// <summary>防御归零检查触发器（内置；被动——挂载更新总线、响应 card.stat.changed；公开只读）。
+    /// 用途：内置事件（「防御归零检查」）的寻址面——注册项句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（moding（逻辑替换）等场景）。</summary>
+    public Trigger<CardTriggerView> DefenseDepletionTrigger => _defenseDepletionTrigger;
+
+    /// <summary>HQ 归零检查触发器（内置；被动——挂载更新总线、响应 card.stat.changed；公开只读）。
+    /// 用途：内置事件（「HQ 归零检查」）的寻址面——注册项句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（moding（逻辑替换）等场景）。</summary>
+    public Trigger<CardTriggerView> HqZeroTrigger => _hqZeroTrigger;
+
     // ---------- ① 指挥入口（一次拖拽＝一次调用链、单一公开入口方法） ----------
 
     /// <summary>

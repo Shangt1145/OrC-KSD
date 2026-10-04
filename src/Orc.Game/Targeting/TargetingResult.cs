@@ -17,7 +17,7 @@ public enum TargetingStatus
 
 /// <summary>
 /// 结局原因（类别化；成功＝null）：
-/// 取消＝<see cref="PlayerCancelled"/>；失败＝系统原因类别（无可用候选、候选收集失败、桥接交互异常、筛选回调异常、未装配、对局已结束、其他/未知兜底）。
+/// 取消＝<see cref="PlayerCancelled"/>；失败＝系统原因类别（无可用候选、候选收集失败、桥接交互异常、筛选回调异常、域判定回调异常、未装配、对局已结束、其他/未知兜底）。
 /// 类别命名以本枚举为契约；不支持自由文本判断（调用方需要程序化判断与提示分流）。
 /// </summary>
 public enum TargetingEndReason
@@ -36,6 +36,9 @@ public enum TargetingEndReason
 
     /// <summary>筛选回调异常（粗筛/细筛任一回调抛出）。</summary>
     FilterFault,
+
+    /// <summary>域判定回调异常（终局校验期域判定面抛出——失败结局；与筛选回调异常先例一致；不归"拒绝"路径）。</summary>
+    DomainValidationFault,
 
     /// <summary>未装配桥接（允许无桥接装配，调用时以失败结局暴露；归"未装配/其他配置"类）。</summary>
     BridgeNotAssembled,
@@ -90,31 +93,56 @@ public sealed class TargetingResult
 }
 
 /// <summary>
-/// 产出（成功结局的只读快照）：扁平（无槽位/单槽位）＝单引用或引用列表；非扁平（多槽位）＝按槽位名组织的结构化结果。
-/// 列表顺序＝前端提交原样（无额外排序承诺）；元素＝引擎引用类型（<see cref="Ref{T}"/>，同一 targeting 内元素类型统一）；
-/// 多槽位＝统一候选池（同一列表经两级筛选；槽位仅约束选择数量/结构）；默认允许同一引用被多槽位同时选中。
+/// 产出（成功结局的只读快照）：涵盖引用类与非引用类两类截面——类别可辨（<see cref="GetSlotKind"/>）、读面分类别
+/// （引用类→<see cref="GetSelection"/>〔Ref 读面〕；非引用类→<see cref="GetIdentifiers"/>〔标识读面〕；不允许统一弱类型快照）。
+/// 扁平（无槽位/单槽位）＝单引用或引用列表（既有简化读面语义不变）；非扁平（多槽位）＝按槽位名组织的结构化结果（不依赖顺序）。
+/// 列表顺序＝前端提交原样（无额外排序承诺）；多槽位＝统一候选池（既有引用类：同一列表经两级筛选；槽位仅约束选择数量/结构）；
+/// 默认允许同一引用被多槽位同时选中。
+/// 非引用类截面（选项/卡牌名单）：产出＝选中标识（文本等呈现数据不进产出）；读出标识足以支撑消费方按标识分派分支/生成实例。
 /// </summary>
 public sealed class TargetOutcome
 {
     private readonly Dictionary<string, IReadOnlyList<Ref<Entity>>> _bySlot;
+    private readonly Dictionary<string, IReadOnlyList<string>> _identifiersBySlot;
+    private readonly Dictionary<string, TargetSlotKind> _kindBySlot;
     private readonly IReadOnlyList<string> _slotNames;
 
     internal TargetOutcome(
         IReadOnlyList<string> slotNames,
         IReadOnlyDictionary<string, IReadOnlyList<Ref<Entity>>> bySlot,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> identifiersBySlot,
+        IReadOnlyDictionary<string, TargetSlotKind> kindBySlot,
         bool isFlat,
         TargetSlotKind flatKind)
     {
         _slotNames = slotNames;
+
         _bySlot = new Dictionary<string, IReadOnlyList<Ref<Entity>>>(StringComparer.Ordinal);
         foreach (var pair in bySlot)
         {
             _bySlot[pair.Key] = pair.Value;
         }
 
+        _identifiersBySlot = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var pair in identifiersBySlot)
+        {
+            _identifiersBySlot[pair.Key] = pair.Value;
+        }
+
+        _kindBySlot = new Dictionary<string, TargetSlotKind>(StringComparer.Ordinal);
+        foreach (var pair in kindBySlot)
+        {
+            _kindBySlot[pair.Key] = pair.Value;
+        }
+
         IsFlat = isFlat;
 
-        var flat = isFlat ? _bySlot[slotNames[0]] : Array.Empty<Ref<Entity>>();
+        IReadOnlyList<Ref<Entity>> flat = Array.Empty<Ref<Entity>>();
+        if (isFlat && _bySlot.TryGetValue(slotNames[0], out var flatList))
+        {
+            flat = flatList;
+        }
+
         List = flat;
         Single = isFlat && flatKind == TargetSlotKind.SingleSelect && flat.Count == 1 ? flat[0] : null;
     }
@@ -126,31 +154,81 @@ public sealed class TargetOutcome
     public IReadOnlyList<string> SlotNames => _slotNames;
 
     /// <summary>
-    /// 扁平单值读面（SingleSelect 语义）：扁平形态且单值选择时＝该引用；其余（多选形态/非扁平）＝null。
+    /// 扁平单值读面（SingleSelect 语义）：扁平形态且单值选择时＝该引用；其余（多选形态/非扁平/非引用类）＝null。
     /// 元素为引擎引用类型；只读快照（消费方读取/拷贝使用）。
     /// </summary>
     public Ref<Entity>? Single { get; }
 
     /// <summary>
-    /// 扁平列表读面：扁平时＝该槽位的完整选择序列（单值形态＝单元素列表；多选形态＝选择列表〔min=0 空选成功＝空列表〕）；非扁平时＝空列表（请使用 <see cref="GetSelection"/>）。
+    /// 扁平列表读面（引用类简化面）：扁平时＝该槽位的完整选择序列（单值形态＝单元素列表；多选形态＝选择列表〔min=0 空选成功＝空列表〕）；
+    /// 非扁平时＝空列表（请使用 <see cref="GetSelection"/>）；扁平但槽位为非引用类时＝空列表（标识产出请使用 <see cref="GetIdentifiers"/>）。
     /// </summary>
     public IReadOnlyList<Ref<Entity>> List { get; }
 
     /// <summary>
-    /// 按槽位名取出强类型引用（能力为需求级）：多槽位按声明名；扁平形态同样稳定可用（缺省槽位＝<see cref="TargetSlot.DefaultName"/>）。
+    /// 按槽位名取出引用类选择（引用类槽位：SingleSelect/MultiSelect/HandSelect/卡牌选择器〔引用集形态〕；能力为需求级）：
+    /// 多槽位按声明名；扁平形态同样稳定可用（缺省槽位＝<see cref="TargetSlot.DefaultName"/>）。
+    /// 读面按类别区分——非引用类槽位（选项/卡牌名单）＝明确异常（请用 <see cref="GetIdentifiers"/>）。
     /// </summary>
     /// <param name="slotName">槽位名（须为声明槽位名之一；缺省槽位＝缺省名）。</param>
     /// <returns>该槽位的选择序列（只读快照；保持提交顺序）。</returns>
     /// <exception cref="KeyNotFoundException">未声明的槽位名。</exception>
+    /// <exception cref="InvalidOperationException">槽位为非引用类（标识产出——请用 GetIdentifiers）。</exception>
     public IReadOnlyList<Ref<Entity>> GetSelection(string slotName)
     {
         ArgumentNullException.ThrowIfNull(slotName);
+        RequireDeclared(slotName);
 
-        if (_bySlot.TryGetValue(slotName, out var selection))
+        if (_identifiersBySlot.ContainsKey(slotName))
         {
-            return selection;
+            throw new InvalidOperationException(
+                $"槽位 '{slotName}' 为非引用类（标识产出），不能按引用读面读取（读面按类别区分；请用 GetIdentifiers）。");
         }
 
-        throw new KeyNotFoundException($"产出中不存在槽位名 '{slotName}'（声明槽位：{string.Join(", ", _slotNames)}）。");
+        return _bySlot[slotName];
+    }
+
+    /// <summary>
+    /// 按槽位名取出非引用类选择（非引用类槽位：选项/卡牌名单——标识读面；与引用读面并列、类别可辨）：
+    /// 产出＝选中标识列表（单选形态＝单元素；保持提交顺序；读出标识足以支撑按标识分派分支/生成实例）；
+    /// 不允许统一弱类型快照（读面分类别）。
+    /// </summary>
+    /// <param name="slotName">槽位名（须为声明槽位名之一；缺省槽位＝缺省名）。</param>
+    /// <returns>该槽位的选中标识序列（只读快照；保持提交顺序）。</returns>
+    /// <exception cref="KeyNotFoundException">未声明的槽位名。</exception>
+    /// <exception cref="InvalidOperationException">槽位为引用类（引用产出——请用 GetSelection）。</exception>
+    public IReadOnlyList<string> GetIdentifiers(string slotName)
+    {
+        ArgumentNullException.ThrowIfNull(slotName);
+        RequireDeclared(slotName);
+
+        if (!_identifiersBySlot.TryGetValue(slotName, out var identifiers))
+        {
+            throw new InvalidOperationException(
+                $"槽位 '{slotName}' 为引用类（引用产出），不能按标识读面读取（读面按类别区分；请用 GetSelection）。");
+        }
+
+        return identifiers;
+    }
+
+    /// <summary>
+    /// 按槽位名读取槽位种类（结果可判定各槽位类别/形态：单选/多选/选项/手牌选择/卡牌选择器）。
+    /// </summary>
+    /// <param name="slotName">槽位名（须为声明槽位名之一；缺省槽位＝缺省名）。</param>
+    /// <returns>该槽位的槽位种类。</returns>
+    /// <exception cref="KeyNotFoundException">未声明的槽位名。</exception>
+    public TargetSlotKind GetSlotKind(string slotName)
+    {
+        ArgumentNullException.ThrowIfNull(slotName);
+        RequireDeclared(slotName);
+        return _kindBySlot[slotName];
+    }
+
+    private void RequireDeclared(string slotName)
+    {
+        if (!_kindBySlot.ContainsKey(slotName))
+        {
+            throw new KeyNotFoundException($"产出中不存在槽位名 '{slotName}'（声明槽位：{string.Join(", ", _slotNames)}）。");
+        }
     }
 }

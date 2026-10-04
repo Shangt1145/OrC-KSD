@@ -141,6 +141,14 @@ internal static class TargeterTestKit
     public static Dictionary<string, IReadOnlyList<Ref<Entity>>> Selection(string slotName, params Ref<Entity>[] refs)
         => new() { [slotName] = refs };
 
+    /// <summary>按槽位组织的统一提交（单槽位一组引用元素——类别化元素面）。</summary>
+    public static Dictionary<string, IReadOnlyList<TargetSelection>> ReferenceSelection(string slotName, params Ref<Entity>[] refs)
+        => new() { [slotName] = refs.Select(TargetSelection.FromReference).ToArray() };
+
+    /// <summary>按槽位组织的统一提交（单槽位一组标识元素——非引用类槽位）。</summary>
+    public static Dictionary<string, IReadOnlyList<TargetSelection>> IdentifierSelection(string slotName, params string[] identifiers)
+        => new() { [slotName] = identifiers.Select(TargetSelection.FromIdentifier).ToArray() };
+
     /// <summary>首个（有效）槽位名——未声明槽位时＝缺省槽位名。</summary>
     public static string PrimarySlot(TargetingRequestDescription description) => description.Slots[0].Name;
 

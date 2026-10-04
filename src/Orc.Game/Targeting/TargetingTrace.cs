@@ -4,7 +4,7 @@ namespace Orc.Game.Targeting;
 
 /// <summary>
 /// 留痕接收器（可观测性为硬要求）：留痕覆盖所有失败与违规路径（收集失败、桥接交互异常、筛选回调异常、
-/// 无可用候选、内容不合规、标识不匹配、时序违规、未装配）。
+/// 域判定回调异常、无可用候选、内容不合规、标识不匹配、时序违规、未装配）。
 /// 对局场景＝引擎既有渠道（事件流，见 <see cref="EventStreamTargetingTrace"/>）；
 /// 独立构造＝注入优先（可选注入留痕目标）、未注入时降级为可观测记录（内存留痕 <see cref="InMemoryTargetingTrace"/>，可查询面）。
 /// </summary>

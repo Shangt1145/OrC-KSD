@@ -243,6 +243,12 @@ public abstract class PassiveEffect : Effect
             owner: this);
     }
 
+    /// <summary>
+    /// 主触发器（生命周期清理承载；子类/装配方可经其句柄寻址——内置事件句柄经
+    /// <see cref="Trigger{TView}.InitialRegistrations"/> 供给，如 moding（逻辑替换）注册）。
+    /// </summary>
+    protected Trigger<CardEventView> LifecycleTrigger => _lifecycleTrigger;
+
     internal override void MountMainTrigger(Bus bus) => bus.Mount(_lifecycleTrigger);
 
     internal override void UnmountMainTrigger()
@@ -315,7 +321,8 @@ public abstract class ActiveEffect<TView> : Effect, ICastAction
             owner: this);
     }
 
-    /// <summary>主触发器（作者视图；可在子类构造体内经 <see cref="Trigger{TView}.Register"/> 注册施放事件）。</summary>
+    /// <summary>主触发器（作者视图；可在子类构造体内经 <see cref="Trigger{TView}.Register"/> 注册施放事件）。
+    /// 构造期 castEvents 项的注册句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（子类可 moding（逻辑替换）/撤销寻址）。</summary>
     protected Trigger<TView> CastTrigger => _castTrigger;
 
     /// <summary>施放入口：调用主触发器（施放 ＝ 主触发器被调用；其施放事件链按注册序执行）。</summary>

@@ -167,6 +167,12 @@ internal sealed class CardLoadoutProcessor
     private readonly Trigger<CardEventView> _placedHandler;
     private readonly Trigger<CardEventView> _cleanupHandler;
 
+    /// <summary>「放置处理」触发器（内置事件：放置处理；供 moding（逻辑替换）等经句柄寻址）。</summary>
+    internal Trigger<CardEventView> PlacedTrigger => _placedHandler;
+
+    /// <summary>「清理处理」触发器（内置事件：清理处理；供 moding（逻辑替换）等经句柄寻址）。</summary>
+    internal Trigger<CardEventView> CleanupTrigger => _cleanupHandler;
+
     internal CardLoadoutProcessor(LogicEngine engine)
     {
         _placedHandler = new Trigger<CardEventView>(

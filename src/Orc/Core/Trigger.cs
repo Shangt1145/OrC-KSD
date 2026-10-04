@@ -18,6 +18,8 @@ public enum TriggerKind
 /// 注册表与挂载状态（MountedBus）为可变面——除事件注册与总线挂载（Mount/UnmountOwner）外无跨调用可变状态。
 /// 开放继承（额外注入 handler 途径的基座）：执行与流产出只经公共执行入口；注册/校验只经公共注册面；
 /// 子类不得引入新的跨调用可变状态面。
+/// moding（逻辑替换；加性扩展）：注册项可经 <see cref="RegisterModing"/> 以 delegate 直接替换其运行逻辑
+/// （执行时动态解析「最后一个」、栈语义、纯替换）；构造期装配项的注册句柄经 <see cref="InitialRegistrations"/> 供给（使全部注册项可寻址）。
 /// 合法性验证（加性扩展）：可选覆写 <see cref="Validate"/>（基类默认恒合法）；每次执行固定先调用（空转豁免）。
 /// 不合法＝仅本次取消（不绑视图、不执行事件、留痕、不传染嵌套链）；验证通过后的结构性错误（含绑定失败）＝契约兜底（记录＋失败标记＋安全结束）。
 /// 触发入口三形态（同一 InvokeAsync 重载族）：①统一入口（本类提供）；②具名重载（作者在具体触发器/子类/调用侧书写，
@@ -30,11 +32,13 @@ public class Trigger<TView> where TView : class
     private const int PriorityUpperBound = 1000;
 
     private readonly List<EventEntry> _events = new();
+    private readonly List<TriggerRegistration> _initialRegistrations = new();
     private readonly Type? _bandType;
     private readonly string[] _hooks;
     private readonly int _mountPriority;
     private readonly object? _owner;
     private long _seq;
+    private long _modingSeq;
 
     /// <summary>
     /// 以初始化形态构造触发器（名称〔可选〕、Kind〔默认主动〕、band 方案〔默认缺省〕、初始事件集合〔可选〕、
@@ -78,7 +82,8 @@ public class Trigger<TView> where TView : class
                     throw new ArgumentNullException(nameof(events), "初始事件集合不能包含 null 元素。");
                 }
 
-                AddEvent(item.Name, item.Handler, item.Band, item.Priority);
+                var entry = AddEvent(item.Name, item.Handler, item.Band, item.Priority);
+                _initialRegistrations.Add(new TriggerRegistration(this, entry.Seq, item.Name));
             }
         }
     }
@@ -139,6 +144,13 @@ public class Trigger<TView> where TView : class
     /// <summary>当前挂载的总线（null＝未挂载；实例级状态；仅由总线 Mount/UnmountOwner 读写）。</summary>
     internal Bus? MountedBus { get; set; }
 
+    /// <summary>
+    /// 构造期初始事件的注册句柄（与初始事件集合声明序一一对应；只读）。
+    /// 用途：使构造期装配的注册项可寻址（供撤销、moding（逻辑替换）等经句柄寻址的场景）；
+    /// 「初始事件集合与注册 API 为等价通道」⇒ 两通道注册项皆可寻址、能力面等价。
+    /// </summary>
+    public IReadOnlyList<TriggerRegistration> InitialRegistrations => _initialRegistrations;
+
     /// <summary>注册一个不带 band 的事件（落默认区段；仅默认 band 方案可用）。返回注册句柄（S4 加性扩展；可用于 <see cref="Unregister"/> 撤销）。</summary>
     /// <exception cref="ArgumentNullException">handler 为 null。</exception>
     /// <exception cref="ArgumentException">事件名为空；默认方案下 band 校验不适用项。</exception>
@@ -164,6 +176,7 @@ public class Trigger<TView> where TView : class
     /// 撤销一条注册（S4 加性扩展：注册项移除能力；对 S2 注册面的受控补充）。
     /// 语义：句柄指向本触发器且对应注册项仍存在 → 移除并返回 true；重复撤销（条目已移除）/句柄不属于本触发器 → 幂等无操作、返回 false、不抛错。
     /// 快照语义：执行期间的撤销不影响本轮已开始的迭代（与注册侧一致）；被撤销条目不再参与后续执行。
+    /// 注册项撤销时其 moding（逻辑替换）项随之失效（避免悬空）：不再被解析选用。
     /// </summary>
     /// <exception cref="ArgumentNullException">registration 为 null。</exception>
     public bool Unregister(TriggerRegistration registration)
@@ -181,8 +194,68 @@ public class Trigger<TView> where TView : class
             return false; // 已撤销/不存在：幂等无操作
         }
 
+        var entry = _events[index];
         _events.RemoveAt(index);
+        entry.ClearModings(); // 注册项撤销 ⇒ 其 moding 项随之失效（避免悬空）
         return true;
+    }
+
+    /// <summary>
+    /// 注册一条 moding（逻辑替换）项：以 <paramref name="target"/> 句柄锚定目标注册项，之后该注册项执行时改用本条 delegate 逻辑
+    /// （纯替换——moding 生效时原逻辑不执行；机制不提供任何指向原逻辑的调用途径：原逻辑不作参数暴露、无 next/proceed 式入口）。
+    /// 解析语义：每次执行目标 handler 时动态解析「当前最后一个未注销的 moding 项」并采用（栈语义——栈序＝moding 注册序，与事件名/band/优先级无关）；
+    /// 注销后回退上一项，全部注销回退原逻辑。装配期（子类/构建时）与运行时为同一注册面（仅调用时点区分）。
+    /// 约束：moding 逻辑与 handler 本体一致，为单一处理单元（读取/计算/数据改写/记录/判定）；
+    /// 禁止在 handler（含其 moding 逻辑）内进行流程编排（调用其它流程/触发器、串联多个处理单元、组织多步骤序列）——编排发生在流程层。
+    /// 无效目标（句柄不属本触发器/目标注册项已撤销）＝幂等无操作、不生效（返回 null、不抛错）。
+    /// 快照语义：执行期间的增删不打断已开始的迭代与进行中 handler 的已解析选择；被注销项不再被选用、新增项自下一次解析点生效。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 或 moding 为 null。</exception>
+    public TriggerModingRegistration? RegisterModing(
+        TriggerRegistration target, Func<TView, Context, CancellationToken, Task> moding)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(moding);
+
+        if (!ReferenceEquals(target.TriggerRef, this))
+        {
+            return null; // 跨触发器句柄：幂等无操作
+        }
+
+        var entry = FindEntry(target.Seq);
+        if (entry is null)
+        {
+            return null; // 目标注册项已撤销：幂等无操作
+        }
+
+        var modingSeq = _modingSeq++;
+        entry.AddModing(moding, modingSeq);
+        return new TriggerModingRegistration(this, target.Seq, modingSeq);
+    }
+
+    /// <summary>
+    /// 注销一条 moding（逻辑替换）项：以句柄为准（任意持有句柄者均可注销，无注册者身份校验）。
+    /// 语义：句柄指向本触发器且对应 moding 项仍存在 → 移除并返回 true（解析随即回退上一项；全部注销＝回退原逻辑）；
+    /// 重复注销/moding 项已不存在/目标注册项已撤销/句柄不属本触发器 → 幂等无操作、返回 false、不抛错。
+    /// 快照语义：执行期间的注销不打断进行中 handler 的已解析选择；被注销项不再被选用（自下一次解析点起）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">registration 为 null。</exception>
+    public bool UnregisterModing(TriggerModingRegistration registration)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+
+        if (!ReferenceEquals(registration.TriggerRef, this))
+        {
+            return false; // 非本触发器句柄：幂等无操作
+        }
+
+        var entry = FindEntry(registration.TargetSeq);
+        if (entry is null)
+        {
+            return false; // 目标注册项已撤销（其 moding 项随之失效）：幂等无操作
+        }
+
+        return entry.RemoveModing(registration.ModingSeq);
     }
 
     /// <summary>
@@ -340,7 +413,10 @@ public class Trigger<TView> where TView : class
             frame.CurrentEventName = item.Name;
             try
             {
-                await item.Handler(view, ctx, ct);
+                // 逻辑替换（moding）解析点：执行 handler 时动态解析「当前最后一个未注销的 moding 项」；
+                // 无 moding＝原逻辑；解析后即固定（执行期间的增删不打断本次已解析选择）。
+                var effectiveHandler = item.LastModing ?? item.Handler;
+                await effectiveHandler(view, ctx, ct);
             }
             catch (OperationCanceledException)
             {
@@ -362,6 +438,13 @@ public class Trigger<TView> where TView : class
                     });
             }
         }
+    }
+
+    /// <summary>按事件注册序查找注册项；不存在＝null（已撤销/非本触发器句柄的静默判定依据）。</summary>
+    private EventEntry? FindEntry(long seq)
+    {
+        var index = _events.FindIndex(e => e.Seq == seq);
+        return index < 0 ? null : _events[index];
     }
 
     private EventEntry AddEvent(string name, Func<TView, Context, CancellationToken, Task> handler, Enum? band, int priority)
@@ -462,6 +545,8 @@ public class Trigger<TView> where TView : class
 
     private sealed class EventEntry
     {
+        private readonly List<ModingEntry> _modings = new();
+
         internal EventEntry(
             string name,
             Func<TView, Context, CancellationToken, Task> handler,
@@ -488,6 +573,46 @@ public class Trigger<TView> where TView : class
 
         /// <summary>排序键＝band 值×1000＋band 内优先级。</summary>
         internal long SortKey => (long)BandValue * PriorityUpperBound + Priority;
+
+        /// <summary>
+        /// 当前生效的 moding（逻辑替换）逻辑：最后一个注册且未注销者；无＝null（回退原 handler）。
+        /// 列表按 moding 注册序追加（尾＝最后注册者）；执行时点解析，不做注册期换绑。
+        /// </summary>
+        internal Func<TView, Context, CancellationToken, Task>? LastModing
+            => _modings.Count == 0 ? null : _modings[^1].Handler;
+
+        internal void AddModing(Func<TView, Context, CancellationToken, Task> handler, long seq)
+            => _modings.Add(new ModingEntry(handler, seq));
+
+        /// <summary>按 moding 注册序移除一项；不存在＝false（幂等）。</summary>
+        internal bool RemoveModing(long seq)
+        {
+            var index = _modings.FindIndex(m => m.Seq == seq);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            _modings.RemoveAt(index);
+            return true;
+        }
+
+        /// <summary>清空全部 moding（注册项撤销时调用：moding 随之失效、避免悬空）。</summary>
+        internal void ClearModings() => _modings.Clear();
+
+        private sealed class ModingEntry
+        {
+            internal ModingEntry(Func<TView, Context, CancellationToken, Task> handler, long seq)
+            {
+                Handler = handler;
+                Seq = seq;
+            }
+
+            internal Func<TView, Context, CancellationToken, Task> Handler { get; }
+
+            /// <summary>moding 注册序（触发器内唯一，作 moding 项身份）。</summary>
+            internal long Seq { get; }
+        }
     }
 }
 
@@ -513,6 +638,30 @@ public sealed class TriggerRegistration
 
     /// <summary>注册序（触发器内唯一，作为注册项身份；内部使用）。</summary>
     internal long Seq { get; }
+}
+
+/// <summary>
+/// moding（逻辑替换）注册句柄：<see cref="Trigger{TView}.RegisterModing"/> 成功时返回，
+/// 标识某注册项上的一条 moding 项，可用作 <see cref="Trigger{TView}.UnregisterModing"/> 的注销依据。
+/// 仅由注册面创建；不含可变状态。
+/// </summary>
+public sealed class TriggerModingRegistration
+{
+    internal TriggerModingRegistration(object triggerRef, long targetSeq, long modingSeq)
+    {
+        TriggerRef = triggerRef;
+        TargetSeq = targetSeq;
+        ModingSeq = modingSeq;
+    }
+
+    /// <summary>所属触发器引用（注销时按引用相等匹配；内部使用）。</summary>
+    internal object TriggerRef { get; }
+
+    /// <summary>目标注册项的事件注册序（内部使用）。</summary>
+    internal long TargetSeq { get; }
+
+    /// <summary>moding 注册序（触发器内唯一，作 moding 项身份；内部使用）。</summary>
+    internal long ModingSeq { get; }
 }
 
 /// <summary>

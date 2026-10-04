@@ -62,8 +62,8 @@ public class CardListTests
         var a = new CardList(source);
         var b = new CardList(source);
 
-        a.Shuffle(new Random(1234)); // 对局级随机源经方法传入（集合自身不持有随机源）
-        b.Shuffle(new Random(1234));
+        a.Shuffle(new MatchRandomService(1234)); // 确定性随机源经方法传入（集合自身不持有随机源——G8 受控源形态）
+        b.Shuffle(new MatchRandomService(1234));
 
         Assert.Equal(a.ToArray(), b.ToArray()); // 同种子 → 逐位一致（可复现）
         Assert.Equal(source.OrderBy(x => x), a.ToArray().OrderBy(x => x)); // 洗牌结果为原多重集的一个排列
@@ -73,14 +73,14 @@ public class CardListTests
         var changed = Enumerable.Range(0, 5).Any(seed =>
         {
             var probe = new CardList(source);
-            probe.Shuffle(new Random(seed));
+            probe.Shuffle(new MatchRandomService(seed));
             return !probe.SequenceEqual(source);
         });
         Assert.True(changed);
     }
 
     [Fact]
-    public void Null_Random_Is_Rejected()
+    public void Null_RandomSource_Is_Rejected()
     {
         var list = new CardList(new[] { "c01" });
         Assert.Throws<ArgumentNullException>(() => list.Shuffle(null!));
@@ -164,8 +164,8 @@ public class CardSetTests
         a.AddRange(cards);
         b.AddRange(cards);
 
-        a.Shuffle(new Random(99));
-        b.Shuffle(new Random(99));
+        a.Shuffle(new MatchRandomService(99));
+        b.Shuffle(new MatchRandomService(99));
 
         Assert.Equal(a.Select(c => c.Name).ToArray(), b.Select(c => c.Name).ToArray()); // 同种子 → 逐位一致
         Assert.Equal(cards.Select(c => c.Name).OrderBy(x => x), a.Select(c => c.Name).OrderBy(x => x)); // 排列性

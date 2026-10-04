@@ -82,4 +82,28 @@ public sealed class Player
 
         Environment = environment;
     }
+
+    /// <summary>
+    /// 对局随机服务（第 2 批 G8 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （效果运行期经 <see cref="MatchRandomService.ResolveFor"/> 取用）；脱局场景（未注入）＝null（无服务面——
+    /// 相关解析自然产出 null、不抛错）。
+    /// </summary>
+    internal MatchRandomService? RandomService { get; private set; }
+
+    /// <summary>
+    /// 装配期注入对局随机服务（第 2 批 G8；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">service 为 null。</exception>
+    /// <exception cref="InvalidOperationException">随机服务已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureRandomService(MatchRandomService service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        if (RandomService is not null)
+        {
+            throw new InvalidOperationException("玩家随机服务已注入（重复注入被拒绝）。");
+        }
+
+        RandomService = service;
+    }
 }
