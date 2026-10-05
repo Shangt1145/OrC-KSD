@@ -43,15 +43,22 @@ public class UnitCard : CardBase
     {
         _chainEngine = engine;
 
-        // 对战数据组件（单位专属；E 区：「单位＝对战数据组件」——指令无其他组件、反制为激活状态组件）。
-        AddData(new BattleStatsData(definition.OperateCost, definition.Attack, definition.Defense));
+        // 对战数据组件由基类构造期组件 loader 装配（battleStats 组件定义驱动——P4；单位卡组件集含该定义）。
 
         // 触发器（预打出/打出＝费用校验触发器——合法性验证承载；部署/加入/单位化＝链触发器）。
         PrePlayTrigger = new CostCheckTrigger("预打出触发器", this, validationJudicatorResolver);
         PlayTrigger = new CostCheckTrigger("打出触发器", this, validationJudicatorResolver);
         DeployTrigger = new Trigger<CardTriggerView>("部署触发器");
+        DeployKeywordTrigger = new Trigger<CardTriggerView>("部署词条触发器");
         JoinTrigger = new Trigger<CardTriggerView>("加入触发器");
         UnitizeTrigger = new Trigger<CardTriggerView>("单位化触发器");
+
+        // S5：具名触发器登记（供效果预制体 injects 声明按名解析注入目标）。
+        RegisterNamedTrigger("打出触发器", PlayTrigger, typeof(CardTriggerView));
+        RegisterNamedTrigger("部署触发器", DeployTrigger, typeof(CardTriggerView));
+        RegisterNamedTrigger("部署词条触发器", DeployKeywordTrigger, typeof(CardTriggerView));
+        RegisterNamedTrigger("加入触发器", JoinTrigger, typeof(CardTriggerView));
+        RegisterNamedTrigger("单位化触发器", UnitizeTrigger, typeof(CardTriggerView));
 
         // 默认链事件（构造期装配；装配方扩展事件按注册序追加于其后——闪击等词条注入属 2C）。
         PlayTrigger.Register("打出链", HandlePlayChainAsync);
@@ -74,6 +81,20 @@ public class UnitCard : CardBase
 
     /// <summary>单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位）。</summary>
     public Trigger<CardTriggerView> UnitizeTrigger { get; }
+
+    /// <summary>
+    /// 部署词条触发器（S6／R12；默认 band）：部署时执行的"部署词条效果"的触发面——
+    /// 部署效果经效果系统表达（效果预制体声明 <c>inject.target</c>＝本触发器名，装载时由框架侧注入 handler）；
+    /// 部署链①段与再触发「部署重放」共用 <see cref="InvokeDeployKeywordAsync"/> 单一入口。
+    /// 无注入＝空转（部署不因此失败）。
+    /// </summary>
+    public Trigger<CardTriggerView> DeployKeywordTrigger { get; }
+
+    /// <summary>
+    /// 触发部署词条效果（S6 单源入口）：部署链与「部署重放」共用；载荷＝{ Card, Player?, Position }。
+    /// </summary>
+    internal Task<EventStream> InvokeDeployKeywordAsync(Player? player, Slot slot, CancellationToken ct)
+        => DeployKeywordTrigger.InvokeAsync(_chainEngine, BuildUnitData(this, player, slot), ct);
 
     /// <summary>
     /// 手牌起始指向槽位声明（S2：由单位卡自行声明——基类不持 targeter）：单位＝手牌打出时指向空槽
@@ -118,10 +139,10 @@ public class UnitCard : CardBase
             return;
         }
 
-        // ① 部署逻辑检查＋部署词条效果：单源执行段（A4：DeploymentLogicRules——部署链①段与再触发「部署重放」共享
-        //    同一执行实现；同序〔登记序〕／同「handler 非空」检查／同逐条异常隔离／同上下文／同留痕形态）。
-        //    无组件或有效条目为空＝跳过（部署不因此失败）。
-        await DeploymentLogicRules.RunEffectSegmentAsync(unit, slot, _chainEngine, ct);
+        // ① 部署词条效果（S6／R12）：触发「部署词条触发器」——部署效果经效果系统表达
+        //    （数据体/预制体声明 inject 目标＝本触发器，装载时由框架侧注入 handler；卸载自动撤销）。
+        //    重放（RetriggerSystem）再调同一触发器（定向、不广播信号）。无注入＝空转（部署不因此失败）。
+        await unit.InvokeDeployKeywordAsync(view.Player as Player, slot, ct);
 
         // ② 单位化（共用：加组件＋入槽）
         await unit.UnitizeTrigger.InvokeAsync(_chainEngine, BuildUnitData(unit, view.Player as Player, slot), ct);

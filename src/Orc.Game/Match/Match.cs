@@ -14,7 +14,7 @@ namespace Orc.Game;
 /// <summary>
 /// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条＋后置项补全）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
 /// 与对局级触发器注册表（2A 机制：登记本体＋分层分类；2C 起内置流程触发器注册为底层）。
-/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）、可选部署逻辑注册表（A4 加性装配输入——卡牌加载时「部署逻辑生成」步骤的装配源）、可选玩家构筑配置（S10 加性装配输入——主国/盟国；按玩家分别提供、提供即校验、初始化期注入）、可选判定器装配段（J1 加性装配输入、J2：外部段＝追加/定制通道；对局装配期一次性执行判定器注册〔注册表创建之后、卡加载之前〕、内置注册段同时固定执行〔默认验证判定器——无条件可用〕；缺省＝null＝无外部追加〔内置验证判定器恒在〕）。
+/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限／起手张数／首回合抽牌）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）、可选部署逻辑注册表（A4 加性装配输入——卡牌加载时「部署逻辑生成」步骤的装配源）、可选玩家构筑配置（S10 加性装配输入——主国/盟国；按玩家分别提供、提供即校验、初始化期注入）、可选判定器装配段（J1 加性装配输入、J2：外部段＝追加/定制通道；对局装配期一次性执行判定器注册〔注册表创建之后、卡加载之前〕、内置注册段同时固定执行〔默认验证判定器——无条件可用〕；缺省＝null＝无外部追加〔内置验证判定器恒在〕）。
 /// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）→〔HQ≤0 时〕"结束"态（立即终局：状态置结束＋胜者记录）。
 /// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）；
 /// 终局后（"结束"态）：所有游戏动作入口拒绝（指挥/打出/移动/攻击/回合推进/初始化等——对外面拒绝、零副作用）、
@@ -22,14 +22,11 @@ namespace Orc.Game;
 /// 失败模式：无效创建参数 → 创建期抛参数校验异常；初始化中异常直接传播（不承诺回滚；失败可重建对局）。
 /// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性＋A4 加性＋S10 加性＋J1 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 判定器注册〔J1：注册表创建＋装配期注册段；J2：内置注册段（默认验证判定器）固定执行＋外部追加段——卡加载前就绪〕→ 再触发服务〔A4：接收触发器创建＋总线挂载〕→ 指挥管理器〔2C：流程触发器创建＋底层注册；A4：注入再触发服务〕→ 玩家注入（环境/随机服务/A4 再触发服务/S9 卡牌服务/S10 构筑配置与历史服务））→
 /// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机服务〔G8：确定性单流〕、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、部署逻辑生成〔A4〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
-/// ID 水位线快照〔W1-1：起手装载之前〕→ 起手装载（静默、不发更新；先手 4 / 后手 5）→
+/// ID 水位线快照〔W1-1：起手装载之前〕→ 起手装载（静默、不发更新；先手 4 / 后手 5——缺省，经 MatchOptions 配置）→
 /// 〔2C 接线：回合恢复钩子〕→ 先手回合开始序列（3 条更新入总流）→ 置"进行"。
 /// </summary>
 public sealed class Match
 {
-    private const int OpeningHandSizeFirstPlayer = 4;
-    private const int OpeningHandSizeSecondPlayer = 5;
-
     private readonly CardList _deckForPlayerA;
     private readonly CardList _deckForPlayerB;
     private readonly IReadOnlyList<CardDefinitionEntry> _cardDefinitions;
@@ -49,7 +46,6 @@ public sealed class Match
     private JudicatorRegistry? _judicators; // J1：判定器注册表（对局级机制——初始化内创建；卡加载前就绪）
     private readonly ITargeterBridge? _targeterBridge;
     private readonly CardEffectRegistry? _effectRegistry;
-    private readonly DeploymentLogicRegistry? _deploymentLogicRegistry; // A4：部署逻辑登记/生成面的装配输入
     private readonly PlayerDeckConfiguration? _deckConfigForPlayerA; // S10：玩家A 构筑配置（主国/盟国——创建期接收、初始化注入）
     private readonly PlayerDeckConfiguration? _deckConfigForPlayerB; // S10：玩家B 构筑配置
     private readonly Action<JudicatorRegistry>? _judicatorAssembly; // J1：判定器装配段（对局装配期一次性执行判定器注册——注册表创建之后、卡加载之前）
@@ -68,7 +64,7 @@ public sealed class Match
     /// <param name="cardDefinitions">卡牌定义集（条目＝id＋定义；初始化时批量注册）。</param>
     /// <param name="seed">可选随机种子（默认自动生成且事后经 <see cref="Seed"/> 可读）。</param>
     /// <param name="firstPlayerIndex">可选先手指定（0＝玩家A、1＝玩家B；默认第一位玩家）。</param>
-    /// <param name="options">可选规则配置（指挥点上限；默认 12）。</param>
+    /// <param name="options">可选规则配置（指挥点上限／起手张数／首回合抽牌；缺省＝12／4／5／不抽——保持现行行为）。</param>
     /// <param name="targeterBridge">可选目标选择桥接（第六员〔目标选择管理器〕的装配输入；缺省＝null＝允许无桥接装配——Targeting 被调用时以失败结局暴露、不抛）。</param>
     /// <param name="effectRegistry">可选效果工厂注册表（X2 加性装配输入；卡牌加载时效果装载的装配源；缺省＝null＝无效果源——卡加载时无「声明效果」装载，装载语境照常〔卡上手动装配的效果仍被装载〕）。</param>
     /// <param name="deploymentLogicRegistry">可选部署逻辑注册表（A4 加性装配输入；卡牌加载时「部署逻辑生成」步骤的装配源〔为单位卡生成并挂载部署逻辑组件〕；缺省＝null＝无装配源——不生成、加载照常）。</param>
@@ -77,7 +73,7 @@ public sealed class Match
     /// <param name="judicatorAssembly">可选判定器装配段（J1 加性装配输入；J2：外部段＝追加/定制通道——内置注册段〔默认验证判定器〕固定无条件执行）；对局装配期一次性调用〔注册表创建之后、卡加载之前〕——执行判定器注册、注册动作返回条目等价句柄供持用；缺省＝null＝无外部追加〔内置验证判定器恒在、可达面照常〕）。</param>
     /// <exception cref="ArgumentNullException">deckForPlayerA / deckForPlayerB / cardDefinitions 为 null。</exception>
     /// <exception cref="ArgumentException">卡组名单为空或含 null/空白 id；定义集含 null 条目；构筑配置成对缺失（只提供其一）。</exception>
-    /// <exception cref="ArgumentOutOfRangeException">先手指定越界；指挥点上限非正整数；构筑配置值非法（未定义枚举值 / 主国非五主国 / 盟国==主国 / 盟国==Neutral）。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">先手指定越界；指挥点上限非正整数；起手张数为负；构筑配置值非法（未定义枚举值 / 主国非五主国 / 盟国==主国 / 盟国==Neutral）。</exception>
     public Match(
         CardList deckForPlayerA,
         CardList deckForPlayerB,
@@ -87,7 +83,6 @@ public sealed class Match
         MatchOptions? options = null,
         ITargeterBridge? targeterBridge = null,
         CardEffectRegistry? effectRegistry = null,
-        DeploymentLogicRegistry? deploymentLogicRegistry = null,
         PlayerDeckConfiguration? deckConfigForPlayerA = null,
         PlayerDeckConfiguration? deckConfigForPlayerB = null,
         Action<JudicatorRegistry>? judicatorAssembly = null)
@@ -121,6 +116,19 @@ public sealed class Match
             throw new ArgumentOutOfRangeException(nameof(options), resolvedOptions.MaxPointSlots, "指挥点上限须为正整数（≥1）。");
         }
 
+        // K4 加性（开局常量配置化）：起手张数（0 合法＝空起手；负数创建期 fail-fast——同 MaxPointSlots 先例）。
+        if (resolvedOptions.OpeningHandSizeFirstPlayer < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), resolvedOptions.OpeningHandSizeFirstPlayer,
+                "先手起手张数不能为负（0 合法＝空起手）。");
+        }
+
+        if (resolvedOptions.OpeningHandSizeSecondPlayer < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), resolvedOptions.OpeningHandSizeSecondPlayer,
+                "后手起手张数不能为负（0 合法＝空起手）。");
+        }
+
         var definitions = cardDefinitions.ToList();
         if (definitions.Any(entry => entry is null))
         {
@@ -140,7 +148,6 @@ public sealed class Match
         _options = resolvedOptions;
         _targeterBridge = targeterBridge;
         _effectRegistry = effectRegistry;
-        _deploymentLogicRegistry = deploymentLogicRegistry;
         _deckConfigForPlayerA = deckConfigForPlayerA;
         _deckConfigForPlayerB = deckConfigForPlayerB;
         _judicatorAssembly = judicatorAssembly;
@@ -408,7 +415,6 @@ public sealed class Match
             () => _playerManager?.NextCardId()
                 ?? throw new InvalidOperationException("卡牌 ID 分配不可用：玩家管理器尚未创建（加载链时序错误）。"),
             cardId => new CardEffectLoadContext(_effectRegistry, cardId),
-            cardId => new DeploymentLogicLoadContext(_deploymentLogicRegistry, cardId),
             ResolveJudicatorBinding);
         foreach (var entry in _cardDefinitions)
         {
@@ -493,19 +499,74 @@ public sealed class Match
         // 时点＝卡加载之前（远早于洗切与加载段——就绪由装配链位置保证：「装配期已注册条目在卡加载阶段即可被解析调用」）。
         _judicators = new JudicatorRegistry();
 
-        // J2 加性（合法性验证替换）：内置注册段（固定、无条件执行）——注册默认验证判定器（费用/反制/复验）：
-        // 「默认名恒可解析、默认判定器无条件可用」（不依赖外部装配段传入）；复验判定器注入对局级只读设施引用
-        // （生命周期/当前行动方/战场/复验规则读取面转发——延迟读取；复验规则读取经 CommandManager 转发保持单源）。
+        // J2 加性（合法性验证替换）：内置注册段（固定、无条件执行）——注册默认验证判定器（费用/反制）：
+        // 「默认名恒可解析、默认判定器无条件可用」（不依赖外部装配段传入）。
+        // （K3 随改：复验两条注册迁移至 K3 段——构造注入共享 leg/推进前置条目句柄；条目名/绑定语义不变。）
         _judicators.Register(JudicatorNames.CostCheck, new CostCheckJudicator());
         _judicators.Register(JudicatorNames.CounterUse, new CounterUseJudicator());
+
+        // K1 加性（A 档 C1-C4：交战合法性判定族）：内置注册段追加 4 条固定注册——
+        // 组合器 combat.target.legal（（攻击者, 目标引用）→ bool；编排六重＝归属→存活/在场→烟幕→守护资格→拦截→范围）
+        // ＋三条子规则（范围/资格/拦截——独立成器、便于单点 moding；组合器经条目句柄消费——子规则改写穿透编排）。
+        // 调用点接入：候选链（CollectAttackCandidates 逐候选过滤）与复验链（IsAttackTargetLegal 转发壳）——
+        // 经条目句柄注入 CommandManager（可用性/复验同源保持、无第二真源）。
+        var combatRangeEntry = _judicators.Register(
+            JudicatorNames.CombatRange,
+            new CombatRangeJudicator(
+                _battlefieldManager.Battlefield,
+                owner => _commandManager?.EnemyOfPlayer(owner)));
+        var combatGuardEligibilityEntry = _judicators.Register(
+            JudicatorNames.CombatGuardEligibility,
+            new CombatGuardEligibilityJudicator());
+        var combatInterceptionEntry = _judicators.Register(
+            JudicatorNames.CombatInterception,
+            new CombatInterceptionJudicator(
+                _battlefieldManager.Battlefield,
+                owner => _commandManager?.EnemyOfPlayer(owner)));
+        var combatTargetLegalEntry = _judicators.Register(
+            JudicatorNames.CombatTargetLegal,
+            new CombatTargetLegalJudicator(
+                enemyOf: owner => _commandManager?.EnemyOfPlayer(owner),
+                isUnitGuarded: unit => _commandManager?.IsUnitGuarded(unit) ?? false,
+                isHqGuarded: hq => _commandManager?.IsHqGuarded(hq) ?? false,
+                rangeRule: (attacker, targetSlot) => CombatJudicatorInvoker.InvokeBool(combatRangeEntry, attacker, targetSlot),
+                guardEligibilityRule: attacker => CombatJudicatorInvoker.InvokeBool(combatGuardEligibilityEntry, attacker),
+                interceptionRule: (attacker, targetSlot, targetIsFighter) => CombatJudicatorInvoker.InvokeBool(combatInterceptionEntry, attacker, targetSlot, targetIsFighter)));
+
+        // K2 加性（A 档 C5/C6：反击豁免与伏击条件）：内置注册段追加 2 条固定注册——
+        // 反击资格判定 combat.counter.eligibility（（攻击者, 目标）→ bool；四条款、豁免优先——原 CounterAttackRules 语义）＋
+        // 伏击条件判定 combat.ambush.condition（（被攻击单位, 攻击者）→ bool；严格大于比较）。
+        // 调用点接入：默认互伤区（CommandManager.HandleDefaultAttackDamageAsync——经条目句柄注入）＋
+        // 伏击组件（资格→C5、条件→C6——经 KeywordLoadContext 判定器通道注入）；单源、无第二真源。
+        var combatCounterEligibilityEntry = _judicators.Register(
+            JudicatorNames.CombatCounterEligibility,
+            new CombatCounterEligibilityJudicator());
+        var combatAmbushConditionEntry = _judicators.Register(
+            JudicatorNames.CombatAmbushCondition,
+            new CombatAmbushConditionJudicator());
+
+        // K3 加性（A 档 C7/C8：复验消重）：内置注册段追加——共享 leg 条目（move/attack 分区、一份逻辑×两条目）＋
+        // 推进前置条目（move.frontline-enemy）＋复验两条重建注册（J2 两条随迁——构造注入共享 leg/推进前置条目句柄；
+        // 条目名/绑定语义不变；注册顺序无关语义——条目按名索引、moding 按条目独立）。
+        var moveLegEligibilityEntry = _judicators.Register(
+            JudicatorNames.MoveLegEligibility,
+            new LegEligibilityJudicator(() => _turnManager?.CurrentPlayer, _battlefieldManager.Battlefield, isMove: true));
+        var attackLegEligibilityEntry = _judicators.Register(
+            JudicatorNames.AttackLegEligibility,
+            new LegEligibilityJudicator(() => _turnManager?.CurrentPlayer, battlefield: null, isMove: false));
+        var moveFrontlineEnemyEntry = _judicators.Register(
+            JudicatorNames.MoveFrontlineEnemy,
+            new MoveFrontlineEnemyJudicator(
+                _battlefieldManager.Battlefield,
+                owner => _commandManager?.EnemyOfPlayer(owner)));
         _judicators.Register(JudicatorNames.MoveRecheck, new MoveRevalidationJudicator(
             _lifecycle,
-            () => _turnManager?.CurrentPlayer,
+            (unit, position) => LegJudicatorInvoker.InvokeLeg(moveLegEligibilityEntry, unit, position),
             _battlefieldManager.Battlefield,
-            owner => _commandManager?.HasLivingEnemyOnFrontLine(owner) ?? false));
+            owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner)));
         _judicators.Register(JudicatorNames.AttackRecheck, new AttackRevalidationJudicator(
             _lifecycle,
-            () => _turnManager?.CurrentPlayer,
+            unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
             (attacker, targetRef) => _commandManager?.IsAttackTargetLegal(attacker, targetRef) ?? false));
 
         // 外部装配段（追加/定制通道——最小加性保持；重复注册默认名被拒绝〔J1「注册即配置、重复拒绝」口径〕；
@@ -529,7 +590,17 @@ public sealed class Match
             () => _turnManager?.CurrentPlayer,
             _lifecycle,
             _retriggerSystem,
-            ResolveJudicatorBinding);
+            ResolveJudicatorBinding,
+            // K1：目标合法性判定通道——经 combat.target.legal 条目句柄（固定内置注册段注册所得；每次调用经统一解析点）。
+            (attacker, targetRef) => CombatJudicatorInvoker.InvokeBool(combatTargetLegalEntry, attacker, targetRef),
+            // K2：反击资格判定通道——经 combat.counter.eligibility 条目句柄（默认互伤区与伏击资格共用）；
+            // 伏击条件判定通道——经 combat.ambush.condition 条目句柄（伏击组件经装载上下文取用）。
+            (attacker, target) => CombatJudicatorInvoker.InvokeBool(combatCounterEligibilityEntry, attacker, target),
+            (self, attacker) => CombatJudicatorInvoker.InvokeBool(combatAmbushConditionEntry, self, attacker),
+            // K3：leg 资格（move/attack）与推进前置判定通道——经条目句柄（固定内置注册段注册所得；可用性/复验四调用点同源）。
+            (unit, position) => LegJudicatorInvoker.InvokeLeg(moveLegEligibilityEntry, unit, position),
+            unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
+            owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner));
         TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
@@ -569,14 +640,14 @@ public sealed class Match
         // W1-1：卡牌 ID 水位线快照（＝已分配 ID 的最大值；语义＝初始化卡牌加载完成后、任何后续动作〔起手装载等〕之前）
         _playerManager.SnapshotCardIdWatermark();
 
-        // 起手装载（静默、不发更新；先手 4 / 后手 5）
+        // 起手装载（静默、不发更新；先手 4 / 后手 5——缺省，经 MatchOptions 配置）
         var firstPlayer = _playerManager.Players[_firstPlayerIndex];
         var secondPlayer = _playerManager.Players[(_firstPlayerIndex + 1) % 2];
-        _playerManager.LoadOpeningHand(firstPlayer, OpeningHandSizeFirstPlayer);
-        _playerManager.LoadOpeningHand(secondPlayer, OpeningHandSizeSecondPlayer);
+        _playerManager.LoadOpeningHand(firstPlayer, _options.OpeningHandSizeFirstPlayer);
+        _playerManager.LoadOpeningHand(secondPlayer, _options.OpeningHandSizeSecondPlayer);
 
         // 先手回合开始序列（3 条更新；第 1 回合不抽牌＝无 card.drawn；顺序 await 完结后返回）
-        _turnManager = new TurnManager(Engine, _playerManager, _resourceManager, _lifecycle);
+        _turnManager = new TurnManager(Engine, _playerManager, _resourceManager, _lifecycle, _options.AllowFirstTurnDraw);
         // 2C 接线：单位行动状态恢复（回合开始处理段——行动方在场单位重置两 bool＋词条运行态清零）
         _turnManager.ActionStateRefresher = _commandManager.RefreshActionStates;
         // 打出管理器（2B 加性：随管理器群生成——打出链服务与交互入口；回合管理器为反制「仅己方回合」真源；

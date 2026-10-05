@@ -191,7 +191,7 @@ public class GameHooksTests
         var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
             .Select(c => c.Value).ToList();
 
-        Assert.Equal(17, signals.Count);
+        Assert.Equal(18, signals.Count);
         Assert.Equal(10, payloadKeys.Count);
         Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
@@ -208,12 +208,12 @@ public class GameHooksTests
             .Select(field => (string)field.GetRawConstantValue()!)
             .ToList();
 
-        Assert.Equal(6, names.Count);
+        Assert.Equal(15, names.Count);
         Assert.Equal(names.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal));
 
-        // 装配面：4 内置固定注册段 + 2 外部装配段 = 全量 6
-        Assert.Equal(4, GameHooks.BuiltInJudicatorNames.Count);
+        // 装配面：13 内置固定注册段（4 验证类＋6 交战类＋3 动作资格类） + 2 外部装配段 = 全量 15
+        Assert.Equal(13, GameHooks.BuiltInJudicatorNames.Count);
         Assert.Equal(2, GameHooks.ExternalJudicatorNames.Count);
         Assert.Equal(GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.BuiltInJudicatorNames.Concat(GameHooks.ExternalJudicatorNames)
@@ -225,7 +225,7 @@ public class GameHooksTests
     [Fact]
     public void Every_Signal_Has_A_Static_Emit_Callpoint()
     {
-        // 12 条经 GameUpdates.Emit* 助手；5 条 turn.* 经 TurnManager.EmitTurnAsync 直发（无助手）
+        // 13 条经 GameUpdates.Emit* 助手；5 条 turn.* 经 TurnManager.EmitTurnAsync 直发（无助手）
         var helpers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [GameHooks.CardPlayed] = "EmitCardPlayed",
@@ -234,6 +234,7 @@ public class GameHooksTests
             [GameHooks.CardLoad] = "EmitCardLoad",
             [GameHooks.CardHandAdd] = "EmitCardHandAdd",
             [GameHooks.CardDiscarded] = "EmitCardDiscarded",
+            [GameHooks.CardBurned] = "EmitCardBurned",
             [GameHooks.CardDied] = "EmitCardDied",
             [GameHooks.UnitJoined] = "EmitUnitJoined",
             [GameHooks.UnitDeployed] = "EmitUnitDeployed",
@@ -247,7 +248,7 @@ public class GameHooksTests
             GameHooks.TurnEndBefore, GameHooks.TurnEnd,
         };
 
-        Assert.Equal(12, helpers.Count);
+        Assert.Equal(13, helpers.Count);
         foreach (var (signal, method) in helpers)
         {
             Assert.Contains(signal, GameHooks.Signals);
@@ -261,7 +262,7 @@ public class GameHooksTests
         Assert.NotNull(typeof(TurnManager).GetMethod(
             "EmitTurnAsync", BindingFlags.NonPublic | BindingFlags.Instance));
 
-        // 12 + 5 = 17，无遗漏、无重复
+        // 13 + 5 = 18，无遗漏、无重复
         Assert.Equal(GameHooks.Signals.Count,
             helpers.Keys.Concat(turnSignals).Distinct(StringComparer.Ordinal).Count());
     }
@@ -312,7 +313,7 @@ public class GameHooksTests
         var flowAllowList = new[] { GameHooks.FlowUnitAttack };
         foreach (var pending in GameHooks.PendingTriggers)
         {
-            // 任何对位都必须是「17 信号 或 流程位白名单」之一（防伪对位）
+            // 任何对位都必须是「18 信号 或 流程位白名单」之一（防伪对位）
             Assert.All(pending.OrcCounterparts, counterpart => Assert.True(
                 GameHooks.Signals.Contains(counterpart) || flowAllowList.Contains(counterpart),
                 $"待补项 '{pending.KardsTrigger}' 的对位 '{counterpart}' 不在信号集/流程位白名单内。"));
@@ -339,8 +340,8 @@ public class GameHooksTests
         using var document = JsonDocument.Parse(GameHooksJson.Serialize(indented: true));
         var root = document.RootElement;
 
-        Assert.Equal(17, root.GetProperty("signals").GetArrayLength());
-        Assert.Equal(6, root.GetProperty("judicators").GetArrayLength());
+        Assert.Equal(18, root.GetProperty("signals").GetArrayLength());
+        Assert.Equal(15, root.GetProperty("judicators").GetArrayLength());
         Assert.Equal(GameHooks.TriggerLayers.Count, root.GetProperty("triggerLayers").GetArrayLength());
         Assert.Equal(27, root.GetProperty("pending").GetArrayLength());
 

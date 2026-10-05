@@ -121,7 +121,7 @@ public class DynamicEffectTests
     public void 效果快照_版本不符_结构化失败()
     {
         var json = PrefabJson.Serialize(Snapshot(PassiveMain(new EventPrefab("onHook", assemblyKey: "k"))))
-            .Replace("\"schemaVersion\":1", "\"schemaVersion\":99");
+            .Replace($"\"schemaVersion\":{EffectSnapshot.SchemaVersion}", "\"schemaVersion\":99");
 
         Assert.False(PrefabJson.TryDeserialize(json, out _, out var error));
         Assert.Contains("版本不符", error);

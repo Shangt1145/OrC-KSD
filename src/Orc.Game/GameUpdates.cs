@@ -10,7 +10,7 @@ namespace Orc.Game;
 /// 游戏更新常量集：统一承载回合五连（<c>turn.*</c>）、通用三项（<c>card.played</c> / <c>card.drawn</c> / <c>card.stat.changed</c>）、
 /// 第二批 hooks 六项（<c>card.load</c> / <c>card.hand.add</c> / <c>card.died</c> / <c>unit.joined</c> / <c>unit.deployed</c> / <c>unit.position.changed</c>）
 /// 与 W4-1（G14 收尾）洗切一项（<c>deck.shuffled</c>）、G7 弃置一项（<c>card.discarded</c>）、
-/// S9 类型变更一项（<c>unit.types.changed</c>）——合计 17 条。
+/// S9 类型变更一项（<c>unit.types.changed</c>）、Kb 爆牌一项（<c>card.burned</c>）——合计 18 条。
 /// 全部为新定义、与 Orc 既有常量集无重叠；字面值为对外订阅契约，一经定稿即冻结（引擎总线同一性＝ordinal 序数、大小写敏感）。
 /// 发射统一经引擎总线 <see cref="LogicEngine.Emit"/>（本类提供可选静态发射助手，内部即走该通路）。
 /// 实际发射（2B 后）：turn 五连、card.drawn 与 card.drawn→card.hand.add 连发（抽牌链路；粒度不同、并存）、card.load（初始化逐张加载）
@@ -21,8 +21,10 @@ namespace Orc.Game;
 /// W4-1（G14 收尾）：card.played 升级为载荷化契约（{ Card, Player }——被使用卡实例＋使用方），调用点＝部署/指令打出链「打出宣告」；
 /// deck.shuffled 新增（初始化双方卡组洗切各一条——「统一经洗切动作面〔Match.ShuffleDeckAsync〕、恰一次」；「是否首次」不入信号）。
 /// G7（手牌操作与弃置）：card.discarded 新增（载荷＝{ Card, Player }〔被弃卡在前、玩家在后——对齐"卡的动作事件"族：
-/// card.played / card.hand.add / card.load〕；调用点＝弃置动作与烧牌路径〔共享销毁原语与信号〕——销毁先于信号、恰一次；
+/// card.played / card.hand.add / card.load〕；调用点＝弃置动作——销毁先于信号、恰一次；
 /// 不携带原因/路径——信号只报事实）。
+/// Kb（爆牌独立化与术语更名）：card.burned 新增（载荷＝{ Card, Player }——被爆卡在前、玩家在后；调用点＝爆牌路径
+/// 〔满手裁决两路〕——销毁先于信号、恰一次；独立信号、不复用 card.discarded——爆牌不走弃牌路线）。
 /// </summary>
 public static class GameUpdates
 {
@@ -77,10 +79,19 @@ public static class GameUpdates
     /// <summary>
     /// 弃置（"card.discarded"；G7 新增；载荷＝{ Card, Player }——被弃卡实例在前、玩家在后〔对齐"卡的动作事件"族：
     /// card.played / card.hand.add / card.load〕；Player＝该卡被弃置时所归属的玩家）。
-    /// 语义＝「某卡被弃置」——只报事实、不携带原因/路径（选择/随机/指定为调用方语义；烧牌＝弃置的自动路径、复用本信号）。
+    /// 语义＝「某卡被弃置」——只报事实、不携带原因/路径（选择/随机/指定为调用方语义；弃置路径专属——
+    /// 爆牌不走弃牌路线、经独立信号 <see cref="CardBurned"/>）。
     /// 次序＝移除 → 销毁（含资源清理）→ 本信号（动作完成后发信号、观察者所见即终态）；恰一次。
     /// </summary>
     public const string CardDiscarded = "card.discarded";
+
+    /// <summary>
+    /// 爆牌（"card.burned"；Kb 新增——合计第 18 条；载荷＝{ Card, Player }——被爆卡实例在前、玩家在后〔对齐"卡的动作事件"族〕；
+    /// Player＝该卡被爆时所归属的玩家）。语义＝「某卡被爆（满手裁决）」——只报事实、不携带原因/路径
+    /// （两路差异仅由是否发 card.drawn 体现）；次序＝销毁（含资源清理）→ 本信号（动作完成后发信号、观察者所见即终态）；恰一次；
+    /// 独立信号、不复用 card.discarded（爆牌不走弃牌路线）。
+    /// </summary>
+    public const string CardBurned = "card.burned";
 
     /// <summary>
     /// 游戏层死亡（"card.died"；载荷＝{ Card }）。与引擎内置 <see cref="Updates.CardDestroyed"/>（"card.destroyed"）并存：
@@ -305,7 +316,7 @@ public static class GameUpdates
             ct);
     }
 
-    /// <summary>发射 card.discarded（G7；载荷＝{ Card, Player }——被弃卡实例在前、玩家在后；弃置动作与烧牌路径共用——销毁先于信号、恰一次）。</summary>
+    /// <summary>发射 card.discarded（G7；载荷＝{ Card, Player }——被弃卡实例在前、玩家在后；弃置路径专用——销毁先于信号、恰一次）。</summary>
     /// <exception cref="ArgumentNullException">engine / card / player 为 null。</exception>
     public static Task EmitCardDiscarded(
         LogicEngine engine, Card card, Player player, CancellationToken ct = default)
@@ -315,6 +326,24 @@ public static class GameUpdates
         ArgumentNullException.ThrowIfNull(player);
         return engine.Emit(
             CardDiscarded,
+            new Dictionary<string, object?>
+            {
+                [PayloadCard] = card,
+                [PayloadPlayer] = player,
+            },
+            ct);
+    }
+
+    /// <summary>发射 card.burned（Kb；载荷＝{ Card, Player }——被爆卡实例在前、玩家在后；爆牌路径专用——销毁先于信号、恰一次；不复用 card.discarded）。</summary>
+    /// <exception cref="ArgumentNullException">engine / card / player 为 null。</exception>
+    public static Task EmitCardBurned(
+        LogicEngine engine, Card card, Player player, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            CardBurned,
             new Dictionary<string, object?>
             {
                 [PayloadCard] = card,

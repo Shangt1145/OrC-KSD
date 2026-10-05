@@ -104,6 +104,30 @@ public abstract class Effect
     }
 
     /// <summary>
+    /// 框架侧注入（S5；装载链调用）：把 handler 注册进目标触发器的**默认区段**并把撤销动作登记到本效果
+    /// （随卸载自动撤销）。与 <see cref="Inject{TView}"/> 的区别：不经"装载语境"校验、目标以 object ＋ 视图类型给出
+    /// （供数据体/预制体路径的 <c>injects</c> 声明落地）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target / viewType / handler 为 null。</exception>
+    public TriggerRegistration InjectByFramework(
+        object target, Type viewType, string name, Delegate handler, int priority = 0)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(viewType);
+        ArgumentNullException.ThrowIfNull(handler);
+
+        var registration = TriggerReflection.RegisterDefaultBand(target, viewType, name, handler, priority);
+        var record = new EffectInjection(target, name, Orc.Core.DefaultBands.Default, priority, registration);
+        _injections.Add(record);
+        _rollbacks.Add(() =>
+        {
+            TriggerReflection.Unregister(target, registration);
+            _injections.Remove(record); // S-C2：注入读面随撤销同步收敛
+        });
+        return registration;
+    }
+
+    /// <summary>
     /// 本效果已登记的注入项（S-C2 加性只读面；审查链用）：装载语境中经 <see cref="Inject{TView}"/> 登记，
     /// 卸载/回滚时框架撤销并同步移除；顺序＝登记序快照。空＝无注入。
     /// </summary>

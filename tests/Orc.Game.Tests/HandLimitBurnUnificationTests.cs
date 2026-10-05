@@ -1,3 +1,4 @@
+using Orc.Cards;
 using Orc.Core;
 using Orc.Game;
 using Orc.Game.Cards;
@@ -7,12 +8,13 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// K0·B12 烧牌统一——两路语义并排对照回归（统一改造的专属锚）：
+/// K0·B12 爆牌统一（Kb 爆牌独立化与术语更名）——两路语义并排对照回归（统一改造的专属锚）：
 /// 同一满手条件下分别走两路（DrawCard 路径 / PlaceToHand 路径），显式断言：
 /// ① 差异面＝仅 card.drawn（DrawCard 路径「算被抽到」恰一次；PlaceToHand 路径「未经手牌」零次）；
-/// ② 共同面＝销毁（含 card.destroyed）先于 card.discarded、card.discarded 恰一次、card.hand.add 零次、
-///    手牌全程保持 HandLimit（无瞬时超额）、被烧卡终态（已销毁、离手、离场/离引擎登记）。
-/// 另：未满边界对照——两路在「上限−1」时均按正常路径处置（无销毁/弃置副作用）。
+/// ② 共同面＝销毁（含 card.destroyed）先于 card.burned、card.burned 恰一次、card.discarded 零次（爆牌不走弃牌路线——
+///    反向锁定）、card.hand.add 零次、手牌全程保持 HandLimit（无瞬时超额）、被爆卡终态（已销毁、离手、离场/离引擎登记）。
+/// 另：未满边界对照——两路在「上限−1」时均按正常路径处置（无销毁/爆牌副作用）。
+/// 附：card.burned 监听消费——独立信号经既有触发器 hooks 机制挂载可达（「当有牌被爆时」类表达可承载）。
 /// </summary>
 public class HandLimitBurnUnificationTests
 {
@@ -50,7 +52,7 @@ public class HandLimitBurnUnificationTests
             return Task.CompletedTask;
         });
 
-        // ══ 段 ①：DrawCard 路径（「算被抽到」）——drawn → 销毁 → discarded ══
+        // ══ 段 ①：DrawCard 路径（「算被抽到」）——drawn → 销毁 → burned ══
         var drawn = await match.PlayerManager.DrawCard(playerA);
 
         var drawPathSignals = recorder.Types.ToList();
@@ -58,18 +60,19 @@ public class HandLimitBurnUnificationTests
         Assert.Equal(Player.HandLimit, Assert.Single(handCountsAtDraw)); // drawn 恰一次观察点、值＝上限
         Assert.Equal(1, drawPathSignals.Count(t => t == GameUpdates.CardDrawn));
         Assert.Equal(1, drawPathSignals.Count(t => t == Updates.CardDestroyed));
-        Assert.Equal(1, drawPathSignals.Count(t => t == GameUpdates.CardDiscarded));
+        Assert.Equal(1, drawPathSignals.Count(t => t == GameUpdates.CardBurned));
+        Assert.Equal(0, drawPathSignals.Count(t => t == GameUpdates.CardDiscarded)); // 反向：爆牌不发弃置信号
         Assert.Equal(0, drawPathSignals.Count(t => t == GameUpdates.CardHandAdd));
-        var drawPathDiscarded = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardDiscarded);
-        Assert.Same(drawn, drawPathDiscarded.Payload![GameUpdates.PayloadCard]);
-        Assert.Same(playerA, drawPathDiscarded.Payload![GameUpdates.PayloadPlayer]);
-        // 被烧卡终态：已销毁、离手、离卡组、离引擎登记
+        var drawPathBurned = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardBurned);
+        Assert.Same(drawn, drawPathBurned.Payload![GameUpdates.PayloadCard]);
+        Assert.Same(playerA, drawPathBurned.Payload![GameUpdates.PayloadPlayer]);
+        // 被爆卡终态：已销毁、离手、离卡组、离引擎登记
         Assert.False(drawn.Life.IsAlive);
         Assert.DoesNotContain(drawn, playerA.Hand);
         Assert.False(playerA.Deck.ContainsInstance(drawn));
         Assert.DoesNotContain(drawn, match.Engine.Cards);
 
-        // ══ 段 ②：PlaceToHand 路径（「未经手牌」）——销毁 → discarded（不发 drawn） ══
+        // ══ 段 ②：PlaceToHand 路径（「未经手牌」）——销毁 → burned（不发 drawn） ══
         recorder.Clear();
         var placed = await match.CardService.CreateAndPlaceToHandAsync(S9Kit.LightInfantryId, playerA);
 
@@ -80,29 +83,31 @@ public class HandLimitBurnUnificationTests
         var burned = Assert.IsType<UnitCard>(placed.Card);
         Assert.Equal(0, placePathSignals.Count(t => t == GameUpdates.CardDrawn));
         Assert.Equal(1, placePathSignals.Count(t => t == Updates.CardDestroyed));
-        Assert.Equal(1, placePathSignals.Count(t => t == GameUpdates.CardDiscarded));
+        Assert.Equal(1, placePathSignals.Count(t => t == GameUpdates.CardBurned));
+        Assert.Equal(0, placePathSignals.Count(t => t == GameUpdates.CardDiscarded)); // 反向：爆牌不发弃置信号
         Assert.Equal(0, placePathSignals.Count(t => t == GameUpdates.CardHandAdd));
-        var placePathDiscarded = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardDiscarded);
-        Assert.Same(burned, placePathDiscarded.Payload![GameUpdates.PayloadCard]);
-        Assert.Same(playerA, placePathDiscarded.Payload![GameUpdates.PayloadPlayer]);
+        var placePathBurned = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardBurned);
+        Assert.Same(burned, placePathBurned.Payload![GameUpdates.PayloadCard]);
+        Assert.Same(playerA, placePathBurned.Payload![GameUpdates.PayloadPlayer]);
         Assert.False(burned.Life.IsAlive);
         Assert.DoesNotContain(burned, playerA.Hand);
         Assert.DoesNotContain(burned, match.Engine.Cards);
 
-        // ══ 并排对照：关键信号序列——差异面＝仅 card.drawn；其余（销毁先于 discarded、hand.add 零次）一致 ══
+        // ══ 并排对照：关键信号序列——差异面＝仅 card.drawn；其余（销毁先于 burned、hand.add 零次、不发 discarded）一致 ══
         static List<string> KeyBurnSignals(IReadOnlyList<string> types) => types
             .Where(t => t == GameUpdates.CardDrawn
                 || t == Updates.CardDestroyed
-                || t == GameUpdates.CardDiscarded
+                || t == GameUpdates.CardBurned
+                || t == GameUpdates.CardDiscarded // 保留过滤：若出现 discarded 将破坏下方预期序列（反向锁定）
                 || t == GameUpdates.CardHandAdd)
             .ToList();
 
         Assert.Equal(
-            new[] { GameUpdates.CardDrawn, Updates.CardDestroyed, GameUpdates.CardDiscarded },
-            KeyBurnSignals(drawPathSignals)); // ① 算被抽到：drawn 在销毁前
+            new[] { GameUpdates.CardDrawn, Updates.CardDestroyed, GameUpdates.CardBurned },
+            KeyBurnSignals(drawPathSignals)); // ① 算被抽到：drawn 在销毁前；burned 收尾、不发 discarded
         Assert.Equal(
-            new[] { Updates.CardDestroyed, GameUpdates.CardDiscarded },
-            KeyBurnSignals(placePathSignals)); // ② 未经手牌：无 drawn、销毁先于 discarded
+            new[] { Updates.CardDestroyed, GameUpdates.CardBurned },
+            KeyBurnSignals(placePathSignals)); // ② 未经手牌：无 drawn、销毁先于 burned、不发 discarded
     }
 
     [Fact]
@@ -117,7 +122,7 @@ public class HandLimitBurnUnificationTests
 
         using var recorder = new UpdateRecorder(match.Engine);
 
-        // 段 ①：DrawCard@「上限−1」＝正常入手（drawn → hand.add；零销毁/弃置）
+        // 段 ①：DrawCard@「上限−1」＝正常入手（drawn → hand.add；零销毁/爆牌）
         recorder.Clear();
         var drawn = await match.PlayerManager.DrawCard(playerA);
         Assert.Equal(Player.HandLimit, playerA.Hand.Count);
@@ -125,7 +130,7 @@ public class HandLimitBurnUnificationTests
         Assert.True(drawn.Life.IsAlive);
         Assert.Equal(new[] { GameUpdates.CardDrawn, GameUpdates.CardHandAdd }, recorder.Types);
 
-        // 段 ②：PlaceToHand@「上限−1」＝正常放置（hand.add 恰一次；drawn/销毁/弃置零次）
+        // 段 ②：PlaceToHand@「上限−1」＝正常放置（hand.add 恰一次；drawn/销毁/爆牌零次）
         recorder.Clear();
         var placed = await match.CardService.CreateAndPlaceToHandAsync(S9Kit.LightInfantryId, playerB);
         Assert.Equal(CardPlaceStatus.Placed, placed.Status);
@@ -137,8 +142,93 @@ public class HandLimitBurnUnificationTests
         Assert.Equal(1, recorder.CountOf(GameUpdates.CardHandAdd));
         Assert.Equal(0, recorder.CountOf(Updates.CardDestroyed));
         Assert.Equal(0, recorder.CountOf(GameUpdates.CardDiscarded));
+        Assert.Equal(0, recorder.CountOf(GameUpdates.CardBurned));
         var handAdd = recorder.PayloadOf(GameUpdates.CardHandAdd)!;
         Assert.Same(placedCard, handAdd[GameUpdates.PayloadCard]);
         Assert.Same(playerB, handAdd[GameUpdates.PayloadPlayer]);
     }
+
+    [Fact]
+    public async Task Burned_Signal_Is_Consumable_Via_Existing_Hooks_Mechanism()
+    {
+        var match = S9Kit.CreateSceneMatch();
+        await match.Initialize();
+        var playerA = match.Players[0];
+        await FillHandToAsync(match, playerA, Player.HandLimit);
+
+        // 消费层：自写被动触发器挂总线（hooks＝card.burned——独立信号经既有触发器 hooks 机制挂载）
+        var watcher = new BurnedWatchHandler(match.Engine, playerA);
+        watcher.Attach();
+
+        var drawn = await match.PlayerManager.DrawCard(playerA);
+
+        // 「当有牌被爆时」可承载：收到恰一次；载荷含被爆卡（与 drawn 返回的同一实例）与归属玩家
+        Assert.Equal(1, watcher.SeenEvents);
+        Assert.Same(drawn, Assert.Single(watcher.Burned));
+    }
+}
+
+// ==================== 监听消费辅助：card.burned 自写监听 handler（私有状态闭环） ====================
+
+/// <summary>
+/// card.burned 监听 handler（「当有牌被爆时」）：自建被动触发器挂总线（hooks＝card.burned）；
+/// 归属过滤（指定玩家）→ 私有状态记录被爆卡——证明独立信号经既有触发器 hooks 机制挂载可达。
+/// </summary>
+internal sealed class BurnedWatchHandler
+{
+    private readonly LogicEngine _engine;
+    private readonly Player _watchedPlayer;
+    private readonly Trigger<BurnedWatchView> _watchTrigger;
+    private readonly List<Card> _burned = new();
+
+    public BurnedWatchHandler(LogicEngine engine, Player watchedPlayer)
+    {
+        _engine = engine;
+        _watchedPlayer = watchedPlayer;
+        _watchTrigger = new Trigger<BurnedWatchView>(
+            $"{watchedPlayer.Index}/爆牌监听",
+            TriggerKind.Passive,
+            events: new[] { new TriggerEvent<BurnedWatchView>("累计", OnBurnedAsync) },
+            hooks: new[] { GameUpdates.CardBurned },
+            owner: this);
+    }
+
+    /// <summary>收到的 card.burned 事件总数（过滤前；真实源联动证据）。</summary>
+    public int SeenEvents { get; private set; }
+
+    /// <summary>被爆卡记录（归属过滤后、发生序）。</summary>
+    public IReadOnlyList<Card> Burned => _burned;
+
+    public void Attach() => _engine.Bus.Mount(_watchTrigger);
+
+    private Task OnBurnedAsync(BurnedWatchView view, Context ctx, CancellationToken ct)
+    {
+        SeenEvents += 1;
+
+        if (view.Player is not Player player || !ReferenceEquals(player, _watchedPlayer))
+        {
+            return Task.CompletedTask; // 归属过滤：仅累计指定玩家的爆牌
+        }
+
+        if (view.Card is not Card card)
+        {
+            return Task.CompletedTask;
+        }
+
+        _burned.Add(card);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>card.burned 监听视图（载荷：{ Card, Player }——被爆卡实例＋爆牌时所归属的玩家）。</summary>
+[ContextView]
+public class BurnedWatchView
+{
+    [Optional]
+    [Read]
+    public virtual object? Card { get; set; }
+
+    [Optional]
+    [Read]
+    public virtual object? Player { get; set; }
 }

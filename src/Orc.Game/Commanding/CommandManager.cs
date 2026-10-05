@@ -30,7 +30,7 @@ namespace Orc.Game.Commanding;
 //   由位置/入场/死亡更新驱动重算——底层链负责）；⑦回合恢复（turn.start 处理段：行动方在场单位重置两 bool）。
 // 「两 bool 只在外层更新」：内层（移动/攻击/伤害/词条）一律不写——法定写入点＝指挥收尾 / 部署链收尾（闪击）/ 回合恢复。
 // W2b G3 接线（加性）：数值读取面接改——攻击力/防御力/行动费结算读点改读「有效值」（修饰机制缓存；
-//   伤害值/HQ 伤害＝攻击有效值、扣减经门户〔ApplyDefenseDamageAsync〕、死亡判定＝防御有效值、可用性/扣费/复验＝行动费有效值）；
+//   伤害值/HQ 伤害＝攻击有效值、扣减经门户〔ApplyDefenseDamageAsync〕、死亡判定＝防御有效值、可用性/扣费/复验＝行动费有效值〔K4：行动费取值经 OperateCosts 共享单元——判定/扣费同源〕）；
 //   防御归零统一死亡衔接——被动触发器（响应 card.stat.changed；外部订阅通知完成之后检查）「防御有效值 ≤0 且未死亡」
 //   → 统一死亡流程〔死亡清理＝效果/修饰器注销＋数值整合零新发射；先数值变化、后死亡信号〕（含修饰撤销/到期等
 //   非伤害来源的 ≤0 边界；伤害路径判定为防护兜底——已死亡跳过，死亡恰一次）；互伤结算含死亡冻结防护（尸体不结算）。
@@ -78,6 +78,12 @@ public sealed class CommandManager
     private readonly MatchLifecycle? _lifecycle;
     private readonly RetriggerSystem? _retrigger; // A4：再触发服务（亡计结算执行面/防护的统一入口；可空＝独立构造降级）
     private readonly Func<string, JudicatorBinding>? _validationJudicatorResolver; // J2：验证判定器解析器（复验绑定解析——对局＝注册表；缺省＝内置默认）
+    private readonly Func<UnitCard, Ref<Entity>, bool> _combatTargetLegal; // K1：目标合法性判定通道（（攻击者, 目标引用）→ bool——对局＝combat.target.legal 条目句柄；缺省＝内置默认）
+    private readonly Func<UnitCard, UnitCard, bool> _combatCounterEligibility; // K2：反击资格判定通道（（攻击者, 目标）→ bool——对局＝combat.counter.eligibility 条目句柄；缺省＝内置默认）
+    private readonly Func<UnitCard, UnitCard, bool> _combatAmbushCondition; // K2：伏击条件判定通道（（被攻击单位, 攻击者）→ bool——对局＝combat.ambush.condition 条目句柄；缺省＝内置默认）
+    private readonly Func<UnitCard, Slot?, LegEligibilityFailure?> _moveLegEligibility; // K3：move leg 资格判定通道（（单位, 源位置）→ 结果〔null＝通过〕——对局＝move.leg.eligibility 条目句柄；缺省＝内置默认）
+    private readonly Func<UnitCard, LegEligibilityFailure?> _attackLegEligibility; // K3：attack leg 资格判定通道（（单位）→ 结果〔null＝通过〕——对局＝attack.leg.eligibility 条目句柄；缺省＝内置默认）
+    private readonly Func<Player, bool> _moveFrontlineEnemy; // K3：推进前置判定通道（（所有者）→ bool——对局＝move.frontline-enemy 条目句柄；缺省＝内置默认）
     private readonly Trigger<CardTriggerView> _defenseDepletionTrigger; // W2b：防御归零检查（被动；挂载于更新总线）
     private readonly Trigger<CardTriggerView> _hqZeroTrigger; // W3-3：HQ 归零检查（被动；挂载于更新总线）
 
@@ -97,6 +103,23 @@ public sealed class CommandManager
     /// <param name="retrigger">再触发服务（A4；亡计结算执行面/防护的统一入口——缺省＝null＝独立构造降级：死亡链直调亡计执行面〔无重入防护〕）。</param>
     /// <param name="validationJudicatorResolver">验证判定器解析器（J2；按名解析——对局路径＝注册表解析〔复验判定器经固定内置注册段注册〕；
     /// 缺省＝null＝独立构造路径——内置默认解析〔构造即可用：注入本管理器对局级只读设施引用〕）。</param>
+    /// <param name="combatTargetLegal">目标合法性判定通道（K1；（攻击者, 目标引用）→ bool——对局路径＝固定内置注册段注册的
+    /// combat.target.legal 条目〔经条目句柄调用——moding 动态生效〕；缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
+    /// <param name="combatCounterEligibility">反击资格判定通道（K2；（攻击者, 目标）→ bool——对局路径＝固定内置注册段注册的
+    /// combat.counter.eligibility 条目〔经条目句柄调用——moding 动态生效；默认互伤区与伏击资格共用〕；
+    /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
+    /// <param name="combatAmbushCondition">伏击条件判定通道（K2；（被攻击单位, 攻击者）→ bool——对局路径＝固定内置注册段注册的
+    /// combat.ambush.condition 条目〔经条目句柄调用——moding 动态生效；伏击组件经装载上下文取用〕；
+    /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
+    /// <param name="moveLegEligibility">move leg 资格判定通道（K3；（单位, 源位置）→ 结果〔null＝通过〕——对局路径＝固定内置注册段注册的
+    /// move.leg.eligibility 条目〔经条目句柄调用——moding 动态生效；可用性与移动复验共用〕；
+    /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
+    /// <param name="attackLegEligibility">attack leg 资格判定通道（K3；（单位）→ 结果〔null＝通过〕——对局路径＝固定内置注册段注册的
+    /// attack.leg.eligibility 条目〔经条目句柄调用——moding 动态生效；可用性与攻击复验共用〕；
+    /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
+    /// <param name="moveFrontlineEnemy">推进前置判定通道（K3；（所有者）→ bool——对局路径＝固定内置注册段注册的
+    /// move.frontline-enemy 条目〔经条目句柄调用——moding 动态生效；移动可用性与移动复验共用〕；
+    /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
     /// <exception cref="ArgumentNullException">engine / battlefield / targeterManager / players 为 null。</exception>
     /// <exception cref="ArgumentException">players 不是两名玩家。</exception>
     /// <exception cref="KeyNotFoundException">解析未注册名（解析动作即校验——装配期 fail-fast）。</exception>
@@ -108,7 +131,13 @@ public sealed class CommandManager
         Func<Player?>? currentPlayerProvider = null,
         MatchLifecycle? lifecycle = null,
         RetriggerSystem? retrigger = null,
-        Func<string, JudicatorBinding>? validationJudicatorResolver = null)
+        Func<string, JudicatorBinding>? validationJudicatorResolver = null,
+        Func<UnitCard, Ref<Entity>, bool>? combatTargetLegal = null,
+        Func<UnitCard, UnitCard, bool>? combatCounterEligibility = null,
+        Func<UnitCard, UnitCard, bool>? combatAmbushCondition = null,
+        Func<UnitCard, Slot?, LegEligibilityFailure?>? moveLegEligibility = null,
+        Func<UnitCard, LegEligibilityFailure?>? attackLegEligibility = null,
+        Func<Player, bool>? moveFrontlineEnemy = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -127,6 +156,24 @@ public sealed class CommandManager
         _lifecycle = lifecycle;
         _retrigger = retrigger;
         _validationJudicatorResolver = validationJudicatorResolver;
+
+        // K1 加性（A 档 C1-C4：交战合法性判定族）：目标合法性判定通道——对局路径＝注入的条目调用委托
+        // （经注册表条目句柄——每次调用经统一解析点，moding 动态生效、候选/复验两链同步）；
+        // 独立构造路径＝内置默认判定器（构造即可用——注入本管理器对局级只读设施引用；子规则内置实例经实例主方法调用——不内联）。
+        _combatTargetLegal = combatTargetLegal ?? CreateBuiltInCombatTargetLegal();
+
+        // K2 加性（A 档 C5/C6：反击豁免与伏击条件）：反击资格与伏击条件判定通道——对局路径＝注入的条目调用委托
+        // （经注册表条目句柄——每次调用经统一解析点，moding 动态生效；反击资格＝默认互伤区与伏击资格共用）；
+        // 独立构造路径＝内置默认判定器（构造即可用——零注入实例经实例主方法调用——不内联）。
+        _combatCounterEligibility = combatCounterEligibility ?? CreateBuiltInCombatCounterEligibility();
+        _combatAmbushCondition = combatAmbushCondition ?? CreateBuiltInCombatAmbushCondition();
+
+        // K3 加性（A 档 C7/C8：复验消重）：leg 资格与推进前置判定通道——对局路径＝注入的条目调用委托
+        // （经注册表条目句柄——每次调用经统一解析点，moding 动态生效、可用性/复验四调用点同源）；
+        // 独立构造路径＝内置默认判定器（构造即可用——注入本管理器对局级只读设施引用；条目化调用形态同构——不内联）。
+        _moveLegEligibility = moveLegEligibility ?? CreateBuiltInMoveLegEligibility();
+        _attackLegEligibility = attackLegEligibility ?? CreateBuiltInAttackLegEligibility();
+        _moveFrontlineEnemy = moveFrontlineEnemy ?? CreateBuiltInMoveFrontlineEnemy();
 
         // ① 指挥触发器（内置；默认链＝指挥流程编排）
         CommandTrigger = new Trigger<CommandTriggerView>("指挥触发器");
@@ -154,9 +201,12 @@ public sealed class CommandManager
 
         // 词条装载上下文（卡牌加载时取用；伏击注册「造成攻击伤害」改写）。
         // A2 加性：随带对局服务——钳击（同伴选择交互/候选枚举/关系注册表）与压制（当前行动方）组件的运行逻辑取用；
+        // K2 加性：随带判定器通道——伏击组件资格（combat.counter.eligibility）与条件（combat.ambush.condition）判定取用
+        // （缺通道＝组件静默不注册——防御；对局/独立构造路径下本管理器两通道恒非空）。
         // lambda 免——直接引用（构造时点这些字段均已赋值）。
         KeywordLoadContext = new KeywordLoadContext(
-            engine, AttackDamageTrigger, _targeterManager, _battlefield, _pincers, _currentPlayerProvider);
+            engine, AttackDamageTrigger, _targeterManager, _battlefield, _pincers, _currentPlayerProvider,
+            _combatCounterEligibility, _combatAmbushCondition);
 
         // 守护维护：由位置/入场/死亡更新驱动（凡影响占用布局的变动均等效触达；词条效果不直接发射更新）
         _engine.Subscribe((updateType, _, _) =>
@@ -525,7 +575,9 @@ public sealed class CommandManager
 
     /// <summary>
     /// 动作可用性聚合判定（纯查询——无副作用、不发更新、不启动交互、不改变任何状态）：
-    /// 流程级资格（己方回合 ∧ Owner＝当前行动方 ∧ 在场未死亡）＋ 动作级（bool ∧ 费用 ∧ 候选可行性——一次聚合）。
+    /// 流程级资格（己方回合 ∧ Owner＝当前行动方 ∧ 在场未死亡）＋ 动作级（bool ∧ 被压制 ∧ 费用 ∧ 候选可行性——一次聚合）。
+    /// K3：leg 资格（流程级＋动作级前置：owner==current／!destroyed／CanMove·CanAttack／被压制／行动费／位置〔源∈支援线〕）
+    /// 经共享 leg 条目单源取用（原内联逐条条件迁入——与复验判定器同源）；流程级原因由 leg 结果分类提取（读取路由——非第二判定源）。
     /// 移动候选＝前线任意空槽引用；攻击候选＝合法敌方单位/敌方 HQ 引用（范围矩阵 ∧ 烟幕 ∧ 守护筛选后）。
     /// 矩阵断言可直接经本公开面进行（不必驱动完整拖拽交互）。
     /// </summary>
@@ -536,76 +588,32 @@ public sealed class CommandManager
         ArgumentNullException.ThrowIfNull(unit);
         RequireUnitized(unit);
 
-        var ineligible = ComputeIneligibility(unit);
+        // K3：leg 资格先行（共享条件源——可用性与复验四调用点同源）；移动的位置参数＝当前位置（仅推进语义）。
+        var moveLegFailure = _moveLegEligibility(unit, unit.GetData<UnitStateData>().Position);
+        var attackLegFailure = _attackLegEligibility(unit);
+
+        // 流程级资格原因＝leg 结果的分类提取（NonOwnerTurn/OwnerInvalid/UnitDead——两侧 leg 流程段同源、结果一致；
+        // 分类为读取路由，不重新判断条件——无第二判定源）。
+        var ineligible = FlowLevelIneligibleReason(moveLegFailure) ?? FlowLevelIneligibleReason(attackLegFailure);
         return new CommandAvailability(
             ineligible,
-            ComputeMoveAvailability(unit, ineligible),
-            ComputeAttackAvailability(unit, ineligible));
+            ComputeMoveAvailability(unit, moveLegFailure),
+            ComputeAttackAvailability(unit, attackLegFailure));
     }
 
-    private CommandBlockReason? ComputeIneligibility(UnitCard unit)
+    private CommandActionAvailability ComputeMoveAvailability(UnitCard unit, LegEligibilityFailure? legFailure)
     {
-        var current = _currentPlayerProvider();
-        if (current is null)
+        // K3：leg 结果→动作级阻断原因（映射为纯读取；leg 内部顺序＝现状优先级：can→suppressed→cost→position）。
+        if (legFailure is { } failure)
         {
-            return CommandBlockReason.NonOwnerTurn; // 回合未就绪（当前行动方未定）
+            return CommandActionAvailability.Blocked(MapLegFailure(failure));
         }
 
-        var owner = unit.Owner;
-        if (owner is null)
-        {
-            return CommandBlockReason.OwnerInvalid; // 无归属单位不可被指挥
-        }
+        var owner = unit.Owner!; // leg 资格通过 ⇒ owner 非 null（归属检查见 leg 条件序列）
 
-        if (!ReferenceEquals(owner, current))
-        {
-            return CommandBlockReason.NonOwnerTurn; // 仅限己方回合操作己方单位
-        }
-
-        if (unit.GetData<UnitStateData>().IsDestroyed)
-        {
-            return CommandBlockReason.UnitDead; // 尸体不可被指挥
-        }
-
-        return null;
-    }
-
-    private CommandActionAvailability ComputeMoveAvailability(UnitCard unit, CommandBlockReason? ineligible)
-    {
-        if (ineligible is { } blocked)
-        {
-            return CommandActionAvailability.Blocked(blocked);
-        }
-
-        var owner = unit.Owner!;
-        var state = unit.GetData<UnitStateData>();
-        var command = unit.GetData<CommandData>();
-
-        if (!command.CanMove)
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
-        }
-
-        // A2：被压制（不能移动或攻击——行动合法性消费面读「被压制」标记）
-        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.Suppressed);
-        }
-
-        // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
-        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.PointShortage);
-        }
-
-        // 仅推进：仅支援线单位可移动（前线单位无移动候选）
-        if (state.Position is null || !_battlefield.GetSupportLine(owner).Contains(state.Position))
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates);
-        }
-
-        // 推进前置（后置项 C）：前线不存在存活敌方单位方可推进（空前线或己方已占；敌方清空后实时恢复）
-        if (HasLivingEnemyOnFrontLine(owner))
+        // 推进前置（后置项 C；K3：经 move.frontline-enemy 条目——与复验同源）：前线不存在存活敌方单位方可推进
+        //（空前线或己方已占；敌方清空后实时恢复）
+        if (_moveFrontlineEnemy(owner))
         {
             return CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates);
         }
@@ -625,31 +633,12 @@ public sealed class CommandManager
             : CommandActionAvailability.Available(candidates);
     }
 
-    private CommandActionAvailability ComputeAttackAvailability(UnitCard unit, CommandBlockReason? ineligible)
+    private CommandActionAvailability ComputeAttackAvailability(UnitCard unit, LegEligibilityFailure? legFailure)
     {
-        if (ineligible is { } blocked)
+        // K3：leg 结果→动作级阻断原因（映射为纯读取；leg 内部顺序＝现状优先级：can→suppressed→cost）。
+        if (legFailure is { } failure)
         {
-            return CommandActionAvailability.Blocked(blocked);
-        }
-
-        var owner = unit.Owner!;
-        var command = unit.GetData<CommandData>();
-
-        if (!command.CanAttack)
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
-        }
-
-        // A2：被压制（不能移动或攻击——行动合法性消费面读「被压制」标记）
-        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.Suppressed);
-        }
-
-        // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
-        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
-        {
-            return CommandActionAvailability.Blocked(CommandBlockReason.PointShortage);
+            return CommandActionAvailability.Blocked(MapLegFailure(failure));
         }
 
         var candidates = CollectAttackCandidates(unit);
@@ -660,7 +649,8 @@ public sealed class CommandManager
 
     /// <summary>
     /// 攻击候选收集（合法敌方单位/敌方 HQ 引用；索引序＝敌支援线 → 前线 → 敌 HQ）：
-    /// 范围矩阵（步/坦仅相邻；炮/战斗机/轰炸机任意）∧ 烟幕（不可被攻击）∧ 守护（被守护仅能被炮/轰）∧ 目标归属。
+    /// 收集/枚举保留于本管理器（遍历结构与顺序＝应用流程逻辑）；逐候选合法性经目标合法性判定器
+    /// （K1：combat.target.legal——六重编排〔归属/存活-在场/烟幕/守护资格/拦截/范围〕由判定器承载；本处只调用不判断）。
     /// </summary>
     private List<Ref<Entity>> CollectAttackCandidates(UnitCard attacker)
     {
@@ -680,7 +670,7 @@ public sealed class CommandManager
         var enemyLine = _battlefield.GetSupportLine(enemy);
         for (var i = 0; i < enemyLine.Count; i++)
         {
-            if (enemyLine[i].Occupant is UnitCard target && IsLegalUnitTarget(attacker, target))
+            if (enemyLine[i].Occupant is UnitCard target && _combatTargetLegal(attacker, target.Ref))
             {
                 result.Add(target.Ref);
             }
@@ -689,7 +679,7 @@ public sealed class CommandManager
         var frontLine = _battlefield.FrontLine;
         for (var i = 0; i < frontLine.Count; i++)
         {
-            if (frontLine[i].Occupant is UnitCard target && IsLegalUnitTarget(attacker, target))
+            if (frontLine[i].Occupant is UnitCard target && _combatTargetLegal(attacker, target.Ref))
             {
                 result.Add(target.Ref);
             }
@@ -697,7 +687,7 @@ public sealed class CommandManager
 
         // HQ（W3-3 实体化）：目标以 HQ 实体引用承载——候选产出 hq.Ref（不留双承载：槽位引用不再作为
         // HQ 目标产出；槽位关系仅用于布局语义判定〔守护/轰炸机拦截/范围矩阵——经 HQ 占位槽〕）。
-        if (enemyLine[0].Occupant is Hq hq && IsLegalHqTarget(attacker, hq))
+        if (enemyLine[0].Occupant is Hq hq && _combatTargetLegal(attacker, hq.Ref))
         {
             result.Add(hq.Ref);
         }
@@ -705,107 +695,10 @@ public sealed class CommandManager
         return result;
     }
 
-    /// <summary>单位为目标的合法性（归属正确 ∧ 在场未死 ∧ 不被烟幕 ∧ 被守护仅炮/轰可攻 ∧ 范围矩阵）。</summary>
-    private bool IsLegalUnitTarget(UnitCard attacker, UnitCard target)
-    {
-        var enemy = attacker.Owner is { } owner ? EnemyOf(owner) : null;
-        if (enemy is null || !ReferenceEquals(target.Owner, enemy))
-        {
-            return false;
-        }
-
-        if (!target.TryGetData<UnitStateData>(out var targetState)
-            || targetState.IsDestroyed
-            || targetState.Position is null)
-        {
-            return false;
-        }
-
-        if (KeywordRules.HasKeyword(target, KeywordIds.SmokeScreen))
-        {
-            return false; // 烟幕：不可被攻击（对一切攻击者生效）
-        }
-
-        if (_guardedUnits.Contains(target) && !CountsAsBombard(attacker))
-        {
-            return false; // 被守护：仅能被炮/轰攻击
-        }
-
-        // 轰炸机拦截（后置项 C）：目标所在战线存在存活敌方战斗机时，该战线的非战斗机目标置黑
-        var targetPosition = targetState.Position!;
-        if (IsBlockedByEnemyFighter(attacker, targetPosition, HasUnitType(target, UnitType.Fighter)))
-        {
-            return false;
-        }
-
-        return IsLineInRange(attacker, targetPosition);
-    }
-
-    /// <summary>HQ 为目标的合法性（仍为敌方 HQ〔引用同一性〕∧ 被守护仅炮/轰可攻 ∧ 范围矩阵；HQ 无死亡/烟幕语义）。
-    /// W3-3：HQ 实体引用承载——布局判定（守护/轰炸机拦截/范围矩阵）经 HQ 占位槽（布局语义基准）。</summary>
-    private bool IsLegalHqTarget(UnitCard attacker, Hq hq)
-    {
-        var enemy = attacker.Owner is { } owner ? EnemyOf(owner) : null;
-        if (enemy is null || !ReferenceEquals(hq.Owner, enemy))
-        {
-            return false;
-        }
-
-        if (hq.Position is not { } hqSlot)
-        {
-            return false; // 异常布局（防御：HQ 未入槽）
-        }
-
-        if (_guardedHqs.Contains(hq) && !CountsAsBombard(attacker))
-        {
-            return false; // HQ 被守护（相邻守护者）：仅能被炮/轰攻击
-        }
-
-        // 轰炸机拦截（后置项 C）：HQ 位于敌方支援线——该战线存在存活敌方战斗机时不可选（须先攻击战斗机）
-        if (IsBlockedByEnemyFighter(attacker, hqSlot, targetIsFighter: false))
-        {
-            return false;
-        }
-
-        return IsLineInRange(attacker, hqSlot);
-    }
-
-    /// <summary>
-    /// 范围矩阵（目标线判定）：炮/战斗机/轰炸机任一＝任意线全组合允许（含 HQ、含同线）；
-    /// 其余（步兵/坦克/零类型）＝仅相邻（跨线紧邻）：支援线→敌前线单位；前线→敌支援线单位/HQ；同线不允许。
-    /// </summary>
-    private bool IsLineInRange(UnitCard attacker, Slot targetSlot)
-    {
-        var attackerState = attacker.GetData<UnitStateData>();
-        var owner = attacker.Owner;
-        if (owner is null || attackerState.Position is null)
-        {
-            return false;
-        }
-
-        var enemy = EnemyOf(owner);
-        if (enemy is null)
-        {
-            return false;
-        }
-
-        if (HasAnyLineRange(attacker))
-        {
-            return true;
-        }
-
-        if (_battlefield.GetSupportLine(owner).Contains(attackerState.Position))
-        {
-            return _battlefield.FrontLine.Contains(targetSlot); // 支援线 → 仅敌方前线单位
-        }
-
-        if (_battlefield.FrontLine.Contains(attackerState.Position))
-        {
-            return _battlefield.GetSupportLine(enemy).Contains(targetSlot); // 前线 → 仅敌方支援线（单位/HQ）
-        }
-
-        return false; // 异常布局（防御）
-    }
+    // K1：原 IsLegalUnitTarget / IsLegalHqTarget / IsLineInRange 的规则编排已迁至交战合法性判定器族——
+    // combat.target.legal 组合器承载前两者之编排（归属→存活/在场→烟幕→守护资格→拦截→范围；HQ 分支＝
+    // 归属→占位槽→守护→拦截→范围），combat.range 子规则承载 IsLineInRange 范围矩阵；
+    // 本管理器候选/复验调用点经 _combatTargetLegal 单源调用（只调用不判断——无第二真源）。
 
     // ---------- ③ 守护状态（维护型；由更新驱动重算） ----------
 
@@ -1129,13 +1022,12 @@ public sealed class CommandManager
         box.Result = CommandResult.Success();
     }
 
-    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
+    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
     private static void FinalizeMove(UnitCard unit)
     {
-        var owner = unit.Owner!;
         var command = unit.GetData<CommandData>();
 
-        owner.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost);
+        OperateCosts.Deduct(unit);
         command.CanMove = false;
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -1143,13 +1035,12 @@ public sealed class CommandManager
         }
     }
 
-    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
+    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
     private static void FinalizeAttack(UnitCard unit)
     {
-        var owner = unit.Owner!;
         var command = unit.GetData<CommandData>();
 
-        owner.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost);
+        OperateCosts.Deduct(unit);
         command.CanAttack = KeywordRules.ResolveCanAttackAfterAttack(unit);
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -1252,14 +1143,15 @@ public sealed class CommandManager
             return;
         }
 
-        // 默认基础互伤：按反击豁免判定表（后置项 A）——同时结算、以互扣前有效值为基准；豁免方不结算反击伤害
+        // 默认基础互伤：按反击豁免判定表（后置项 A；K2：经 combat.counter.eligibility 判定器条目——单源、moding 动态生效）
+        // ——同时结算、以互扣前有效值为基准；豁免方不结算反击伤害
         // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常）
         // W2b：伤害值与扣减一律接改——伤害读「攻击力有效值」；扣减经门户（损伤量→跑链→有变更集中触发）。
         // A2：伤害修正读取（handler 链介入——免疫归零／重甲减伤在默认结算 handler 之前登记；修正后照常走
         // 「0 伤害」路径——净伤害＝0 不算「受到伤害」，与动员失去等消费一致）。
         var damageToTarget = ResolveIncomingDamage(resolution, attacker, target);
         var damageToAttacker = ResolveIncomingDamage(resolution, target, attacker);
-        var counterAttacks = CounterAttackRules.CanCounterAttack(attacker, target);
+        var counterAttacks = _combatCounterEligibility(attacker, target); // K2：反击资格判定通道（对局＝条目句柄；独立构造＝内置默认）
 
         await target.ApplyDefenseDamageAsync(damageToTarget, ct); // 门户：伤害＝即时变更（只扣当前、不减上限）
         if (counterAttacks)
@@ -1392,11 +1284,12 @@ public sealed class CommandManager
 
     // ---------- ⑨ 执行前复验（分派后、执行前兜底；J2：验证判定器承载——ValidationRejected、零副作用＋留痕） ----------
     // 复验逻辑迁至逐点专属判定器（MoveRevalidationJudicator / AttackRevalidationJudicator——验证点装配期按名绑定）；
-    // 本区保留复验所依赖的规则读取面（HasLivingEnemyOnFrontLine / IsAttackTargetLegal——与可用性侧单源、供判定器装配期注入转发）。
+    // K3：复验经共享 leg 条目与 move.frontline-enemy 条目取用条件（与可用性侧同源）；本区保留攻击目标合法性转发面
+    //（IsAttackTargetLegal——与可用性侧单源、供攻击复验判定器装配期注入转发）。
 
     /// <summary>
     /// 复验判定器绑定解析（J2）：对局路径＝注册表解析（固定内置注册段已注册——装配期已就绪）；
-    /// 独立构造路径＝内置默认（构造即可用——注入本管理器的对局级只读设施引用；复验规则读取经本管理器的读取面转发——单源）。
+    /// 独立构造路径＝内置默认（构造即可用——注入本管理器的对局级只读设施引用；leg/推进前置经本管理器内置默认通道——单源）。
     /// 解析动作即校验（未注册名＝装配期 fail-fast）。
     /// </summary>
     private JudicatorBinding ResolveRecheckBinding(string name)
@@ -1404,41 +1297,103 @@ public sealed class CommandManager
             ? _validationJudicatorResolver(name)
             : JudicatorBinding.FromStandalone(name, CreateRecheckJudicator(name));
 
-    /// <summary>创建内置默认复验判定器（独立构造路径；装配期注入本管理器对局级只读设施引用——仅只读使用）。</summary>
+    /// <summary>创建内置默认复验判定器（独立构造路径；装配期注入本管理器对局级只读设施引用——仅只读使用）。
+    /// K3：leg 资格与推进前置经本管理器内置默认通道注入（与对局路径「经条目句柄」形态同构——不内联副本）。</summary>
     private ValidationJudicator CreateRecheckJudicator(string name) => name switch
     {
         JudicatorNames.MoveRecheck => new MoveRevalidationJudicator(
-            _lifecycle, _currentPlayerProvider, _battlefield, owner => HasLivingEnemyOnFrontLine(owner)),
+            _lifecycle, _moveLegEligibility, _battlefield, _moveFrontlineEnemy),
         JudicatorNames.AttackRecheck => new AttackRevalidationJudicator(
-            _lifecycle, _currentPlayerProvider, (attacker, targetRef) => IsAttackTargetLegal(attacker, targetRef)),
+            _lifecycle, _attackLegEligibility, (attacker, targetRef) => IsAttackTargetLegal(attacker, targetRef)),
         _ => throw new KeyNotFoundException(
             $"判定器 '{name}' 未注册（独立构造路径无注册表——内置默认仅含复验两项；未注册引用＝配置错误）。"),
     };
 
-    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 引用仍为敌方 HQ——W3-3 实体承载）。
-    /// J2：复验逻辑迁至 AttackRevalidationJudicator（经装配期注入转发本读取面——与可用性侧单源）；可见性提为 internal 供其使用。</summary>
-    internal bool IsAttackTargetLegal(UnitCard attacker, Ref<Entity> targetRef)
+    /// <summary>
+    /// 创建内置默认目标合法性判定通道（K1；独立构造路径——构造即可用、零配置）：
+    /// 子规则（范围/资格/拦截）以内置默认实例承载、经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）；对局级只读设施（战场布局/敌我判定/守护查询）经构造注入（仅只读使用）。
+    /// </summary>
+    private Func<UnitCard, Ref<Entity>, bool> CreateBuiltInCombatTargetLegal()
     {
-        if (!targetRef.IsAlive)
-        {
-            return false;
-        }
-
-        var targetEntity = targetRef.Value;
-        if (targetEntity is Hq hq)
-        {
-            return IsLegalHqTarget(attacker, hq);
-        }
-
-        if (targetEntity is UnitCard target)
-        {
-            return IsLegalUnitTarget(attacker, target);
-        }
-
-        return false;
+        var range = new CombatRangeJudicator(_battlefield, EnemyOf);
+        var guardEligibility = new CombatGuardEligibilityJudicator();
+        var interception = new CombatInterceptionJudicator(_battlefield, EnemyOf);
+        var targetLegal = new CombatTargetLegalJudicator(
+            EnemyOf,
+            IsUnitGuarded,
+            hq => IsHqGuarded(hq),
+            (attacker, targetSlot) => CombatJudicatorInvoker.InvokeBool(range, attacker, targetSlot),
+            attacker => CombatJudicatorInvoker.InvokeBool(guardEligibility, attacker),
+            (attacker, targetSlot, targetIsFighter) => CombatJudicatorInvoker.InvokeBool(interception, attacker, targetSlot, targetIsFighter));
+        return (attacker, targetRef) => CombatJudicatorInvoker.InvokeBool(targetLegal, attacker, targetRef);
     }
 
+    /// <summary>
+    /// 创建内置默认反击资格判定通道（K2；独立构造路径——构造即可用、零配置）：
+    /// 内置默认实例经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）。
+    /// </summary>
+    private static Func<UnitCard, UnitCard, bool> CreateBuiltInCombatCounterEligibility()
+    {
+        var counterEligibility = new CombatCounterEligibilityJudicator();
+        return (attacker, target) => CombatJudicatorInvoker.InvokeBool(counterEligibility, attacker, target);
+    }
+
+    /// <summary>
+    /// 创建内置默认伏击条件判定通道（K2；独立构造路径——构造即可用、零配置）：
+    /// 内置默认实例经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）。
+    /// </summary>
+    private static Func<UnitCard, UnitCard, bool> CreateBuiltInCombatAmbushCondition()
+    {
+        var ambushCondition = new CombatAmbushConditionJudicator();
+        return (self, attacker) => CombatJudicatorInvoker.InvokeBool(ambushCondition, self, attacker);
+    }
+
+    /// <summary>
+    /// 创建内置默认 move leg 资格判定通道（K3；独立构造路径——构造即可用、零配置）：
+    /// 内置默认实例经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）。
+    /// </summary>
+    private Func<UnitCard, Slot?, LegEligibilityFailure?> CreateBuiltInMoveLegEligibility()
+    {
+        var judicator = new LegEligibilityJudicator(_currentPlayerProvider, _battlefield, isMove: true);
+        return (unit, position) => LegJudicatorInvoker.InvokeLeg(judicator, unit, position);
+    }
+
+    /// <summary>
+    /// 创建内置默认 attack leg 资格判定通道（K3；独立构造路径——构造即可用、零配置）：
+    /// 内置默认实例经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）。
+    /// </summary>
+    private Func<UnitCard, LegEligibilityFailure?> CreateBuiltInAttackLegEligibility()
+    {
+        var judicator = new LegEligibilityJudicator(_currentPlayerProvider, battlefield: null, isMove: false);
+        return unit => LegJudicatorInvoker.InvokeLeg(judicator, unit, null);
+    }
+
+    /// <summary>
+    /// 创建内置默认推进前置判定通道（K3；独立构造路径——构造即可用、零配置）：
+    /// 内置默认实例经实例主方法调用（独立路径无注册表——无改写通道；
+    /// 与对局路径「经条目句柄」形态同构、不内联副本）。
+    /// </summary>
+    private Func<Player, bool> CreateBuiltInMoveFrontlineEnemy()
+    {
+        var judicator = new MoveFrontlineEnemyJudicator(_battlefield, EnemyOf);
+        return owner => CombatJudicatorInvoker.InvokeBool(judicator, owner);
+    }
+
+    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 引用仍为敌方 HQ——W3-3 实体承载）。
+    /// K1：规则编排迁至 CombatTargetLegalJudicator（combat.target.legal——六重编排＋引用契约）；本面保留为转发壳
+    /// （候选链与复验链同源单点）；可见性保持 internal（J2 口径——供复验判定器装配期注入转发）。</summary>
+    internal bool IsAttackTargetLegal(UnitCard attacker, Ref<Entity> targetRef)
+        => _combatTargetLegal(attacker, targetRef);
+
     // ---------- 辅助 ----------
+
+    /// <summary>敌我判定转发（K1；交战判定族装配期注入转发——与指挥流程单源；可见性提为 internal 供装配段注入使用）。</summary>
+    internal Player? EnemyOfPlayer(Player player) => EnemyOf(player);
 
     private Player? EnemyOf(Player player)
     {
@@ -1456,93 +1411,13 @@ public sealed class CommandManager
     private static bool HasUnitType(UnitCard unit, UnitType type)
         => unit.TryGetData<UnitStateData>(out var state) && state.UnitTypes.Contains(type);
 
-    /// <summary>任意线射程组（炮兵/战斗机/轰炸机任一——存在性判定；含同线、含 HQ 全组合允许）。</summary>
-    private static bool HasAnyLineRange(UnitCard unit)
-        => HasUnitType(unit, UnitType.Artillery)
-            || HasUnitType(unit, UnitType.Fighter)
-            || HasUnitType(unit, UnitType.Bomber);
+    // K1：原 HasAnyLineRange / CountsAsBombard（类型组判定）已迁至 CombatTypeGroups（C2/C3/C4 共表——单源定义处）。
 
-    /// <summary>炮/轰组（炮兵/轰炸机任一——被守护攻击资格：不含战斗机）。</summary>
-    private static bool CountsAsBombard(UnitCard unit)
-        => HasUnitType(unit, UnitType.Artillery) || HasUnitType(unit, UnitType.Bomber);
+    // K3：原 HasLivingEnemyOnFrontLine（推进前置读取面）已迁至 MoveFrontlineEnemyJudicator（move.frontline-enemy 条目——
+    // 移动可用性与移动复验两调用点经条目句柄单源取用；旧装配期注入转发路径退役）。
 
-    /// <summary>
-    /// 推进前置判定（后置项 C）：前线是否存在存活敌方单位（空前线或己方已占＝false；敌方清空后实时恢复）。
-    /// J2：复验逻辑迁至 MoveRevalidationJudicator（经装配期注入转发本读取面——与可用性侧单源）；可见性提为 internal 供其使用。
-    /// </summary>
-    internal bool HasLivingEnemyOnFrontLine(Player owner)
-    {
-        var enemy = EnemyOf(owner);
-        if (enemy is null)
-        {
-            return false;
-        }
-
-        foreach (var slot in _battlefield.FrontLine)
-        {
-            if (slot.Occupant is UnitCard unit && !IsDead(unit) && ReferenceEquals(unit.Owner, enemy))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// 轰炸机拦截判定（后置项 C）：攻击者含轰炸机 ∧ 目标非战斗机 ∧ 目标所在战线存在存活敌方战斗机 → 拦截（置黑）。
-    /// 跨战线其他目标不受影响；以存活为限；多条战斗机共存＝无额外优先级（存在性判定）。
-    /// </summary>
-    private bool IsBlockedByEnemyFighter(UnitCard attacker, Slot targetSlot, bool targetIsFighter)
-    {
-        if (!HasUnitType(attacker, UnitType.Bomber) || targetIsFighter)
-        {
-            return false;
-        }
-
-        var enemy = attacker.Owner is { } owner ? EnemyOf(owner) : null;
-        if (enemy is null)
-        {
-            return false;
-        }
-
-        if (ResolveLineOf(targetSlot) is not { } line)
-        {
-            return false; // 异常布局（防御）
-        }
-
-        foreach (var slot in line)
-        {
-            if (slot.Occupant is UnitCard unit && !IsDead(unit)
-                && ReferenceEquals(unit.Owner, enemy) && HasUnitType(unit, UnitType.Fighter))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>槽位所属战线（三线判定；异常布局＝null——防御）。</summary>
-    private BattleLine? ResolveLineOf(Slot slot)
-    {
-        if (_battlefield.FrontLine.Contains(slot))
-        {
-            return _battlefield.FrontLine;
-        }
-
-        if (_battlefield.PlayerASupportLine.Contains(slot))
-        {
-            return _battlefield.PlayerASupportLine;
-        }
-
-        if (_battlefield.PlayerBSupportLine.Contains(slot))
-        {
-            return _battlefield.PlayerBSupportLine;
-        }
-
-        return null;
-    }
+    // K1：原 IsBlockedByEnemyFighter（轰炸机拦截判定）与 ResolveLineOf（槽位→战线解析）已迁至
+    // CombatInterceptionJudicator（combat.interception 子规则——逐字迁移、含防御分支）。
 
     private static bool IsDead(UnitCard unit)
         => !unit.TryGetData<UnitStateData>(out var state) || state.IsDestroyed;
@@ -1553,6 +1428,31 @@ public sealed class CommandManager
         CommandBlockReason.OwnerInvalid => CommandFailureReason.OwnerInvalid,
         CommandBlockReason.UnitDead => CommandFailureReason.UnitDead,
         _ => CommandFailureReason.CommandFlowFault,
+    };
+
+    /// <summary>leg 结果→流程级资格原因（K3；分类读取——NonOwnerTurn/OwnerInvalid/UnitDead 三项流程级；其余＝null）。
+    /// 读取路由（leg 条件→原因），不重新判断条件——无第二判定源。</summary>
+    private static CommandBlockReason? FlowLevelIneligibleReason(LegEligibilityFailure? failure) => failure switch
+    {
+        LegEligibilityFailure.NonOwnerTurn => CommandBlockReason.NonOwnerTurn,
+        LegEligibilityFailure.OwnerInvalid => CommandBlockReason.OwnerInvalid,
+        LegEligibilityFailure.UnitDead => CommandBlockReason.UnitDead,
+        _ => null,
+    };
+
+    /// <summary>leg 结果→动作级阻断原因映射（K3；逐项：owner/can/suppressed/cost 同名映射、
+    /// 位置不在支援线→NoCandidates——映射为纯读取、非条件重判）。</summary>
+    private static CommandBlockReason MapLegFailure(LegEligibilityFailure failure) => failure switch
+    {
+        LegEligibilityFailure.NonOwnerTurn => CommandBlockReason.NonOwnerTurn,
+        LegEligibilityFailure.OwnerInvalid => CommandBlockReason.OwnerInvalid,
+        LegEligibilityFailure.UnitDead => CommandBlockReason.UnitDead,
+        LegEligibilityFailure.FlagFalse => CommandBlockReason.FlagFalse,
+        LegEligibilityFailure.Suppressed => CommandBlockReason.Suppressed,
+        LegEligibilityFailure.PointShortage => CommandBlockReason.PointShortage,
+        LegEligibilityFailure.PositionNotInSupportLine => CommandBlockReason.NoCandidates,
+        _ => throw new InvalidOperationException(
+            $"leg 资格结果 '{failure}' 超出已知值域（映射不可用——fail-fast）。"),
     };
 
     private static void RequireUnitized(UnitCard unit)

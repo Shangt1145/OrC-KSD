@@ -59,6 +59,9 @@ internal sealed class DynamicBuildState
     internal object MainTrigger { get; }
 
     internal List<(object Trigger, Type ViewType)> OtherTriggers { get; } = new();
+
+    /// <summary>事件 id → handler（S5 注入用：把同一 handler 注册进宿主具名触发器）。</summary>
+    internal Dictionary<string, Delegate> Handlers { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -96,14 +99,13 @@ internal static class DynamicEffectBuilder
             return DynamicEffectInstantiation.Fail("view-type", $"主触发器构造失败：{ex.Message}");
         }
 
+        var state = new DynamicBuildState(mainViewType, mainTrigger);
         var eventsById = new Dictionary<string, TriggerRegistration>(StringComparer.Ordinal);
-        var failure = RegisterEvents(engine, manager, mainTrigger, mainViewType, prefab.MainTrigger, eventsById);
+        var failure = RegisterEvents(engine, manager, mainTrigger, mainViewType, prefab.MainTrigger, eventsById, state);
         if (failure is not null)
         {
             return failure;
         }
-
-        var state = new DynamicBuildState(mainViewType, mainTrigger);
 
         foreach (var otherPrefab in prefab.OtherTriggers)
         {
@@ -125,7 +127,7 @@ internal static class DynamicEffectBuilder
             }
 
             var otherEvents = new Dictionary<string, TriggerRegistration>(StringComparer.Ordinal);
-            failure = RegisterEvents(engine, manager, otherTrigger, otherViewType, otherPrefab, otherEvents);
+            failure = RegisterEvents(engine, manager, otherTrigger, otherViewType, otherPrefab, otherEvents, state);
             if (failure is not null)
             {
                 return failure;
@@ -161,7 +163,8 @@ internal static class DynamicEffectBuilder
         object trigger,
         Type viewType,
         TriggerPrefab prefab,
-        Dictionary<string, TriggerRegistration> eventsById)
+        Dictionary<string, TriggerRegistration> eventsById,
+        DynamicBuildState state)
     {
         foreach (var ev in prefab.Events)
         {
@@ -174,6 +177,7 @@ internal static class DynamicEffectBuilder
             var registration = TriggerReflection.Register(
                 trigger, viewType, ev.EntryName == "HandleAsync" ? ev.Id : ev.Id, resolution.Handler!, ev.Downstream);
             eventsById[ev.Id] = registration;
+            state.Handlers[ev.Id] = resolution.Handler!; // S5：注入用的 handler 来源
         }
 
         return null;
@@ -241,6 +245,25 @@ internal static class TriggerReflection
         => (TriggerRegistration)RegisterMethod.MakeGenericMethod(viewType)
             .Invoke(null, new object[] { trigger, name, handler, downstream })!;
 
+    /// <summary>默认区段注册（S5 注入用：无 band、可带优先级）。</summary>
+    internal static TriggerRegistration RegisterDefaultBand(
+        object trigger, Type viewType, string name, Delegate handler, int priority)
+        => (TriggerRegistration)RegisterBandMethod.MakeGenericMethod(viewType)
+            .Invoke(null, new object[] { trigger, name, handler, priority })!;
+
+    /// <summary>撤销注册（S5 注入撤销用；目标触发器 <c>Unregister</c> 面）。</summary>
+    internal static void Unregister(object trigger, TriggerRegistration registration)
+        => UnregisterMethod.Invoke(trigger, new object[] { registration });
+
+    private static readonly MethodInfo RegisterBandMethod = Get(nameof(RegisterBandCore));
+
+    private static readonly MethodInfo UnregisterMethod = typeof(Trigger<>)
+        .GetMethod(nameof(Trigger<object>.Unregister), new[] { typeof(TriggerRegistration) })!;
+
+    private static TriggerRegistration RegisterBandCore<TView>(object trigger, string name, Delegate handler, int priority)
+        where TView : class
+        => ((Trigger<TView>)trigger).Register(name, (Func<TView, Context, CancellationToken, Task>)handler, priority);
+
     internal static void RegisterModing(object trigger, Type viewType, TriggerRegistration target, Delegate moding)
         => ModingMethod.MakeGenericMethod(viewType).Invoke(null, new object[] { trigger, target, moding });
 
@@ -288,6 +311,15 @@ public sealed class DynamicPassiveEffect : PassiveEffect, ISerializableEffect
     public EffectSnapshot Snapshot => _snapshot;
 
     internal void AttachState(DynamicBuildState state) => _state = state;
+
+    /// <summary>取本效果内某事件的 handler（S5 注入用；未命中＝false）。</summary>
+    public bool TryGetEventHandler(string eventId, out Delegate? handler)
+    {
+        handler = null;
+        return _state is not null
+            && !string.IsNullOrWhiteSpace(eventId)
+            && _state.Handlers.TryGetValue(eventId, out handler);
+    }
 
     internal override void MountMainTrigger(Bus bus)
     {

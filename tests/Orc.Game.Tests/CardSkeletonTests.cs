@@ -143,11 +143,8 @@ public class CardSkeletonTests
         var defaultCard = match.CardLibrary.Instantiate("c01");
         await defaultCard.LoadAsync(player);
 
-        // 子类重写点可观测：自定义卡重写「持久化重建」扩展点（本批空位、可插桩——总装阶段填入重建逻辑）
-        var custom = new RecordingCard(match.Engine, new CardDefinition("自定义", 1, 2, 3, 4, faction: Faction.Germany, rarity: Rarity.Standard));
-        await custom.LoadAsync(player);
-        Assert.Equal(1, custom.RebuildInvocationCount);
-        Assert.Same(player, custom.LastOwner);
+        // 扩展点插桩语义已迁移：`RebuildFromPersistence` 随 P4b 删除，其能力由「扩展组件 loader」承载
+        // （加载期第二段＝数据体声明序；等价验收见 CardDataBodyTests 的扩展组件用例）。
     }
 
     [Fact]
@@ -169,21 +166,4 @@ public class CardSkeletonTests
         Assert.Throws<InvalidOperationException>(() => deck.DrawInstance()); // 首条未装配＝明确错误
     }
 
-    private sealed class RecordingCard : CardBase
-    {
-        public RecordingCard(LogicEngine engine, CardDefinition definition)
-            : base(engine, definition)
-        {
-        }
-
-        public int RebuildInvocationCount { get; private set; }
-
-        public Player? LastOwner { get; private set; }
-
-        protected override void RebuildFromPersistence(Player owner)
-        {
-            RebuildInvocationCount++;
-            LastOwner = owner;
-        }
-    }
 }

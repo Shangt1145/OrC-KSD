@@ -99,6 +99,8 @@ public static class KeywordIds
 /// A2 服务面（均可缺省——独立构造/部分装配＝null，消费侧防御跳过）：
 /// 目标选择管理器（钳击同伴选择交互）、战场（钳击候选枚举——己方在场单位）、
 /// 钳击关系注册表（一对一占用查询/登记）、当前行动方提供器（压制施加时的「拥有者回合」判定）。
+/// K2 判定器通道（可缺省——缺省＝无判定器通道：伏击组件静默不注册〔与「无上下文」同构〕、不抛错、不回退直调）：
+/// 反击资格（combat.counter.eligibility——伏击资格判定取用）、伏击条件（combat.ambush.condition——伏击条件判定取用）。
 /// </summary>
 public sealed class KeywordLoadContext
 {
@@ -108,7 +110,9 @@ public sealed class KeywordLoadContext
         TargeterManager? targeterManager = null,
         Battlefield? battlefield = null,
         PincerRegistry? pincerRegistry = null,
-        Func<Player?>? currentPlayerProvider = null)
+        Func<Player?>? currentPlayerProvider = null,
+        Func<UnitCard, UnitCard, bool>? counterEligibility = null,
+        Func<UnitCard, UnitCard, bool>? ambushCondition = null)
     {
         Engine = engine;
         AttackDamageTrigger = attackDamageTrigger;
@@ -116,6 +120,8 @@ public sealed class KeywordLoadContext
         Battlefield = battlefield;
         PincerRegistry = pincerRegistry;
         CurrentPlayerProvider = currentPlayerProvider;
+        CounterEligibility = counterEligibility;
+        AmbushCondition = ambushCondition;
     }
 
     /// <summary>对局引擎（发射更新 / 触发子触发器所需）。</summary>
@@ -135,6 +141,14 @@ public sealed class KeywordLoadContext
 
     /// <summary>当前行动方提供器（A2 加性；压制施加时「是否处于拥有者回合」判定〔「下一个回合」不含当前回合〕；可空＝视为非拥有者回合）。</summary>
     public Func<Player?>? CurrentPlayerProvider { get; }
+
+    /// <summary>反击资格判定通道（K2 加性；combat.counter.eligibility——伏击资格判定取用〔资格→C5〕；
+    /// 可空＝无判定器通道：伏击组件静默不注册、不抛错、不回退直调）。</summary>
+    public Func<UnitCard, UnitCard, bool>? CounterEligibility { get; }
+
+    /// <summary>伏击条件判定通道（K2 加性；combat.ambush.condition——伏击条件判定取用〔条件→C6〕；
+    /// 可空＝无判定器通道：伏击组件静默不注册、不抛错、不回退直调）。</summary>
+    public Func<UnitCard, UnitCard, bool>? AmbushCondition { get; }
 }
 
 /// <summary>

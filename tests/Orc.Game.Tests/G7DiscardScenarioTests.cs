@@ -15,7 +15,7 @@ namespace Orc.Game.Tests;
 /// ②选择＋放回卡组顶（两步组合——不含洗切；附「指定位置回迁」最小覆盖）；
 /// ③选择＋手牌内移动（组合消费级——移至最左）；
 /// ④洗入类（全体＝逐张回迁→洗切恰一次；随机单张＝随机服务取样→回迁→洗切恰一次；空集＝无操作）；
-/// ⑥HandLimit 烧牌（直烧口径：不经手牌、手牌全程 9；drawn → discarded、hand.add 零次；销毁先于信号）；
+/// ⑥HandLimit 爆牌（直爆口径：不经手牌、手牌全程 9；drawn → burned、hand.add 零次；销毁先于信号；不发 discarded）；
 /// ⑦弃牌信号与监听消费（信号层订阅记录断言＋消费层自写监听 handler 演示）。
 /// 演示定位：效果侧逻辑由测试充当消费方（不新增生产文件、不绕过受控面）；选择驱动＝桥接脚本化。
 /// </summary>
@@ -256,10 +256,10 @@ public class G7DiscardScenarioTests
         await match.ShuffleDeckAsync(player); // 装入全部完成后、洗切恰一次（既有洗切动作面——发射 deck.shuffled）
     }
 
-    // ==================== ⑥ HandLimit 烧牌 ====================
+    // ==================== ⑥ HandLimit 爆牌 ====================
 
     [Fact]
-    public async Task HandLimit_Burn_Draw_At_Full_Hand_Discards_Newly_Drawn_Card()
+    public async Task HandLimit_Burn_Draw_At_Full_Hand_Emits_Burned_Not_Discarded()
     {
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
@@ -290,7 +290,7 @@ public class G7DiscardScenarioTests
         var deckBefore = playerA.Deck.Count;
         await match.EndTurn(); // 回合 2（B）：B 照抽
         recorder.Clear(); // 只保留 A 回合的更新（分段断言）
-        await match.EndTurn(); // 回合 3（A）：满手 → 触发一次回合抽牌 → 烧牌
+        await match.EndTurn(); // 回合 3（A）：满手 → 触发一次回合抽牌 → 爆牌
 
         // 手牌：终态＝9（不变）、全程＝9
         Assert.Equal(9, playerA.Hand.Count);
@@ -298,24 +298,26 @@ public class G7DiscardScenarioTests
         // 卡组：计数＝N−1（抽取发生）
         Assert.Equal(deckBefore - 1, playerA.Deck.Count);
 
-        // 被烧卡：不可再抽到/使用；销毁接线佐证
-        var discarded = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardDiscarded);
-        var burned = Assert.IsAssignableFrom<CardBase>(discarded.Payload![GameUpdates.PayloadCard]);
+        // 被爆卡：不可再抽到/使用；销毁接线佐证
+        var burnedUpdate = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardBurned);
+        var burned = Assert.IsAssignableFrom<CardBase>(burnedUpdate.Payload![GameUpdates.PayloadCard]);
         Assert.False(burned.Life.IsAlive);
         Assert.DoesNotContain(burned, playerA.Hand);
         Assert.False(playerA.Deck.ContainsInstance(burned));
         Assert.DoesNotContain(burned, match.Engine.Cards);
 
-        // 信号序列（分段断言）：card.drawn 恰一次 → card.discarded 恰一次（drawn 先于 discarded）；card.hand.add 零次
+        // 信号序列（分段断言）：card.drawn 恰一次 → card.burned 恰一次（drawn 先于 burned）；
+        // card.discarded 零次（反向：爆牌不走弃牌路线）；card.hand.add 零次
         var types = recorder.Types.ToList();
         Assert.Equal(1, types.Count(t => t == GameUpdates.CardDrawn));
-        Assert.Equal(1, types.Count(t => t == GameUpdates.CardDiscarded));
+        Assert.Equal(1, types.Count(t => t == GameUpdates.CardBurned));
+        Assert.Equal(0, types.Count(t => t == GameUpdates.CardDiscarded));
         Assert.Equal(0, types.Count(t => t == GameUpdates.CardHandAdd));
-        Assert.True(types.IndexOf(GameUpdates.CardDrawn) < types.IndexOf(GameUpdates.CardDiscarded));
-        // 销毁先于 discarded（引擎销毁更新先于弃置信号）
-        Assert.True(types.IndexOf(Updates.CardDestroyed) < types.IndexOf(GameUpdates.CardDiscarded));
-        // 载荷：被烧卡＋归属玩家
-        Assert.Same(playerA, discarded.Payload![GameUpdates.PayloadPlayer]);
+        Assert.True(types.IndexOf(GameUpdates.CardDrawn) < types.IndexOf(GameUpdates.CardBurned));
+        // 销毁先于 burned（引擎销毁更新先于爆牌信号）
+        Assert.True(types.IndexOf(Updates.CardDestroyed) < types.IndexOf(GameUpdates.CardBurned));
+        // 载荷：被爆卡＋归属玩家
+        Assert.Same(playerA, burnedUpdate.Payload![GameUpdates.PayloadPlayer]);
     }
 
     // ==================== ⑦ 弃牌信号与监听消费 ====================

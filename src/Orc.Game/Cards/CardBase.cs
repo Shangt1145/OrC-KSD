@@ -1,4 +1,5 @@
 using Orc.Core;
+using Orc.Game.Cards.Data;
 using Orc.Game.Players;
 
 namespace Orc.Game.Cards;
@@ -33,7 +34,7 @@ public abstract class CardBase : Orc.Cards.Card
         // 实例化路径数据组件装配（旧 → 新：原四合一 CardStatsData → 2A 拆分〔指挥点花费＋对战〕→
         // S10 再重构：指挥点花费并入「阵营〔国籍〕＋部署费」合并组件〔FactionCostData——全类别构造期常驻〕；
         // 单位另加对战组件〔见 UnitCard〕）。
-        AddData(new FactionCostData(definition.Faction, definition.DeployCost));
+        LoadConstructionComponents(engine);
 
         // W2a G3 修饰机制：卡侧修饰器组件构造期常驻（所有卡类；轻量伴生、非数据组件——不进装配/加载/快照语义）。
         Modifiers = new CardModifierComponent(this, engine);
@@ -44,6 +45,39 @@ public abstract class CardBase : Orc.Cards.Card
 
     /// <summary>本卡的定义（代码注册形态；名称/类别/四项数值可读）。</summary>
     public CardDefinition Definition { get; }
+
+    private readonly Dictionary<string, (object Trigger, Type ViewType)> _namedTriggers = new(StringComparer.Ordinal);
+
+    /// <summary>登记具名触发器（S5；子类构造期调用）：供效果预制体 <c>injects</c> 声明按名解析注入目标。</summary>
+    /// <exception cref="ArgumentException">name 为 null/空白。</exception>
+    /// <exception cref="ArgumentNullException">trigger 或 viewType 为 null。</exception>
+    protected void RegisterNamedTrigger(string name, object trigger, Type viewType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(trigger);
+        ArgumentNullException.ThrowIfNull(viewType);
+
+        _namedTriggers[name] = (trigger, viewType);
+    }
+
+    /// <summary>按名查找具名触发器（S5 注入目标解析；未登记＝false）。</summary>
+    public bool TryFindNamedTrigger(
+        string name,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? trigger,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? viewType)
+    {
+        trigger = null;
+        viewType = null;
+
+        if (string.IsNullOrWhiteSpace(name) || !_namedTriggers.TryGetValue(name, out var entry))
+        {
+            return false;
+        }
+
+        trigger = entry.Trigger;
+        viewType = entry.ViewType;
+        return true;
+    }
 
     /// <summary>
     /// 卡侧修饰器组件（W2a G3 修饰机制）：每实例构造期常驻的专用轻量容器
@@ -92,13 +126,6 @@ public abstract class CardBase : Orc.Cards.Card
     /// 由对局加载路径经卡牌库注入（延迟读取）；独立构造（脱离对局——不经卡牌库）＝null（效果装载整链跳过——不抛错、加载不失败、功能不可用）。
     /// </summary>
     internal Func<CardEffectLoadContext?>? EffectLoadContextProvider { get; set; }
-
-    /// <summary>
-    /// 部署逻辑装载语境提供器（A4 加性面；internal）：加载时（<see cref="LoadAsync"/> 的「部署逻辑生成」步骤）
-    /// 为单位卡生成并挂载部署逻辑组件（<see cref="DeploymentLogicData"/>）所需的装配源查询面；
-    /// 由对局加载路径经卡牌库注入（延迟读取）；独立构造（脱离对局——不经卡牌库）＝null（生成步骤跳过——不抛错、加载不失败、功能不可用）。
-    /// </summary>
-    internal Func<DeploymentLogicLoadContext?>? DeploymentLogicLoadContextProvider { get; set; }
 
     /// <summary>
     /// 对局级卡牌 ID（W1-1 加性面；internal）：加载时分配——由 <see cref="MatchCardIdProvider"/> 取新值；
@@ -168,11 +195,8 @@ public abstract class CardBase : Orc.Cards.Card
         ArgumentNullException.ThrowIfNull(owner);
 
         Owner = owner;
-        RebuildFromPersistence(owner);
         LoadMatchCardId();
-        LoadTagData();
-        GenerateDeploymentLogic();
-        LoadKeywords();
+        await LoadComponentPhaseAsync(ct); // 两段式：第一段＝内置注册序；第二段＝扩展／社区组件按数据体声明序
         await LoadEffectsAsync(ct);
         await GameUpdates.EmitCardLoad(_engine, owner, this, ct);
     }
@@ -190,101 +214,126 @@ public abstract class CardBase : Orc.Cards.Card
     }
 
     /// <summary>
-    /// 元数据装配（W1-1；加载时＝与 card.load 同步完成）：从定义读稀有度与开放 tag → 装配 <see cref="TagData"/>
-    /// （全类别覆盖；无开放 tag 卡＝空集合装配——槽位恒在）。S10 随改：国籍不再经本装配（移出至
-    /// <see cref="FactionCostData"/>——构造期已装配，本步骤仅剩稀有度＋开放 tag）。登记先于 card.load 广播——
-    /// 消费者查询不到未就绪状态（与词条装配流先例一致）。重复加载＝重复装配被拒绝（AddData 契约：每类型恰一份）。
+    /// 构造期组件装配（P4；构造期相位）：按注册面注册序执行「构造期」loader——
+    /// 仅执行本卡组件集确实声明了的项（typeCategory／factionCost／battleStats）；
+    /// 构造期 loader 同步完成（返回已完成任务——P2 同步语义），此处按完成等待。
     /// </summary>
-    private void LoadTagData()
+    private void LoadConstructionComponents(LogicEngine engine)
     {
-        var data = new TagData(Definition.Rarity);
-        foreach (var tag in Definition.Tags)
-        {
-            data.AddTag(tag);
-        }
+        var context = new CardComponentLoadContext(engine);
 
-        AddData(data);
-    }
-
-    /// <summary>
-    /// 部署逻辑生成（A4；加载时＝与 card.load 同时完成——「加载时生成部署组件」）：
-    /// 仅单位卡（部署链为单位路径；非单位卡不生成/不消费）；无装配源（context 为 null）＝跳过；
-    /// 无登记条目＝不生成（缺省——消费端已「无组件＝跳过」）；生成＝挂载 <see cref="DeploymentLogicData"/>
-    /// 组件＋按登记序逐条 Add（登记序＝触发顺序依据）；装配期生成失败＝记录、不阻断加载（对齐加载链防御口径）。
-    /// 相遇语义（对齐容器语义）：卡上已有同类型组件（手动登记先遇）＝生成环节跳过并申报（记录）；
-    /// 手动登记（组件层 <see cref="DeploymentLogicData.Add"/>）继续合法、并存。
-    /// </summary>
-    private void GenerateDeploymentLogic()
-    {
-        if (this is not UnitCard)
+        foreach (var entry in CardComponentRegistry.Registered)
         {
-            return; // 生成面只为单位卡生成（非单位卡不生成/不消费）
-        }
-
-        var context = DeploymentLogicLoadContextProvider?.Invoke();
-        if (context is null)
-        {
-            return; // 无装配源（独立构造/未注入）：跳过（不抛错、加载不失败）
-        }
-
-        try
-        {
-            var entries = context.Entries;
-            if (entries.Count == 0)
+            if (entry.Phase != CardComponentPhase.Construction)
             {
-                return; // 无部署效果卡＝无组件（生成面缺省——不生成）
+                continue;
             }
 
-            if (TryGetData<DeploymentLogicData>(out _))
+            var definition = FindComponent(entry.Name);
+            if (definition is null)
             {
-                _engine.RootStream.WriteLog(
-                    "部署逻辑生成",
-                    $"卡牌 '{Name}' 已存在部署逻辑组件（手动登记先遇）——生成环节跳过（容器「每类型恰一份」语义）。",
-                    LogLevel.Info,
-                    new[] { "deployment-logic", "generate-skip" });
-                return; // 相遇语义：生成环节幂等跳过（申报）
+                continue;
             }
 
-            var data = new DeploymentLogicData();
-            foreach (var entry in entries)
-            {
-                data.Add(entry.Name, entry.Handler); // 按登记序逐条搬运
-            }
-
-            AddData(data);
-        }
-        catch (Exception ex)
-        {
-            _engine.RootStream.WriteLog(
-                "部署逻辑生成",
-                $"卡牌 '{Name}' 的部署逻辑生成失败（隔离：不阻断加载）：{ex.Message}",
-                LogLevel.Error,
-                new[] { "deployment-logic", "error", $"exception:{ex.GetType().Name}" });
+            entry.Loader(this, definition, context).GetAwaiter().GetResult();
         }
     }
 
     /// <summary>
-    /// 词条装载（2C-A1；加载时＝与 card.load 同时完成）：
-    /// 逐条经词条管理组件的授予链挂载（存在性置位 → 运行逻辑装载〔如伏击注册改写〕＋内嵌效果装载 → OnGrant）——
-    /// 与运行时动态授予同一机制；词条组件经注册面（<see cref="KeywordRegistry"/>）构造。
-    /// 卡组/手牌即可被读取查询（先于 card.load 广播——消费者查询不到未就绪状态）。
-    /// 无词条卡＝无副作用（不注册词条组件、不装载逻辑；词条面可寻址、空内容）。
-    /// 标识合法性与重复项已在定义期 fail-fast（合法集＝注册面内容）；装载链内失败＝fail-fast（上抛——加载失败、回滚无残留）。
+    /// 加载期两段式组件装配（P4／Q9a）：
+    /// 第一段＝**内置**注册项且加载相位——按游戏层注册序（防组件间依赖丢失）；
+    /// 第二段＝本卡剩余组件定义中的**扩展／社区**项——按数据体声明序（未注册项＝隔离记录）。
+    /// 第一段失败＝fail-fast（内置配置错误——上抛、该卡加载失败）；第二段失败＝隔离（不阻断加载）。
+    /// 全部先于 <c>card.load</c> 广播（消费者查询不到未就绪状态）。
     /// </summary>
-    private void LoadKeywords()
+    private async Task LoadComponentPhaseAsync(CancellationToken ct)
     {
-        var keywords = Definition.Keywords;
-        if (keywords.Count == 0)
+        var context = new CardComponentLoadContext(
+            _engine,
+            () => KeywordLoadContextProvider?.Invoke(),
+            () => EffectLoadContextProvider?.Invoke());
+
+        var consumed = new HashSet<Type>();
+
+        // 第一段：内置 + 加载相位，按注册序。
+        foreach (var entry in CardComponentRegistry.Registered)
         {
-            return;
+            if (!entry.IsBuiltIn || entry.Phase != CardComponentPhase.Load)
+            {
+                continue;
+            }
+
+            var definition = FindComponent(entry.Name);
+            if (definition is null)
+            {
+                continue;
+            }
+
+            await entry.Loader(this, definition, context);
+            consumed.Add(definition.GetType());
         }
 
-        var context = KeywordLoadContextProvider?.Invoke();
-        foreach (var declaration in keywords)
+        // 第二段：剩余组件定义（数据体声明序；扩展／社区组件）。
+        foreach (var definition in Definition.Components)
         {
-            Keywords.GrantCore(declaration.Id, declaration.Value, context);
+            if (consumed.Contains(definition.GetType()))
+            {
+                continue;
+            }
+
+            if (!CardComponentRegistry.TryResolve(definition.ComponentName, out var entry))
+            {
+                WriteComponentIsolation($"未知组件 '{definition.ComponentName}'（未注册——隔离：该组件跳过）");
+                continue;
+            }
+
+            if (entry.Phase != CardComponentPhase.Load)
+            {
+                continue; // 构造期项已在构造期执行
+            }
+
+            try
+            {
+                await entry.Loader(this, definition, context);
+                consumed.Add(definition.GetType());
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                WriteComponentIsolation(
+                    $"组件 '{definition.ComponentName}' 装配失败（隔离：该组件跳过）：{ex.Message}");
+            }
         }
     }
+
+    /// <summary>按组件类型名在本卡组件集内查找定义（未含＝null）。</summary>
+    private ICardDataComponentDefinition? FindComponent(string componentName)
+    {
+        foreach (var definition in Definition.Components)
+        {
+            if (string.Equals(definition.ComponentName, componentName, StringComparison.Ordinal))
+            {
+                return definition;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>组件隔离留痕（引擎总流；对齐既有装载链隔离记录形态）。</summary>
+    private void WriteComponentIsolation(string message)
+    {
+        _engine.RootStream.WriteLog(
+            "组件装载",
+            $"卡牌 '{Name}'：{message}",
+            LogLevel.Error,
+            new[] { "component", "error" });
+    }
+
+
 
     /// <summary>
     /// 效果装载（X2；加载时＝与 card.load 同时完成「声明解析＋构造＋登记＋装载」）：
@@ -298,13 +347,6 @@ public abstract class CardBase : Orc.Cards.Card
         await CardEffectLoader.LoadAsync(this, _engine, context, ct);
     }
 
-    /// <summary>
-    /// 持久化重建/装配（加载模板的扩展点；子类重写点预留）：总装阶段将从持久化文件重建 handler/效果/组件并装配于此。
-    /// 默认空实现且不破坏流程（本批无任何重建逻辑）；重写须保持默认路径下的加载全流程可跑通。
-    /// </summary>
-    protected virtual void RebuildFromPersistence(Player owner)
-    {
-    }
 
     private static string DefinitionName(CardDefinition definition)
     {

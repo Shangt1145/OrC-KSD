@@ -111,6 +111,13 @@ public static class PrefabJson
             Target = m.TargetEventId,
             Replacement = ToDto(m.Replacement),
         }).ToList(),
+        Injects = prefab.Injects.Select(i => new InjectPrefabDto
+        {
+            Target = i.TargetTriggerName,
+            Band = i.BandName,
+            Event = i.EventId,
+            Priority = i.Priority,
+        }).ToList(),
     };
 
     private static TriggerPrefabDto ToDto(TriggerPrefab prefab) => new()
@@ -154,7 +161,26 @@ public static class PrefabJson
             return new ModingPrefab(m.Target, FromDto(m.Replacement));
         }).ToList();
 
-        return new EffectPrefab(dto.Id ?? string.Empty, FromDto(dto.MainTrigger), others, modings, dto.Version <= 0 ? 1 : dto.Version);
+        List<InjectPrefab> injects;
+        try
+        {
+            injects = (dto.Injects ?? new List<InjectPrefabDto>())
+                .Select(i => new InjectPrefab(
+                    i.Target ?? string.Empty, i.Band, i.Event ?? string.Empty, i.Priority))
+                .ToList();
+        }
+        catch (ArgumentException ex)
+        {
+            throw new FormatException($"效果快照的 inject 声明非法：{ex.Message}", ex);
+        }
+
+        return new EffectPrefab(
+            dto.Id ?? string.Empty,
+            FromDto(dto.MainTrigger),
+            others,
+            modings,
+            dto.Version <= 0 ? 1 : dto.Version,
+            injects);
     }
 
     private static TriggerPrefab FromDto(TriggerPrefabDto dto)
@@ -201,6 +227,7 @@ public static class PrefabJson
         public TriggerPrefabDto? MainTrigger { get; set; }
         public List<TriggerPrefabDto>? OtherTriggers { get; set; }
         public List<ModingDto>? Modings { get; set; }
+        public List<InjectPrefabDto>? Injects { get; set; }
     }
 
     private sealed class TriggerPrefabDto
@@ -228,5 +255,13 @@ public static class PrefabJson
     {
         public string Target { get; set; } = string.Empty;
         public EventPrefabDto? Replacement { get; set; }
+    }
+
+    private sealed class InjectPrefabDto
+    {
+        public string? Target { get; set; }
+        public string? Band { get; set; }
+        public string? Event { get; set; }
+        public int Priority { get; set; }
     }
 }

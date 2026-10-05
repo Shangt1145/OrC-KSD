@@ -10,7 +10,7 @@ namespace Orc.Game.Tests;
 /// ③1 读取面（最小历史读取面——按类型筛取＋时序取最近；读出的卡引用可直接消费）；
 /// ③2 场景（连续消灭〔友/敌混合〕→ 读取「上1个被消灭的友方单位」〔最近＋友方过滤〕；无符合＝空/无结果、不抛错）；
 /// ③3 组合闭环（读取 → S9 转换组合形态重建到转换目标位置——旧实例离场/销毁、新实例按定义就位、位置正确）；
-/// ③4 边界核验（信号契约 17 条不变；读取来源＝事件流——无专门死亡记录结构）。
+/// ③4 边界核验（信号契约 18 条不变；读取来源＝事件流——无专门死亡记录结构）。
 /// 「自写 handler（实时）」半边沿用既有模式（G14HistoryCountTests 先例——不新增构件）。
 /// </summary>
 public class MatchHistoryReadTests
@@ -153,25 +153,26 @@ public class MatchHistoryReadTests
         Assert.Same(rebuilt, target.Occupant);
     }
 
-    // ---------- ③4 边界核验（信号契约 17 条不变；读取来源＝事件流） ----------
+    // ---------- ③4 边界核验（信号契约 18 条不变；读取来源＝事件流） ----------
 
     [Fact]
     public async Task Signal_Contract_Literals_Are_Frozen_And_History_Reads_From_Event_Stream()
     {
-        // 17 条信号契约不变（字面值冻结——核对元素面与关键值）
+        // 18 条信号契约不变（字面值冻结——核对元素面与关键值）
         var signalLiterals = new[]
         {
             GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter,
             GameUpdates.TurnEndBefore, GameUpdates.TurnEnd,
             GameUpdates.CardPlayed, GameUpdates.CardDrawn, GameUpdates.CardStatChanged,
-            GameUpdates.CardLoad, GameUpdates.CardHandAdd, GameUpdates.CardDiscarded,
+            GameUpdates.CardLoad, GameUpdates.CardHandAdd, GameUpdates.CardDiscarded, GameUpdates.CardBurned,
             GameUpdates.CardDied, GameUpdates.UnitJoined, GameUpdates.UnitDeployed,
             GameUpdates.UnitPositionChanged, GameUpdates.DeckShuffled, GameUpdates.UnitTypesChanged,
         };
-        Assert.Equal(17, signalLiterals.Length);
-        Assert.Equal(17, signalLiterals.Distinct().Count());
+        Assert.Equal(18, signalLiterals.Length);
+        Assert.Equal(18, signalLiterals.Distinct().Count());
         Assert.Equal("card.died", GameUpdates.CardDied);
         Assert.Equal("card.discarded", GameUpdates.CardDiscarded);
+        Assert.Equal("card.burned", GameUpdates.CardBurned);
         Assert.Equal("unit.types.changed", GameUpdates.UnitTypesChanged);
 
         // 读取来源＝事件流（无专门死亡记录结构）：读取到的条目即事件流中的同一引用

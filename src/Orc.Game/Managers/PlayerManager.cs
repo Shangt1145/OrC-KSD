@@ -12,11 +12,12 @@ namespace Orc.Game.Managers;
 /// → 装配到卡组条目（同一性：即后续起手 / 抽牌所得实例）→ 执行加载模板（其内广播 card.load）。
 /// 抽牌链路＝卡组条目（加载实例）取件 → 加入手牌：起手装载＝静默版本（不发更新）；
 /// 回合抽牌发 card.drawn → card.hand.add（顺序：drawn 先、hand.add 后；载荷均＝{ 玩家, 卡牌实例 }；粒度不同、并存）；
-/// 满手（≥ HandLimit〔9〕）＝HandLimit 烧牌裁决（G7；直烧口径：不经手牌、手牌全程保持上限——发 card.drawn 恰一次
-/// → 销毁〔引擎既有机制〕→ 发 card.discarded 恰一次；card.hand.add 零次；KARDS 烧牌语义；起手装载不受裁决）。
+/// 满手（≥ HandLimit〔9〕）＝HandLimit 爆牌裁决（G7；直爆口径：不经手牌、手牌全程保持上限——发 card.drawn 恰一次
+/// → 销毁〔引擎既有机制〕→ 发 card.burned 恰一次；card.hand.add 零次；KARDS 爆牌语义；起手装载不受裁决）。
 /// 手牌动作面（G7；范围修正后——KARDS 官方无弃牌堆/墓地语义）：弃置动作（从手牌移除＋销毁＋card.discarded 信号——
 /// 归属口径＝卡当前所在手牌、拒绝语义明确、非幂等）与回迁动作（手牌 → 卡组：跨集合受控动作——移出＋装入一体；
-/// 位置＝卡组顶/指定位置；静默）。弃置与烧牌共享「销毁」原语与 card.discarded 信号（烧牌不经弃置动作）。
+/// 位置＝卡组顶/指定位置；静默）。弃置与爆牌仅共享「销毁」步骤（引擎既有销毁）；信号发射各自独立
+/// （弃置＝card.discarded、爆牌＝card.burned——爆牌不经弃置动作）。
 /// 空卡组抽牌＝抛错（集合契约）；"卡组为空的游戏层处理（疲劳等）"属后续批次。
 /// 〔W1-1 G12 加性面〕对局级卡牌 ID 水位线：加载时逐张分配自增整数 ID（承载于卡上）→ 初始化加载完成后快照水位线
 /// （＝已分配最大值；起手装载之前）→ 构筑外判定（ID ＞ 水位线）与访问口（本类 <see cref="IsOutsideDeck"/>）。
@@ -138,10 +139,10 @@ public sealed class PlayerManager
     }
 
     /// <summary>
-    /// 回合抽牌（G7 起含 HandLimit 烧牌裁决）：抽 1 张——未满手＝加入手牌并发 card.drawn → card.hand.add
-    /// （顺序：drawn 先、hand.add 后；载荷均＝{ 玩家, 卡牌实例 }）；满手（≥ HandLimit〔9〕）＝KARDS 烧牌语义
-    /// （直烧口径：不经手牌、手牌全程保持上限——发 card.drawn 恰一次 → 销毁〔引擎既有机制〕→ 发 card.discarded 恰一次；card.hand.add 零次）。
-    /// 返回抽到的卡牌实例（烧牌路径＝被烧卡引用——烧掉的牌「算被抽到」、不算「进过手牌」）。
+    /// 回合抽牌（G7 起含 HandLimit 爆牌裁决）：抽 1 张——未满手＝加入手牌并发 card.drawn → card.hand.add
+    /// （顺序：drawn 先、hand.add 后；载荷均＝{ 玩家, 卡牌实例 }）；满手（≥ HandLimit〔9〕）＝KARDS 爆牌语义
+    /// （直爆口径：不经手牌、手牌全程保持上限——发 card.drawn 恰一次 → 销毁〔引擎既有机制〕→ 发 card.burned 恰一次；card.hand.add 零次）。
+    /// 返回抽到的卡牌实例（爆牌路径＝被爆卡引用——爆掉的牌「算被抽到」、不算「进过手牌」）。
     /// </summary>
     /// <exception cref="ArgumentNullException">player 为 null。</exception>
     /// <exception cref="InvalidOperationException">卡组为空（空集合 Draw 被拒绝）。</exception>
@@ -152,8 +153,8 @@ public sealed class PlayerManager
         var card = player.Deck.DrawInstance(); // 空集合 / 未加载抛错（集合契约）；「移除」由抽取步骤自然完成
         if (HandLimitBurn.IsAtLimit(player))
         {
-            // HandLimit 烧牌（直烧：不经手牌——手牌全程保持 9、无瞬时第 10 张；「算被抽到」路径＝
-            // drawn → 销毁 → discarded——经共享烧牌单元〔K0·B12 统一〕）
+            // HandLimit 爆牌（直爆：不经手牌——手牌全程保持 9、无瞬时第 10 张；「算被抽到」路径＝
+            // drawn → 销毁 → burned——经共享爆牌单元〔K0·B12 统一；Kb 独立信号输出〕）
             await HandLimitBurn.BurnAsync(_engine, player, card, emitDrawn: true, ct);
         }
         else

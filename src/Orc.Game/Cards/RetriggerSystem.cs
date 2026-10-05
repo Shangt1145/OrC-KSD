@@ -187,7 +187,7 @@ public sealed class RetriggerSystem
                 return; // 防御（接收侧已校验「在场存活」）：非在场＝无操作
             }
 
-            await DeploymentLogicRules.RunEffectSegmentAsync(unit, state.Position, _engine, ct);
+            await unit.InvokeDeployKeywordAsync(unit.Owner, state.Position, ct);
         }
         finally
         {

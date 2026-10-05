@@ -93,7 +93,7 @@ public sealed record GameHookPendingTrigger(
 /// </summary>
 public static class GameHooks
 {
-    // ---------- 对外信号（17 条；转发引用 GameUpdates） ----------
+    // ---------- 对外信号（18 条；转发引用 GameUpdates） ----------
 
     /// <summary>回合开始前（<c>turn.start.before</c>）。</summary>
     public const string TurnStartBefore = GameUpdates.TurnStartBefore;
@@ -128,6 +128,9 @@ public static class GameHooks
     /// <summary>弃置（<c>card.discarded</c>）。</summary>
     public const string CardDiscarded = GameUpdates.CardDiscarded;
 
+    /// <summary>爆牌（<c>card.burned</c>）。</summary>
+    public const string CardBurned = GameUpdates.CardBurned;
+
     /// <summary>游戏层死亡（<c>card.died</c>）。</summary>
     public const string CardDied = GameUpdates.CardDied;
 
@@ -146,12 +149,12 @@ public static class GameHooks
     /// <summary>单位类型变更（<c>unit.types.changed</c>）。</summary>
     public const string UnitTypesChanged = GameUpdates.UnitTypesChanged;
 
-    /// <summary>对外信号全量（17 条；稳定序＝定义序）。</summary>
+    /// <summary>对外信号全量（18 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> Signals { get; } = new[]
     {
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
         CardPlayed, CardDrawn, CardStatChanged,
-        CardLoad, CardHandAdd, CardDiscarded,
+        CardLoad, CardHandAdd, CardDiscarded, CardBurned,
         CardDied, UnitJoined, UnitDeployed, UnitPositionChanged,
         DeckShuffled, UnitTypesChanged,
     };
@@ -195,7 +198,7 @@ public static class GameHooks
         PayloadOldPosition, PayloadNewPosition, PayloadChangedFields, PayloadDeck, PayloadAddedType,
     };
 
-    // ---------- 判定器名（6 条；转发引用 JudicatorNames） ----------
+    // ---------- 判定器名（15 条；转发引用 JudicatorNames） ----------
 
     /// <summary>判定器名：费用检查（<c>validation.cost.check</c>）。</summary>
     public const string JudicatorCostCheck = JudicatorNames.CostCheck;
@@ -215,17 +218,50 @@ public static class GameHooks
     /// <summary>判定器名：目标候选合法性判定（<c>targeting.candidate.eligibility</c>；示范②）。</summary>
     public const string JudicatorTargetCandidateEligibility = JudicatorNames.TargetCandidateEligibility;
 
-    /// <summary>判定器名全量（6 条；稳定序＝定义序）。</summary>
+    /// <summary>判定器名：目标合法性判定（<c>combat.target.legal</c>；K1 组合判定器）。</summary>
+    public const string JudicatorCombatTargetLegal = JudicatorNames.CombatTargetLegal;
+
+    /// <summary>判定器名：范围矩阵判定（<c>combat.range</c>；K1 子规则）。</summary>
+    public const string JudicatorCombatRange = JudicatorNames.CombatRange;
+
+    /// <summary>判定器名：被守护攻击资格判定（<c>combat.guard.eligibility</c>；K1 子规则）。</summary>
+    public const string JudicatorCombatGuardEligibility = JudicatorNames.CombatGuardEligibility;
+
+    /// <summary>判定器名：轰炸机拦截判定（<c>combat.interception</c>；K1 子规则）。</summary>
+    public const string JudicatorCombatInterception = JudicatorNames.CombatInterception;
+
+    /// <summary>判定器名：反击资格判定（<c>combat.counter.eligibility</c>；K2——反击豁免表）。</summary>
+    public const string JudicatorCombatCounterEligibility = JudicatorNames.CombatCounterEligibility;
+
+    /// <summary>判定器名：伏击条件判定（<c>combat.ambush.condition</c>；K2——伏击条件）。</summary>
+    public const string JudicatorCombatAmbushCondition = JudicatorNames.CombatAmbushCondition;
+
+    /// <summary>判定器名：move leg 资格判定（<c>move.leg.eligibility</c>；K3——复验消重共享条件）。</summary>
+    public const string JudicatorMoveLegEligibility = JudicatorNames.MoveLegEligibility;
+
+    /// <summary>判定器名：attack leg 资格判定（<c>attack.leg.eligibility</c>；K3——复验消重共享条件）。</summary>
+    public const string JudicatorAttackLegEligibility = JudicatorNames.AttackLegEligibility;
+
+    /// <summary>判定器名：推进前置判定（<c>move.frontline-enemy</c>；K3——前线存活敌方）。</summary>
+    public const string JudicatorMoveFrontlineEnemy = JudicatorNames.MoveFrontlineEnemy;
+
+    /// <summary>判定器名全量（15 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> JudicatorNameList { get; } = new[]
     {
         JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
         JudicatorDeckTopTag, JudicatorTargetCandidateEligibility,
+        JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
+        JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
+        JudicatorMoveLegEligibility, JudicatorAttackLegEligibility, JudicatorMoveFrontlineEnemy,
     };
 
-    /// <summary>判定器名装配面：4 条验证类由 <c>Match.Initialize</c> 固定注册段注册；2 条示范类经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
+    /// <summary>判定器名装配面：13 条内置（4 条验证类＋6 条交战类＋3 条动作资格类）由 <c>Match.Initialize</c> 固定注册段注册；2 条示范类经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
     public static IReadOnlyList<string> BuiltInJudicatorNames { get; } = new[]
     {
         JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
+        JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
+        JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
+        JudicatorMoveLegEligibility, JudicatorAttackLegEligibility, JudicatorMoveFrontlineEnemy,
     };
 
     /// <summary>判定器名装配面：示范类（经 <c>judicatorAssembly</c> 外部装配段注入）。</summary>

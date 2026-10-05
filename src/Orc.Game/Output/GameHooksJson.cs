@@ -96,7 +96,7 @@ public static class GameHooksJson
     private static readonly IReadOnlyList<string> CardPlayerPayload =
         [GameHooks.PayloadCard, GameHooks.PayloadPlayer];
 
-    /// <summary>17 条信号的权威描述表（与 03-hook定义 S2 对齐）。</summary>
+    /// <summary>18 条信号的权威描述表（与 03-hook定义 S2 对齐）。</summary>
     private static IReadOnlyList<SignalEntry> SignalMetadata { get; } = new[]
     {
         new SignalEntry(GameHooks.TurnStartBefore, TurnPayload,
@@ -117,7 +117,7 @@ public static class GameHooksJson
             ["Cards/KeywordComponents2.cs·打出时词条"]),
         new SignalEntry(GameHooks.CardDrawn,
             [GameHooks.PayloadPlayer, GameHooks.PayloadCard],
-            ["Managers/PlayerManager.cs:156·DrawCard（烧牌）", "Managers/PlayerManager.cs:162·DrawCard（常规）"],
+            ["HandLimitBurn.cs:66·BurnAsync（爆牌路径）", "Managers/PlayerManager.cs:163·DrawCard（常规）"],
             ["Match/MatchCardService.cs·进手牌链路"]),
         new SignalEntry(GameHooks.CardStatChanged,
             [GameHooks.PayloadCard, GameHooks.PayloadChangedFields],
@@ -128,7 +128,9 @@ public static class GameHooksJson
         new SignalEntry(GameHooks.CardHandAdd, CardPlayerPayload,
             ["Match/MatchCardService.cs:220·PlaceToHandAsync", "Managers/PlayerManager.cs:163·DrawCard"], []),
         new SignalEntry(GameHooks.CardDiscarded, CardPlayerPayload,
-            ["Match/MatchCardService.cs:215·PlaceToHandAsync（烧牌）", "Managers/PlayerManager.cs:255·DestroyAndEmitDiscardedAsync"], []),
+            ["HandLimitBurn.cs:47·DestroyAndEmitDiscardedAsync（弃置处置链）"], []),
+        new SignalEntry(GameHooks.CardBurned, CardPlayerPayload,
+            ["HandLimitBurn.cs:70·BurnAsync（爆牌共享单元）"], []),
         new SignalEntry(GameHooks.CardDied,
             [GameHooks.PayloadCard],
             ["Commanding/CommandManager.cs:1349·ProcessDeathAsync"],
@@ -153,7 +155,7 @@ public static class GameHooksJson
             ["Cards/UnitCard.cs:266·AddUnitTypeAsync"], []),
     };
 
-    /// <summary>6 条判定器的权威描述表（与 03-hook定义 S3-3 对齐）。</summary>
+    /// <summary>15 条判定器的权威描述表（与 03-hook定义 S3-3 对齐）。</summary>
     private static IReadOnlyList<JudicatorEntry> JudicatorMetadata { get; } = new[]
     {
         new JudicatorEntry(GameHooks.JudicatorCostCheck,
@@ -164,6 +166,24 @@ public static class GameHooksJson
             ["Judicators/MoveRevalidationJudicator.cs"], true),
         new JudicatorEntry(GameHooks.JudicatorAttackRecheck,
             ["Judicators/AttackRevalidationJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatTargetLegal,
+            ["Judicators/CombatTargetLegalJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatRange,
+            ["Judicators/CombatRangeJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatGuardEligibility,
+            ["Judicators/CombatGuardEligibilityJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatInterception,
+            ["Judicators/CombatInterceptionJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatCounterEligibility,
+            ["Judicators/CombatCounterEligibilityJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCombatAmbushCondition,
+            ["Judicators/CombatAmbushConditionJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorMoveLegEligibility,
+            ["Judicators/LegEligibilityJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorAttackLegEligibility,
+            ["Judicators/LegEligibilityJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorMoveFrontlineEnemy,
+            ["Judicators/MoveFrontlineEnemyJudicator.cs"], true),
         new JudicatorEntry(GameHooks.JudicatorDeckTopTag,
             ["Judicators/DeckTopTagJudicator.cs"], false),
         new JudicatorEntry(GameHooks.JudicatorTargetCandidateEligibility,

@@ -32,7 +32,6 @@ public sealed class CardLibrary
     private readonly Func<KeywordLoadContext?>? _keywordLoadContextProvider;
     private readonly Func<int>? _matchCardIdProvider;
     private readonly Func<string, CardEffectLoadContext?>? _effectLoadContextProvider;
-    private readonly Func<string, DeploymentLogicLoadContext?>? _deploymentLogicLoadContextProvider;
     private readonly Func<string, JudicatorBinding>? _validationJudicatorResolver;
 
     /// <summary>创建卡牌库（实例化所需引擎引用由构造注入；可选回合上下文提供器——2B 加性；可选词条装载上下文提供器——2C 加性；
@@ -45,7 +44,6 @@ public sealed class CardLibrary
         Func<KeywordLoadContext?>? keywordLoadContextProvider = null,
         Func<int>? matchCardIdProvider = null,
         Func<string, CardEffectLoadContext?>? effectLoadContextProvider = null,
-        Func<string, DeploymentLogicLoadContext?>? deploymentLogicLoadContextProvider = null,
         Func<string, JudicatorBinding>? validationJudicatorResolver = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -54,7 +52,6 @@ public sealed class CardLibrary
         _keywordLoadContextProvider = keywordLoadContextProvider;
         _matchCardIdProvider = matchCardIdProvider;
         _effectLoadContextProvider = effectLoadContextProvider;
-        _deploymentLogicLoadContextProvider = deploymentLogicLoadContextProvider;
         _validationJudicatorResolver = validationJudicatorResolver;
     }
 
@@ -141,9 +138,6 @@ public sealed class CardLibrary
         card.EffectLoadContextProvider = _effectLoadContextProvider is null
             ? null
             : () => _effectLoadContextProvider(id);
-        card.DeploymentLogicLoadContextProvider = _deploymentLogicLoadContextProvider is null
-            ? null
-            : () => _deploymentLogicLoadContextProvider(id);
         return card;
     }
 }

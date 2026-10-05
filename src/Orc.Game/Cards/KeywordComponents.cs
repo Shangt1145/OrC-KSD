@@ -63,15 +63,19 @@ public sealed class FuryKeywordComponent : KeywordComponent
 /// <summary>
 /// 伏击（能力型）词条组件：装载时向「造成攻击伤害」触发器注册改写逻辑；卸载（移除/死亡注销）时注销。
 /// 改写判定（先资格、后条件）：被攻击单位（目标侧，＝本卡）含伏击 ∧ 目标方按反击豁免判定表具有反击资格
-/// （豁免约束改写——无资格＝不发生反击、改写不成立、按表单方结算）∧ 条件命中（被攻击单位攻击力有效值 ＞ 攻击者防御力有效值，
-/// 互扣前；读修饰机制缓存有效值）→ 置改写标志（攻击者死亡、被攻击者不受伤）；
-/// 资格通过但条件不成立＝正常基础互伤。不区分攻击者类型；HQ 攻击不走该流程。
+/// （K2：经 <c>combat.counter.eligibility</c> 判定器通道——豁免约束改写，无资格＝不发生反击、改写不成立、按表单方结算）
+/// ∧ 条件命中（K2：经 <c>combat.ambush.condition</c> 判定器通道——被攻击单位攻击力有效值 ＞ 攻击者防御力有效值，互扣前）
+/// → 置改写标志（攻击者死亡、被攻击者不受伤）；资格通过但条件不成立＝正常基础互伤。
+/// 判定器通道经装载上下文取用（<see cref="KeywordLoadContext.CounterEligibility"/>／<see cref="KeywordLoadContext.AmbushCondition"/>）；
+/// 无装载上下文或通道缺失＝不注册（防御、不抛错、不回退直调——单源约束）。不区分攻击者类型；HQ 攻击不走该流程。
 /// </summary>
 public sealed class AmbushKeywordComponent : KeywordComponent
 {
     private Trigger<AttackDamageTriggerView>? _trigger;
     private TriggerRegistration? _registration;
     private Card? _card;
+    private Func<UnitCard, UnitCard, bool>? _counterEligibility; // K2：反击资格判定通道（combat.counter.eligibility——资格→C5）
+    private Func<UnitCard, UnitCard, bool>? _ambushCondition; // K2：伏击条件判定通道（combat.ambush.condition——条件→C6）
 
     /// <summary>创建伏击词条组件。</summary>
     public AmbushKeywordComponent()
@@ -88,6 +92,13 @@ public sealed class AmbushKeywordComponent : KeywordComponent
             return; // 无装载上下文（独立构造场景）：不注册（防御、不抛错）
         }
 
+        if (context.CounterEligibility is null || context.AmbushCondition is null)
+        {
+            return; // K2：判定器通道缺失：不注册（防御、不抛错、不回退直调——与「无装载上下文」同构）
+        }
+
+        _counterEligibility = context.CounterEligibility;
+        _ambushCondition = context.AmbushCondition;
         _trigger = context.AttackDamageTrigger;
         _registration = _trigger.Register("伏击改写", HandleAttackDamageAsync);
     }
@@ -99,6 +110,8 @@ public sealed class AmbushKeywordComponent : KeywordComponent
         var registration = _registration;
         _trigger = null;
         _registration = null;
+        _counterEligibility = null; // K2：通道引用清位（与注册状态一致；重复卸载幂等）
+        _ambushCondition = null;
         if (trigger is not null && registration is not null)
         {
             trigger.Unregister(registration); // 幂等（重复注销＝无操作、不抛错）
@@ -131,15 +144,21 @@ public sealed class AmbushKeywordComponent : KeywordComponent
             return Task.CompletedTask; // 目标侧单命中（多源不叠加；已改写＝跳过）
         }
 
-        // 先资格：目标方（本卡）按反击豁免判定表具有反击资格（豁免约束改写——无资格＝不发生反击、改写不成立）。
-        if (!CounterAttackRules.CanCounterAttack(attacker, self))
+        var counterEligibility = _counterEligibility;
+        var ambushCondition = _ambushCondition;
+        if (counterEligibility is null || ambushCondition is null)
+        {
+            return Task.CompletedTask; // K2：判定器通道缺失（防御：装载时已不注册——双保险；不回退直调）
+        }
+
+        // 先资格（K2：经 combat.counter.eligibility 判定器通道——豁免约束改写）：目标方（本卡）具有反击资格。
+        if (!counterEligibility(attacker, self))
         {
             return Task.CompletedTask;
         }
 
-        // 后条件：伏击条件命中（被攻击单位攻击力有效值 ＞ 攻击者防御力有效值——读修饰机制缓存有效值）＝改写成立。
-        if (self.Modifiers.GetEffectiveValue(CardStatFields.Attack)
-            > attacker.Modifiers.GetEffectiveValue(CardStatFields.Defense))
+        // 后条件（K2：经 combat.ambush.condition 判定器通道——单源）：伏击条件命中＝改写成立。
+        if (ambushCondition(self, attacker))
         {
             resolution.MarkRewritten();
         }

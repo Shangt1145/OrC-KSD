@@ -1,38 +1,97 @@
+using Orc.Game.Cards.Data;
+using Orc.Game.Cards.Data.Components;
+
 namespace Orc.Game.Cards;
 
 /// <summary>
-/// 卡牌定义（代码注册形态）：类别（单位/指令/反制）＋名称＋四项基础数值（部署费 / 行动费 / 攻击力 / 防御力）；
-/// id 由注册键携带（定义自身不含 id，避免冗余与不一致）。
-/// 名称不可为 null/空白（注册即配置、fail-fast）；类别须为已定义值（配置错误在定义期被拒绝）；
-/// 数值域校验后置（负数等，本批不做）。
-/// 类别缺省＝单位（兼容既有构造调用；三类卡的区分经显式指定类别）。
-/// 〔2C 加性受控变更〕新增三个静态声明字段（定义＝单一真源、不可运行时增删）：
-/// ①词条声明清单（2C-A1 单一声明类型＝标识＋可选参值；加载时逐条经词条管理组件的授予链挂载；
-/// 未注册标识/同标识重复项〔不论参值〕＝定义期明确错误 fail-fast——合法集来源＝词条注册面内容）；
-/// ②单位类型清单（单位化时填充 UnitStateData.UnitTypes——部署/加入两路径一致；未声明＝空列表＝零类型·行为按基线〔视同步兵〕；重复项 fail-fast）；
-/// ③守护者标记（守护机制：相邻单位获「被守护」——需求空白点的实现裁决，交付汇报标注）。
-/// 〔W1-1 G12 加性受控变更〕再加两维卡牌元数据（定义＝单一真源、不可运行时增删）：
-/// ④必填强类型槽位（国籍 / 稀有度——新定义卡须显式提供，缺失/未定义枚举值＝定义期 fail-fast 拒绝；全类别必填）；
-/// ⑤开放 tag 清单（子类别标记：海军/T-34/谢尔曼等——纯分类、不承载机制行为；加载时装配到实例 TagData）。
+/// 卡牌定义（P2＝A 改造后形态）：**组件定义集为唯一真源** ＋ 兼容读面。
+/// ①主构造＝"名称 ＋ 组件定义集"（数据体路径：<c>CardDataBody</c> 的组件逐步转换而来）；
+/// ②兼容构造＝既有 12 参数（代码注册路径，构造时转换为组件定义集）——既有调用与测试零改动。
+/// 读面（<see cref="Faction"/>/<see cref="DeployCost"/>/<see cref="OperateCost"/>/<see cref="Attack"/>/<see cref="Defense"/>/
+/// <see cref="Rarity"/>/<see cref="Tags"/>/<see cref="Keywords"/>/<see cref="UnitTypes"/>/<see cref="Category"/>）保留同名同义、内部从组件定义派生。
+/// 必填槽位（国籍 / 稀有度）缺失＝定义期 fail-fast 拒绝（<c>factionCost</c> / <c>tagData</c> 组件必需）。
+/// 效果声明不入本类型（代码注册路径走 <c>CardEffectRegistry</c>；数据体路径在卡包载入期转为其注册项）。
 /// </summary>
 public sealed class CardDefinition
 {
-    /// <summary>创建定义。</summary>
+    /// <summary>创建定义（主构造：名称 ＋ 组件定义集）。</summary>
     /// <param name="name">卡牌名称（非 null/空白）。</param>
-    /// <param name="deployCost">部署费。</param>
-    /// <param name="operateCost">行动费。</param>
-    /// <param name="attack">攻击力。</param>
-    /// <param name="defense">防御力。</param>
-    /// <param name="category">卡牌类别（缺省＝单位）。</param>
-    /// <param name="keywords">词条声明清单（2C-A1；可缺省＝无词条；单一声明类型＝标识＋可选参值——「仅标识」＝参值位空；
-    /// 标识须为注册面已注册词条、同标识不得重复〔不论参值〕——未注册/重复＝定义期拒绝）。</param>
-    /// <param name="unitTypes">单位类型清单（2C 加性；可缺省＝空列表＝零类型；枚举值须已定义、不得重复——重复＝定义期拒绝）。</param>
-    /// <param name="isGuard">守护者标记（2C 加性；缺省＝false；守护机制的来源标记——相邻单位/HQ 获「被守护」）。</param>
-    /// <param name="faction">国籍（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
-    /// <param name="rarity">稀有度（W1-1 加性、必填强类型槽位：新定义卡须显式提供；缺失＝定义期 fail-fast 拒绝、无可用默认值）。</param>
-    /// <param name="tags">开放 tag 清单（W1-1 加性；可缺省＝空列表＝无开放 tag；null 元素/空白/重复项＝定义期拒绝）。</param>
-    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失（未提供/为 null）；词条声明清单含空白标识/未注册标识/同标识重复项；单位类型清单含重复项；开放 tag 清单含 null/空白/重复项。</exception>
-    /// <exception cref="ArgumentOutOfRangeException">category 为未定义的卡牌类别；国籍/稀有度为未定义枚举值；单位类型含未定义枚举值。</exception>
+    /// <param name="components">组件定义集（每类型至多一份；须含 <c>factionCost</c> 与 <c>tagData</c>）。</param>
+    /// <param name="isGuard">守护者标记（代码注册路径加性面；数据体路径恒 false——官方 <c>guard</c> 走未实现留痕）。</param>
+    /// <exception cref="ArgumentException">name 为 null/空白；components 含 null/重复类型；缺 factionCost/tagData。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">国籍/稀有度为未定义枚举值。</exception>
+    public CardDefinition(string name, IEnumerable<ICardDataComponentDefinition> components, bool isGuard = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(components);
+
+        var list = new List<ICardDataComponentDefinition>();
+        var seen = new HashSet<Type>();
+        foreach (var item in components)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+
+            if (!seen.Add(item.GetType()))
+            {
+                throw new ArgumentException(
+                    $"卡牌定义含重复组件 '{item.GetType().Name}'（每类型至多一份——拒绝）。", nameof(components));
+            }
+
+            list.Add(item);
+        }
+
+        var factionCost = Find<FactionCostDefinition>(list)
+            ?? throw new ArgumentException(
+                "卡牌定义缺少 factionCost 组件（国籍与部署费为必填槽位——缺失＝定义期 fail-fast 拒绝）。",
+                nameof(components));
+
+        var tagData = Find<TagDataDefinition>(list)
+            ?? throw new ArgumentException(
+                "卡牌定义缺少 tagData 组件（稀有度为必填槽位——缺失＝定义期 fail-fast 拒绝）。",
+                nameof(components));
+
+        if (!Enum.IsDefined(factionCost.Faction))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(components), factionCost.Faction, "国籍为未定义枚举值（配置错误在定义期被拒绝）。");
+        }
+
+        if (!Enum.IsDefined(tagData.Rarity))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(components), tagData.Rarity, "稀有度为未定义枚举值（配置错误在定义期被拒绝）。");
+        }
+
+        var typeCategory = Find<TypeCategoryDefinition>(list);
+        var battleStats = Find<BattleStatsDefinition>(list);
+        var keywords = Find<KeywordsDefinition>(list);
+
+        Name = name;
+        Components = list.ToArray();
+        IsGuard = isGuard;
+
+        Faction = factionCost.Faction;
+        DeployCost = factionCost.DeployCost;
+        Rarity = tagData.Rarity;
+        Tags = tagData.Tags;
+
+        Category = typeCategory?.Category ?? CardCategory.Unit;
+        UnitTypes = typeCategory?.UnitTypes ?? Array.Empty<UnitType>();
+
+        OperateCost = battleStats?.OperateCost ?? 0;
+        Attack = battleStats?.Attack ?? 0;
+        Defense = battleStats?.Defense ?? 0;
+
+        Attributes = keywords?.Attributes ?? Array.Empty<string>();
+        Keywords = keywords?.Keywords ?? Array.Empty<KeywordDeclaration>();
+        UnmappedAttributes = keywords?.UnmappedAttributes ?? Array.Empty<string>();
+    }
+
+    /// <summary>
+    /// 创建定义（兼容构造：既有 12 参数；内部转换为组件定义集——校验与既有行为一致、fail-fast 保留）。
+    /// </summary>
+    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失；词条清单含空白/未注册/重复标识；单位类型或开放 tag 含重复项。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">category 为未定义值；国籍/稀有度/单位类型为未定义枚举值。</exception>
     public CardDefinition(
         string name,
         int deployCost,
@@ -46,15 +105,31 @@ public sealed class CardDefinition
         Faction? faction = null,
         Rarity? rarity = null,
         IEnumerable<string>? tags = null)
+        : this(
+            name,
+            BuildComponents(category, deployCost, operateCost, attack, defense, keywords, unitTypes, faction, rarity, tags),
+            isGuard)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+    }
+
+    /// <summary>兼容构造 → 组件定义集（校验先于构造：配置错误在此明确拒绝）。</summary>
+    private static IReadOnlyList<ICardDataComponentDefinition> BuildComponents(
+        CardCategory category,
+        int deployCost,
+        int operateCost,
+        int attack,
+        int defense,
+        IEnumerable<KeywordDeclaration>? keywords,
+        IEnumerable<UnitType>? unitTypes,
+        Faction? faction,
+        Rarity? rarity,
+        IEnumerable<string>? tags)
+    {
         if (!Enum.IsDefined(category))
         {
             throw new ArgumentOutOfRangeException(nameof(category), category, "未定义的卡牌类别（配置错误在定义期被拒绝）。");
         }
 
-        // W1-1：必填强类型槽位（国籍 / 稀有度）——缺失＝定义期 fail-fast 拒绝（不设可用默认值，「省略即默认」不成立）；
-        // 未定义枚举值＝拒绝（沿用既有 Enum 校验风格）。
         if (faction is null)
         {
             throw new ArgumentException(
@@ -77,24 +152,32 @@ public sealed class CardDefinition
             throw new ArgumentOutOfRangeException(nameof(rarity), rarity, "稀有度为未定义枚举值（配置错误在定义期被拒绝）。");
         }
 
-        Name = name;
-        DeployCost = deployCost;
-        OperateCost = operateCost;
-        Attack = attack;
-        Defense = defense;
-        Category = category;
-        Keywords = ResolveKeywords(keywords);
-        UnitTypes = ResolveUnitTypes(unitTypes);
-        IsGuard = isGuard;
-        Faction = faction.Value;
-        Rarity = rarity.Value;
-        Tags = ResolveTags(tags);
+        var resolvedKeywords = ResolveKeywords(keywords);
+        var resolvedUnitTypes = ResolveUnitTypes(unitTypes);
+        var resolvedTags = ResolveTags(tags);
+
+        var list = new List<ICardDataComponentDefinition>
+        {
+            new TypeCategoryDefinition(category, resolvedUnitTypes),
+            new FactionCostDefinition(faction.Value, deployCost),
+        };
+
+        if (category == CardCategory.Unit)
+        {
+            list.Add(new BattleStatsDefinition(operateCost, attack, defense));
+        }
+
+        list.Add(new TagDataDefinition(rarity.Value, resolvedTags));
+
+        if (resolvedKeywords.Count > 0)
+        {
+            list.Add(new KeywordsDefinition(Array.Empty<string>(), resolvedKeywords, Array.Empty<string>()));
+        }
+
+        return list;
     }
 
-    /// <summary>
-    /// 词条声明清单校验与拷贝（2C-A1 fail-fast：空白标识 / 未注册标识 / 同标识重复项〔不论参值〕均被拒绝；登记序保留）。
-    /// 合法标识集来源＝词条注册面（<see cref="KeywordRegistry"/>）内容（单源）。
-    /// </summary>
+    /// <summary>词条声明校验与拷贝（fail-fast：空白标识 / 未注册标识 / 同标识重复项均被拒绝；登记序保留）。</summary>
     private static IReadOnlyList<KeywordDeclaration> ResolveKeywords(IEnumerable<KeywordDeclaration>? keywords)
     {
         if (keywords is null)
@@ -130,7 +213,7 @@ public sealed class CardDefinition
         return list.ToArray();
     }
 
-    /// <summary>单位类型清单校验与拷贝（fail-fast：null 元素 / 未定义枚举值 / 重复项均被拒绝；登记序保留）。</summary>
+    /// <summary>单位类型清单校验与拷贝（fail-fast：未定义枚举值 / 重复项均被拒绝；登记序保留）。</summary>
     private static IReadOnlyList<UnitType> ResolveUnitTypes(IEnumerable<UnitType>? unitTypes)
     {
         if (unitTypes is null)
@@ -160,7 +243,7 @@ public sealed class CardDefinition
         return list.ToArray();
     }
 
-    /// <summary>开放 tag 清单校验与拷贝（W1-1 fail-fast：null 元素 / null 或空白值 / 重复项均被拒绝；登记序保留）。</summary>
+    /// <summary>开放 tag 清单校验与拷贝（fail-fast：null 元素 / null 或空白值 / 重复项均被拒绝；登记序保留）。</summary>
     private static IReadOnlyList<string> ResolveTags(IEnumerable<string>? tags)
     {
         if (tags is null)
@@ -189,40 +272,63 @@ public sealed class CardDefinition
         return list.ToArray();
     }
 
+    private static T? Find<T>(IReadOnlyList<ICardDataComponentDefinition> components)
+        where T : class, ICardDataComponentDefinition
+    {
+        foreach (var item in components)
+        {
+            if (item is T typed)
+            {
+                return typed;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>卡牌名称（实例化时取用）。</summary>
     public string Name { get; }
 
-    /// <summary>卡牌类别（单位 / 指令 / 反制；实例化按此产出对应基类实例）。</summary>
+    /// <summary>组件定义集（声明序；唯一真源——读面均由此派生）。</summary>
+    public IReadOnlyList<ICardDataComponentDefinition> Components { get; }
+
+    /// <summary>卡牌类别（派生自 <c>typeCategory</c> 组件；缺省＝单位）。</summary>
     public CardCategory Category { get; }
 
-    /// <summary>部署费初始值。</summary>
+    /// <summary>部署费初始值（派生自 <c>factionCost</c> 组件）。</summary>
     public int DeployCost { get; }
 
-    /// <summary>行动费初始值。</summary>
+    /// <summary>行动费初始值（派生自 <c>battleStats</c> 组件；非单位卡＝0）。</summary>
     public int OperateCost { get; }
 
-    /// <summary>攻击力初始值。</summary>
+    /// <summary>攻击力初始值（派生自 <c>battleStats</c> 组件；非单位卡＝0）。</summary>
     public int Attack { get; }
 
-    /// <summary>防御力初始值（＝HP）。</summary>
+    /// <summary>防御力初始值（＝HP；派生自 <c>battleStats</c> 组件；非单位卡＝0）。</summary>
     public int Defense { get; }
 
-    /// <summary>词条声明清单（2C-A1；标识＋可选参值、登记序；空列表＝无词条——加载时无副作用）。</summary>
+    /// <summary>词条声明清单（派生自 <c>keywords</c> 组件；空＝无词条）。</summary>
     public IReadOnlyList<KeywordDeclaration> Keywords { get; }
 
-    /// <summary>单位类型清单（2C 加性；登记序；空列表＝零类型——行为按基线〔视同步兵〕；单位化时填充）。</summary>
+    /// <summary>数据体原始词条标识（保真；代码注册路径＝空）。</summary>
+    public IReadOnlyList<string> Attributes { get; }
+
+    /// <summary>未映射/未实现词条标识（只读留痕面；不参与机制、不写日志）。</summary>
+    public IReadOnlyList<string> UnmappedAttributes { get; }
+
+    /// <summary>单位类型清单（派生自 <c>typeCategory</c> 组件；登记序；空＝零类型）。</summary>
     public IReadOnlyList<UnitType> UnitTypes { get; }
 
-    /// <summary>守护者标记（2C 加性；true＝守护者——相邻单位/HQ 获「被守护」；守护者自身不可被守护）。</summary>
+    /// <summary>守护者标记（代码注册路径加性面；数据体路径恒 false）。</summary>
     public bool IsGuard { get; }
 
-    /// <summary>国籍（W1-1 必填槽位终值；11 值全量域；实例侧只读——本批不支持运行时修改）。</summary>
+    /// <summary>国籍（派生自 <c>factionCost</c> 组件终值；实例侧只读）。</summary>
     public Faction Faction { get; }
 
-    /// <summary>稀有度（W1-1 必填槽位终值：Standard/Limited/Special/Elite；实例侧只读——本批不支持运行时修改）。</summary>
+    /// <summary>稀有度（派生自 <c>tagData</c> 组件终值；实例侧只读）。</summary>
     public Rarity Rarity { get; }
 
-    /// <summary>开放 tag 清单（W1-1 加性；登记序；空列表＝无开放 tag——加载时装配为空集合、无副作用）。</summary>
+    /// <summary>开放 tag 清单（派生自 <c>tagData</c> 组件；登记序；空＝无开放 tag）。</summary>
     public IReadOnlyList<string> Tags { get; }
 }
 

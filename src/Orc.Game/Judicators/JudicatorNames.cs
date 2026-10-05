@@ -33,4 +33,44 @@ public static class JudicatorNames
     /// <summary>目标候选合法性判定（示范②；签名＝（候选引用）→ bool）：默认规则＝在场单位可选；
     /// 改写用例＝允许/禁止某类目标可选（经 moding 整体更换选择规则）。</summary>
     public const string TargetCandidateEligibility = "targeting.candidate.eligibility";
+
+    // ---------- K1（A 档 C1-C4：交战合法性判定族）：交战判定器（四条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>目标合法性判定（组合判定器；签名＝（攻击者, 目标引用）→ bool）：编排六重＝归属→存活/在场→烟幕→守护资格→拦截→范围
+    /// （HQ 分支＝归属→占位槽→守护→拦截→范围）；候选链与复验链共用同一条目——改写后全部调用点同步生效。</summary>
+    public const string CombatTargetLegal = "combat.target.legal";
+
+    /// <summary>范围矩阵判定（签名＝（攻击者, 目标槽位）→ bool）：炮/战/轰任意线、步/坦/零类型仅相邻；类型组单源共表。</summary>
+    public const string CombatRange = "combat.range";
+
+    /// <summary>被守护攻击资格判定（签名＝（攻击者）→ bool）：炮/轰组——不含战斗机；类型组与 combat.range 共表。</summary>
+    public const string CombatGuardEligibility = "combat.guard.eligibility";
+
+    /// <summary>轰炸机拦截判定（签名＝（攻击者, 目标槽位, 目标是否战斗机）→ bool）：轰炸机∧非战斗机目标∧同线存活敌方战斗机＝拦截。</summary>
+    public const string CombatInterception = "combat.interception";
+
+    // ---------- K2（A 档 C5/C6：反击豁免与伏击条件）：反击/伏击判定器（两条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>反击资格判定（签名＝（攻击者, 目标）→ bool）：反击豁免表四条款、豁免优先（目标轰炸机永不反击／攻击者炮兵不受任何反击／
+    /// 攻击者轰炸机不受反击〔例外＝目标战斗机〕／其余正常）；默认互伤区与伏击资格共用同一条目——改写后全部调用点同步生效。</summary>
+    public const string CombatCounterEligibility = "combat.counter.eligibility";
+
+    /// <summary>伏击条件判定（签名＝（被攻击单位, 攻击者）→ bool）：被攻击单位攻击有效值 ＞ 攻击者防御有效值（严格大于、相等＝不命中）。</summary>
+    public const string CombatAmbushCondition = "combat.ambush.condition";
+
+    // ---------- K3（A 档 C7/C8：复验消重）：leg 资格与推进前置判定器（三条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>move leg 资格判定（签名＝（单位, 源位置）→ LegEligibilityFailure?〔null＝通过〕）：共享『leg 资格』条件序列
+    /// （owner==current／!destroyed／CanMove／被压制／行动费／位置〔源∈支援线〕）；可用性聚合与移动复验共用同一条目——
+    /// 改写后两调用点同步生效（分区条目：不影响 attack 侧）。</summary>
+    public const string MoveLegEligibility = "move.leg.eligibility";
+
+    /// <summary>attack leg 资格判定（签名＝（单位, 位置〔忽略〕）→ LegEligibilityFailure?〔null＝通过〕）：共享『leg 资格』条件序列
+    /// （owner==current／!destroyed／CanAttack／被压制／行动费）；可用性聚合与攻击复验共用同一条目——
+    /// 改写后两调用点同步生效（分区条目：不影响 move 侧）。</summary>
+    public const string AttackLegEligibility = "attack.leg.eligibility";
+
+    /// <summary>推进前置判定（签名＝（所有者）→ bool）：前线是否存在存活敌方单位（空前线或己方已占＝false）；
+    /// 移动可用性与移动复验共用同一条目——改写后两调用点同步生效。</summary>
+    public const string MoveFrontlineEnemy = "move.frontline-enemy";
 }

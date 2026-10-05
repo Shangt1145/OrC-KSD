@@ -7,39 +7,41 @@ using Orc.Game.Players;
 namespace Orc.Game.Judicators;
 
 /// <summary>
-/// 移动复验判定器（J2；单位移动验证点专属——逐点专属判定器之一）：
+/// 移动复验判定器（J2；单位移动验证点专属——逐点专属判定器之一；K3 改造：leg 共享消重）：
 /// 执行前兜底复验的验证承载（原 <c>CommandManager.RevalidateMove</c> 逐字迁移）。
-/// 规则：终局后拒绝；操作角色引用（单位/原槽位/目标槽位）有效性与在场状态、当前行动方、可动标记、
-/// 被压制、行动费（有效值）、位置一致性、仅推进（支援线→前线空槽）、前线无存活敌方（后置项 C）。
+/// 规则：终局后拒绝；操作角色引用（单位/原槽位/目标槽位）有效性与在场状态、leg 资格（K3：owner==current／
+/// !destroyed／CanMove／被压制／行动费／位置〔源∈支援线〕——经共享 leg 条目单源取用）、位置一致性（复验固有兜底）、
+/// 仅推进（目标须为前线空槽——调用点单源）、前线无存活敌方（K3：经 move.frontline-enemy 条目单源取用）。
 /// 输入：refs（触发数据第一层引用收集——本验证点：单位/原槽位/目标槽位位于前位；尾部可携带触发者卡引用、不参与复验）
 /// ＋subject（被判定对象＝操作单位引用——显式、Ref 形态）。
 /// 装配期注入对局级只读设施（对局加载时加载、生命随对局、仅只读使用）：
-/// 生命周期（终局门禁）、当前行动方提供器、战场（布局读取）、前线存活敌方查询（转发——与可用性侧单源）。
-/// 无状态：不持有跨调用可变状态；改写＝moding（移动复验改写——与攻击复验相互独立）。
+/// 生命周期（终局门禁）、leg 资格通道（K3 共享条目——每次调用经统一解析点）、战场（布局读取）、
+/// 推进前置通道（K3 move.frontline-enemy 条目——与可用性侧单源）。
+/// 无状态：不持有跨调用可变状态；改写＝moding（移动复验改写——与攻击复验相互独立；leg/C8 条目改写＝可用性与复验同步）。
 /// </summary>
 internal sealed class MoveRevalidationJudicator : ValidationJudicator
 {
     private readonly MatchLifecycle? _lifecycle;
-    private readonly Func<Player?> _currentPlayerProvider;
+    private readonly Func<UnitCard, Slot?, LegEligibilityFailure?> _moveLegEligibility;
     private readonly Battlefield _battlefield;
-    private readonly Func<Player, bool> _hasLivingEnemyOnFrontLine;
+    private readonly Func<Player, bool> _moveFrontlineEnemy;
 
     /// <summary>创建移动复验判定器（装配期注入对局级只读设施引用）。</summary>
-    /// <exception cref="ArgumentNullException">currentPlayerProvider / battlefield / hasLivingEnemyOnFrontLine 为 null。</exception>
+    /// <exception cref="ArgumentNullException">moveLegEligibility / battlefield / moveFrontlineEnemy 为 null。</exception>
     internal MoveRevalidationJudicator(
         MatchLifecycle? lifecycle,
-        Func<Player?> currentPlayerProvider,
+        Func<UnitCard, Slot?, LegEligibilityFailure?> moveLegEligibility,
         Battlefield battlefield,
-        Func<Player, bool> hasLivingEnemyOnFrontLine)
+        Func<Player, bool> moveFrontlineEnemy)
     {
-        ArgumentNullException.ThrowIfNull(currentPlayerProvider);
+        ArgumentNullException.ThrowIfNull(moveLegEligibility);
         ArgumentNullException.ThrowIfNull(battlefield);
-        ArgumentNullException.ThrowIfNull(hasLivingEnemyOnFrontLine);
+        ArgumentNullException.ThrowIfNull(moveFrontlineEnemy);
 
         _lifecycle = lifecycle;
-        _currentPlayerProvider = currentPlayerProvider;
+        _moveLegEligibility = moveLegEligibility;
         _battlefield = battlefield;
-        _hasLivingEnemyOnFrontLine = hasLivingEnemyOnFrontLine;
+        _moveFrontlineEnemy = moveFrontlineEnemy;
     }
 
     /// <inheritdoc />
@@ -72,49 +74,30 @@ internal sealed class MoveRevalidationJudicator : ValidationJudicator
             return ValidationVerdict.Invalid();
         }
 
+        // K3：leg 资格（共享条件源——原内联的 owner/destroyed/can/suppressed/cost/位置〔源∈支援线〕检查迁至
+        // leg 条目；复验按 bool 语义消费：非 null＝Invalid；编排保持——leg 整体判定位于 refs/终局/subject 检查之后）。
+        if (_moveLegEligibility(unit, oldSlot) is not null)
+        {
+            return ValidationVerdict.Invalid();
+        }
+
         var state = unit.GetData<UnitStateData>();
-        var command = unit.GetData<CommandData>();
-        var owner = unit.Owner;
-        var current = _currentPlayerProvider();
 
-        if (current is null || owner is null || !ReferenceEquals(owner, current))
-        {
-            return ValidationVerdict.Invalid();
-        }
-
-        if (state.IsDestroyed || !command.CanMove)
-        {
-            return ValidationVerdict.Invalid();
-        }
-
-        // A2：被压制（不能移动或攻击——复验与可用性同源）
-        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
-        {
-            return ValidationVerdict.Invalid();
-        }
-
-        // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
-        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
-        {
-            return ValidationVerdict.Invalid();
-        }
-
+        // 复验固有：位置一致性（Position==oldSlot——复验兜底语义，非两侧重复项；与共享「位置」检查的相对顺序
+        // 调整（置后）＝值级等价——所有检查无副作用、纯 AND 必要条件，见实现记录申报）。
         if (!ReferenceEquals(state.Position, oldSlot))
         {
             return ValidationVerdict.Invalid();
         }
 
-        if (!_battlefield.GetSupportLine(owner).Contains(oldSlot))
-        {
-            return ValidationVerdict.Invalid(); // 仅推进：源位置须为支援线
-        }
-
+        // 仅推进：目标须为前线空槽（move 上下文——调用点单源保留）。
         if (!_battlefield.FrontLine.Contains(newSlot) || !newSlot.IsEmpty)
         {
             return ValidationVerdict.Invalid(); // 目标须为前线空槽
         }
 
-        if (_hasLivingEnemyOnFrontLine(owner))
+        // K3：推进前置（经 move.frontline-enemy 条目——与可用性侧单源；owner 非 null 由 leg 资格保证）。
+        if (_moveFrontlineEnemy(unit.Owner!))
         {
             return ValidationVerdict.Invalid(); // 推进前置复验（后置项 C；防御性双保险）：前线存在存活敌方单位＝拒绝
         }

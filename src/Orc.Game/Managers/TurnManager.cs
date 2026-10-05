@@ -7,7 +7,7 @@ namespace Orc.Game.Managers;
 /// 回合管理器（回合领域真源：回合数、当前行动方）：回合推进编排（"信号先行、处理随后"模型）。
 /// 回合开始序列＝turn.start.before → turn.start →（开始处理：结算 → 单位行动状态恢复〔2C 加性〕→ 抽牌）→ turn.start.after；
 /// 结算＝资源管理器（槽 +1 至上限 → 点数＝槽值；静默）、行动状态恢复＝注入钩子（指挥管理器：行动方在场单位重置两 bool＋词条运行态清零；
-/// 未接线＝跳过）、抽牌＝玩家管理器（先手第 1 回合不抽、其余照抽 1；抽时所发 card.drawn 位于 start 与 after 之间）；
+/// 未接线＝跳过）、抽牌＝玩家管理器（缺省：先手第 1 回合不抽、其余照抽 1——K4：AllowFirstTurnDraw 配置可关闭该例外；抽时所发 card.drawn 位于 start 与 after 之间）；
 /// 回合结束序列＝turn.end.before → turn.end → 切换当前方、回合数 +1（点数保留——X3：回合结束不清零、敌方回合内保留）。
 /// 所有 turn 系列更新经总线 Emit（载荷＝{ 玩家, 回合数 }）；全部顺序 await 完结（调用返回即结算与更新完结）。
 /// 终局门禁（后置项 B）：对局已结束＝EndTurn 拒绝（可空生命周期；缺省＝独立构造场景无门禁）。
@@ -18,18 +18,21 @@ public sealed class TurnManager
     private readonly PlayerManager _playerManager;
     private readonly ResourceManager _resourceManager;
     private readonly MatchLifecycle? _lifecycle;
+    private readonly bool _allowFirstTurnDraw; // K4：允许先手第 1 回合抽牌（缺省 false＝保持唯一抽牌例外）
     private Player? _currentPlayer;
 
     internal TurnManager(
         LogicEngine engine,
         PlayerManager playerManager,
         ResourceManager resourceManager,
-        MatchLifecycle? lifecycle = null)
+        MatchLifecycle? lifecycle = null,
+        bool allowFirstTurnDraw = false)
     {
         _engine = engine;
         _playerManager = playerManager;
         _resourceManager = resourceManager;
         _lifecycle = lifecycle;
+        _allowFirstTurnDraw = allowFirstTurnDraw;
     }
 
     /// <summary>
@@ -47,7 +50,7 @@ public sealed class TurnManager
     public Player CurrentPlayer => _currentPlayer ?? throw new InvalidOperationException("回合尚未开始（当前行动方未定）。");
 
     /// <summary>
-    /// 初始化动作：置回合数＝1、当前行动方＝先手；发起先手回合开始序列（本轮不抽牌——先手第 1 回合＝唯一抽牌例外）。只允许一次。
+    /// 初始化动作：置回合数＝1、当前行动方＝先手；发起先手回合开始序列（本轮抽牌按抽牌规则裁决——先手第 1 回合＝唯一抽牌例外、缺省不抽）。只允许一次。
     /// </summary>
     /// <exception cref="ArgumentNullException">firstPlayer 为 null。</exception>
     /// <exception cref="InvalidOperationException">先手回合已发起（重复发起被拒绝）。</exception>
@@ -111,8 +114,11 @@ public sealed class TurnManager
         await EmitTurnAsync(GameUpdates.TurnStartAfter, current, TurnNumber, ct);
     }
 
-    /// <summary>抽牌规则：先手第 1 回合（全局回合 1）不抽；其余回合（含后手首回合与自回合 3 起双方各回合）照抽 1。</summary>
-    private static bool ShouldDrawForTurn(int turnNumber) => turnNumber != 1;
+    /// <summary>
+    /// 抽牌规则：先手第 1 回合（全局回合 1）不抽（唯一抽牌例外——<c>allowFirstTurnDraw</c>＝true 时关闭该例外、照抽）；
+    /// 其余回合（含后手首回合与自回合 3 起双方各回合）照抽 1。
+    /// </summary>
+    private bool ShouldDrawForTurn(int turnNumber) => turnNumber != 1 || _allowFirstTurnDraw;
 
     /// <summary>发射 turn 系列更新（载荷＝{ 玩家, 回合数 }）。</summary>
     private Task EmitTurnAsync(string updateType, Player player, int turnNumber, CancellationToken ct)

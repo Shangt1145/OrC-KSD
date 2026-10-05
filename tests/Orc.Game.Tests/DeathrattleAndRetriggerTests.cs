@@ -278,41 +278,34 @@ public class DeathrattleAndRetriggerTests
     // ---------- ② 再触发：部署（含 DeploymentLogicData 数据面） ----------
 
     [Fact]
-    public async Task Deploy_Retrigger_Replays_Generated_Segment_In_Registration_Order()
+    public async Task Deploy_Retrigger_Replays_Injected_Effects_In_Registration_Order()
     {
-        // 装配链生成/登记：装配方经注册面程序化登记条目（含空 handler 无效条目）。
-        var registry = new DeploymentLogicRegistry();
-        var order = new List<string>();
-        var contexts = new List<DeploymentLogicContext>();
-        registry.Register(ReplayUnitId, "A", (logicContext, _) => { order.Add("A"); contexts.Add(logicContext); return Task.CompletedTask; });
-        registry.Register(ReplayUnitId, "空条目", null);
-        registry.Register(ReplayUnitId, "B", (logicContext, _) => { order.Add("B"); contexts.Add(logicContext); return Task.CompletedTask; });
-
-        var match = CommandTestKit.CreateCommandMatch(
-            bridge: null, seed: 42, effectRegistry: null, extraDefinitions: ReplayDefinitions(), deploymentLogicRegistry: registry);
+        // S6 迁移：部署效果＝效果 + 注入「部署词条触发器」（原 A4 登记面退场）。
+        var match = CommandTestKit.CreateCommandMatch(seed: 42, extraDefinitions: ReplayDefinitions());
         await match.Initialize();
         var player = match.Players[0];
 
-        // 生成面（加载期）：组件就绪、条目按登记序（含无效条目——「handler 非空」检查在触发侧）。
         var unit = await CommandTestKit.InstantiateLoadedAsync(match, player, ReplayUnitId);
-        Assert.True(unit.TryGetData<DeploymentLogicData>(out var logic));
-        Assert.Equal(new[] { "A", "空条目", "B" }, logic.Entries.Select(e => e.Name));
+        var order = new List<string>();
+        var views = new List<Orc.Game.Triggers.CardTriggerView>();
+        unit.AddEffect(new DeployLogicProbeEffect(unit, "A", view => { order.Add("A"); views.Add(view); return Task.CompletedTask; }));
+        unit.AddEffect(new DeployLogicProbeEffect(unit, "B", view => { order.Add("B"); views.Add(view); return Task.CompletedTask; }));
 
         var slot = match.Battlefield.GetSupportLine(player)[1];
         var joined = await match.PlayManager.JoinUnitAsync(unit, slot);
         Assert.Equal(PlayResultStatus.Success, joined.Status);
         order.Clear();
-        contexts.Clear();
+        views.Clear();
 
-        // 再触发（发布入口；同步链——返回即已完成）：重放部署效果段——登记序、空 handler 跳过、上下文＝测试单位＋当前槽位。
+        // 再触发（发布入口；同步链——返回即已完成）：重放部署效果——执行序可观测、上下文＝测试单位＋当前槽位。
         var accepted = await RetriggerRules.RequestDeployAsync(unit);
         Assert.True(accepted);
         Assert.Equal(new[] { "A", "B" }, order);
-        Assert.Equal(2, contexts.Count);
-        Assert.All(contexts, context =>
+        Assert.Equal(2, views.Count);
+        Assert.All(views, view =>
         {
-            Assert.Same(unit, context.Unit);
-            Assert.Same(slot, context.Target);
+            Assert.Same(unit, view.Card);
+            Assert.Same(slot, view.Position);
         });
 
         // 非幂等：同一卡同链类型重复请求＝各执行一次（「再触发是动作而非状态确保」）。
@@ -331,52 +324,46 @@ public class DeathrattleAndRetriggerTests
     }
 
     [Fact]
-    public async Task Deploy_Retrigger_Isolates_Single_Entry_Exception()
+    public async Task Deploy_Retrigger_Isolates_Single_Effect_Exception()
     {
-        var registry = new DeploymentLogicRegistry();
-        var order = new List<string>();
-        registry.Register(ReplayUnitId, "A", (_, _) => { order.Add("A"); return Task.CompletedTask; });
-        registry.Register(ReplayUnitId, "B", (_, _) => throw new InvalidOperationException("重放爆炸（测试）"));
-        registry.Register(ReplayUnitId, "C", (_, _) => { order.Add("C"); return Task.CompletedTask; });
-
-        var match = CommandTestKit.CreateCommandMatch(
-            bridge: null, seed: 42, effectRegistry: null, extraDefinitions: ReplayDefinitions(), deploymentLogicRegistry: registry);
+        var match = CommandTestKit.CreateCommandMatch(seed: 42, extraDefinitions: ReplayDefinitions());
         await match.Initialize();
         var player = match.Players[0];
         var unit = await CommandTestKit.InstantiateLoadedAsync(match, player, ReplayUnitId);
+        var order = new List<string>();
+        unit.AddEffect(new DeployLogicProbeEffect(unit, "A", _ => { order.Add("A"); return Task.CompletedTask; }));
+        unit.AddEffect(new DeployLogicProbeEffect(unit, "B", _ => throw new InvalidOperationException("重放爆炸（测试）")));
+        unit.AddEffect(new DeployLogicProbeEffect(unit, "C", _ => { order.Add("C"); return Task.CompletedTask; }));
         await match.PlayManager.JoinUnitAsync(unit, match.Battlefield.GetSupportLine(player)[1]);
 
-        // 逐条异常隔离（记录并继续）——单个条目异常不阻断后续条目。
+        // 逐条异常隔离（记录并继续）——单个效果异常不阻断后续效果。
         var accepted = await RetriggerRules.RequestDeployAsync(unit);
         Assert.True(accepted);
         Assert.Equal(new[] { "A", "C" }, order);
         Assert.Contains(
             match.Engine.RootStream.Entries,
-            e => e.Source == "部署逻辑" && e.Keywords.Contains("exception:InvalidOperationException"));
+            e => e.Keywords.Contains("exception:InvalidOperationException"));
     }
 
     [Fact]
     public async Task Deploy_Retrigger_Shares_Single_Source_With_Play_Chain()
     {
-        // 单源化验证：同一组条目——打出路径（加入链不走部署词条；故用部署链观测面以「日志 source/行为」对齐）：
-        // 此处以「再触发重放」与「打出部署链①段」对同一组件的行为等价性作代表性断言（共同实现＝DeploymentLogicRules）。
-        var registry = new DeploymentLogicRegistry();
-        var order = new List<string>();
-        registry.Register(ReplayUnitId, "甲", (_, _) => { order.Add("甲"); return Task.CompletedTask; });
-        registry.Register(ReplayUnitId, "乙", (_, _) => { order.Add("乙"); return Task.CompletedTask; });
-
-        var match = CommandTestKit.CreateCommandMatch(
-            bridge: null, seed: 42, effectRegistry: null, extraDefinitions: ReplayDefinitions(), deploymentLogicRegistry: registry);
+        // 单源化验证：同一注入面（「部署词条触发器」）——打出路径（部署链①段）与再触发（重放）行为一致。
+        var match = CommandTestKit.CreateCommandMatch(seed: 42, extraDefinitions: ReplayDefinitions());
         await match.Initialize();
         var playerA = match.Players[0];
 
-        // 打出（部署链①段——单源执行实现）。
         var played = await CommandTestKit.InstantiateLoadedAsync(match, playerA, ReplayUnitId);
+        var order = new List<string>();
+        played.AddEffect(new DeployLogicProbeEffect(played, "甲", _ => { order.Add("甲"); return Task.CompletedTask; }));
+        played.AddEffect(new DeployLogicProbeEffect(played, "乙", _ => { order.Add("乙"); return Task.CompletedTask; }));
+
+        // 打出（部署链①段）。
         var playResult = await match.PlayManager.PlayUnitAsync(played, match.Battlefield.GetSupportLine(playerA)[1]);
         Assert.Equal(PlayResultStatus.Success, playResult.Status);
         Assert.Equal(new[] { "甲", "乙" }, order);
 
-        // 再触发（重放——同一单源执行实现）：行为与打出路径一致（同序/同检查/同隔离）。
+        // 再触发（重放——同一触发器）：行为与打出路径一致。
         order.Clear();
         var accepted = await RetriggerRules.RequestDeployAsync(played);
         Assert.True(accepted);
@@ -515,44 +502,6 @@ public class DeathrattleAndRetriggerTests
         Assert.Empty(recorder.Updates);
     }
 
-    // ---------- ③ 生成面细节（并存/缺省/非单位卡） ----------
-
-    [Fact]
-    public async Task Deployment_Logic_Generation_Coexists_With_Manual_Registration_And_Skips_NonUnits()
-    {
-        var registry = new DeploymentLogicRegistry();
-        var fired = new List<string>();
-        registry.Register(ReplayUnitId, "生成A", (_, _) => { fired.Add("生成A"); return Task.CompletedTask; });
-        registry.Register(CommandTestKit.CommandCardId, "非法", (_, _) => { fired.Add("非法"); return Task.CompletedTask; }); // 非单位卡登记
-
-        var match = CommandTestKit.CreateCommandMatch(
-            bridge: null, seed: 42, effectRegistry: null, extraDefinitions: ReplayDefinitions(), deploymentLogicRegistry: registry);
-        await match.Initialize();
-        var player = match.Players[0];
-
-        // ① 无登记卡不生成（缺省——消费端已「无组件＝跳过」）。
-        var plain = await CommandTestKit.InstantiateLoadedAsync(match, player, CommandTestKit.InfantryId);
-        Assert.False(plain.TryGetData<DeploymentLogicData>(out _));
-
-        // ② 非单位卡不生成（即便注册表有登记——部署链为单位路径）。
-        var command = match.CardLibrary.Instantiate(CommandTestKit.CommandCardId);
-        await command.LoadAsync(player);
-        Assert.False(command.TryGetData<DeploymentLogicData>(out _));
-
-        // ③ 生成面与手动登记相遇＝对齐容器语义（生成环节跳过并申报——不重复挂载、不异常）。
-        var manual = (UnitCard)match.CardLibrary.Instantiate(ReplayUnitId);
-        manual.AddData(new DeploymentLogicData().Add("手动", (_, _) => { fired.Add("手动"); return Task.CompletedTask; }));
-        await manual.LoadAsync(player);
-        Assert.True(manual.TryGetData<DeploymentLogicData>(out var manualLogic));
-        Assert.Equal(new[] { "手动" }, manualLogic.Entries.Select(e => e.Name));
-        Assert.Contains(
-            match.Engine.RootStream.Entries,
-            e => e.Source == "部署逻辑生成" && e.Keywords.Contains("generate-skip"));
-
-        // ④ 手动登记继续合法且可用（再触发重放走同一消费面）。
-        await match.PlayManager.JoinUnitAsync(manual, match.Battlefield.GetSupportLine(player)[1]);
-        var accepted = await RetriggerRules.RequestDeployAsync(manual);
-        Assert.True(accepted);
-        Assert.Contains("手动", fired);
-    }
+    // ---------- ③ A4 部署逻辑生成面：随 S6/S7 废弃（原「生成/并存/非单位卡」用例不再适用；
+    //    等价能力＝效果 + 注入「部署词条触发器」，覆盖见 PlayChainDeploymentTests 与上方三例） ----------
 }

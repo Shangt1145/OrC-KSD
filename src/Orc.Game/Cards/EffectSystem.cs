@@ -262,7 +262,9 @@ internal static class CardEffectLoader
                 continue;
             }
 
-            card.AddEffect(instantiation.Effect!); // Add 即装载（被动：挂载动态触发器；主动：列表进出）
+            var instantiatedEffect = instantiation.Effect!;
+            card.AddEffect(instantiatedEffect); // Add 即装载（被动：挂载动态触发器；主动：列表进出）
+            ApplyFrameworkInjects(card, engine, snapshot, instantiatedEffect); // S5：injects 声明落地
         }
 
         // ④ 装载兜底（幂等——Add 即装载后多为跳过；对装载失败回滚者＝重试装载；失败＝回滚为未生效、记录、不阻断）。
@@ -283,6 +285,69 @@ internal static class CardEffectLoader
                 await CleanupFailedLoadAsync(card, engine, effect, ct);
             }
         }
+    }
+
+    /// <summary>
+    /// 框架侧注入（S5；P7＝a）：把效果预制体声明的 <c>injects</c> 落地——按名在宿主卡上解析目标触发器、
+    /// 取本效果内对应事件的 handler、注册进目标触发器默认区段（卸载随效果自动撤销）。
+    /// 失败（非动态被动效果／区段非默认／目标未登记／事件无 handler）＝隔离记录、不阻断。
+    /// </summary>
+    private static void ApplyFrameworkInjects(
+        CardBase card, LogicEngine engine, EffectSnapshot? snapshot, Effect effect)
+    {
+        if (snapshot is null || snapshot.Root.Injects.Count == 0)
+        {
+            return;
+        }
+
+        if (effect is not DynamicPassiveEffect dynamic)
+        {
+            WriteInjectError(engine, card, $"效果 '{effect.Name}' 非动态被动形态（隔离：注入跳过）。", effect.Name);
+            return;
+        }
+
+        foreach (var inject in snapshot.Root.Injects)
+        {
+            if (!string.IsNullOrWhiteSpace(inject.BandName))
+            {
+                WriteInjectError(
+                    engine, card,
+                    $"注入区段 '{inject.BandName}' 不受支持（本版仅默认区段——隔离）。", inject.TargetTriggerName);
+                continue;
+            }
+
+            if (!card.TryFindNamedTrigger(inject.TargetTriggerName, out var target, out var viewType))
+            {
+                WriteInjectError(
+                    engine, card,
+                    $"注入目标 '{inject.TargetTriggerName}' 未在宿主登记（隔离）。", inject.TargetTriggerName);
+                continue;
+            }
+
+            if (!dynamic.TryGetEventHandler(inject.EventId, out var handler) || handler is null)
+            {
+                WriteInjectError(engine, card, $"注入事件 '{inject.EventId}' 无 handler（隔离）。", inject.EventId);
+                continue;
+            }
+
+            try
+            {
+                effect.InjectByFramework(target!, viewType!, inject.EventId, handler, inject.Priority);
+            }
+            catch (Exception ex)
+            {
+                WriteInjectError(engine, card, $"注入失败（隔离）：{ex.Message}", inject.EventId);
+            }
+        }
+    }
+
+    private static void WriteInjectError(LogicEngine engine, CardBase card, string message, string detail)
+    {
+        engine.RootStream.WriteLog(
+            "效果注入",
+            $"卡牌 '{card.Name}'：{message}",
+            LogLevel.Error,
+            new[] { "effect", "inject", "error", detail });
     }
 
     /// <summary>

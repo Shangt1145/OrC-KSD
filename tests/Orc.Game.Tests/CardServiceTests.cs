@@ -2,6 +2,7 @@ using Orc.Core;
 using Orc.Game;
 using Orc.Game.Cards;
 using Orc.Game.Commanding;
+using Orc.Game.Judicators;
 using Orc.Game.Players;
 using Xunit;
 
@@ -12,7 +13,7 @@ namespace Orc.Game.Tests;
 /// ①生成→手牌（端到端＋衍生卡「构筑外」）②生成→阵线（机制级全维＋上下文可达性专项＋落点敌方）
 /// ③生成→相邻处（端到端：解析口径/选取分离/空解析失败零副作用）④生成→卡组（卡组顶/洗入＋专项）
 /// ⑤复制（端到端：定义级/新实例/源不受影响）⑥转换（端到端组合链：同槽位/静态/离场销毁/信号/计数/离场通知）
-/// ⑦类型增补（受控入口/信号/去重/实例级/专项）；差异点（满手烧牌/槽占用失败回收静默/定义不存在/
+/// ⑦类型增补（受控入口/信号/去重/实例级/专项）；差异点（满手爆牌/槽占用失败回收静默/定义不存在/
 /// 跨玩家/重复放置）；门禁（准备态/终局后）；独立构造（可注入可测试）；脱局降级。
 /// 驱动形态：主链场景（①③⑤⑥）＝效果端到端（效果桩经上下文取用面）；②④⑦＝机制级全维＋「上下文可达性」专项断言
 /// （经效果/上下文路径完成一次该场景操作并断言结果——Q&A-1·2(c)/Q&A-6·2(c)）。
@@ -63,7 +64,7 @@ public class CardServiceTests
     }
 
     [Fact]
-    public async Task Scenario1_Burn_On_Full_Hand_Destroyed_Then_Discarded_No_HandAdd()
+    public async Task Scenario1_Burn_On_Full_Hand_Destroyed_Then_Burned_No_HandAdd()
     {
         var match = S9Kit.CreateSceneMatch();
         await match.Initialize();
@@ -78,22 +79,24 @@ public class CardServiceTests
         using var recorder = new UpdateRecorder(match.Engine);
         var result = await match.CardService.CreateAndPlaceToHandAsync(S9Kit.LightInfantryId, playerA);
 
-        // 满手＝烧牌（直烧：不经手牌——手牌全程保持上限；结果＝裁决完成、非失败）
+        // 满手＝爆牌（直爆：不经手牌——手牌全程保持上限；结果＝裁决完成、非失败）
         Assert.Equal(CardPlaceStatus.Burned, result.Status);
         Assert.True(result.IsSuccess);
         Assert.Equal(Player.HandLimit, playerA.Hand.Count);
         var burned = Assert.IsType<UnitCard>(result.Card);
         Assert.False(burned.Life.IsAlive); // 已销毁
 
-        // 信号（生成路径烧牌口径）：销毁（含 card.destroyed）→ card.discarded 恰一次；hand.add / drawn 零次
+        // 信号（生成路径爆牌口径）：销毁（含 card.destroyed）→ card.burned 恰一次；card.discarded 零次（反向：
+        // 爆牌不走弃牌路线）；hand.add / drawn 零次
         Assert.Equal(1, recorder.CountOf(Updates.CardDestroyed));
-        Assert.Equal(1, recorder.CountOf(GameUpdates.CardDiscarded));
+        Assert.Equal(1, recorder.CountOf(GameUpdates.CardBurned));
+        Assert.Equal(0, recorder.CountOf(GameUpdates.CardDiscarded));
         var destroyedIndex = recorder.Types.ToList().IndexOf(Updates.CardDestroyed);
-        var discardedIndex = recorder.Types.ToList().IndexOf(GameUpdates.CardDiscarded);
-        Assert.True(destroyedIndex >= 0 && destroyedIndex < discardedIndex); // 顺序：销毁先、discarded 后
-        var discardedPayload = recorder.PayloadOf(GameUpdates.CardDiscarded)!;
-        Assert.Same(burned, discardedPayload[GameUpdates.PayloadCard]);
-        Assert.Same(playerA, discardedPayload[GameUpdates.PayloadPlayer]);
+        var burnedIndex = recorder.Types.ToList().IndexOf(GameUpdates.CardBurned);
+        Assert.True(destroyedIndex >= 0 && destroyedIndex < burnedIndex); // 顺序：销毁先、burned 后
+        var burnedPayload = recorder.PayloadOf(GameUpdates.CardBurned)!;
+        Assert.Same(burned, burnedPayload[GameUpdates.PayloadCard]);
+        Assert.Same(playerA, burnedPayload[GameUpdates.PayloadPlayer]);
         Assert.Equal(0, recorder.CountOf(GameUpdates.CardHandAdd));
         Assert.Equal(0, recorder.CountOf(GameUpdates.CardDrawn));
     }
@@ -547,12 +550,16 @@ public class CardServiceTests
         Assert.Equal(0, recorder.CountOf(GameUpdates.UnitTypesChanged));
 
         // 判定读点受益（增补前基线）：目标非轰炸机 → 可反击
-        Assert.True(CounterAttackRules.CanCounterAttack(attacker, unit));
+        // （K2：经 combat.counter.eligibility 判定器条目读值——单源口径，断言强度保持）
+        Assert.Equal(new object[] { true },
+            match.Judicators.Resolve(JudicatorNames.CombatCounterEligibility).Invoke(new object[] { attacker, unit }));
 
         await unit.AddUnitTypeAsync(UnitType.Bomber);
 
-        // ① 既有判定读点即时可见（无需修改读点代码——反击豁免判定：目标＝轰炸机 → 永不反击）
-        Assert.False(CounterAttackRules.CanCounterAttack(attacker, unit));
+        // ① 既有判定读点即时可见（无需修改读点代码——反击豁免判定：目标＝轰炸机 → 永不反击；
+        // K2：经判定器条目读值——单源口径，断言强度保持）
+        Assert.Equal(new object[] { false },
+            match.Judicators.Resolve(JudicatorNames.CombatCounterEligibility).Invoke(new object[] { attacker, unit }));
         Assert.Contains(UnitType.Bomber, unit.GetData<UnitStateData>().UnitTypes);
 
         // ② 信号恰一次（载荷＝{ Unit, AddedType }——增量）

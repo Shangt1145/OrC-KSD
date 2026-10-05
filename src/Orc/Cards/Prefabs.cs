@@ -221,6 +221,18 @@ public sealed class TriggerPrefab
 public sealed record ModingPrefab(string TargetEventId, EventPrefab Replacement);
 
 /// <summary>
+/// 注入声明（S5／P7＝a；<see cref="EffectPrefab"/> 级，与 <see cref="ModingPrefab"/> 并列）：
+/// 把本效果内某个事件（<see cref="EventId"/> 指向的 handler）注册进**宿主具名触发器**（<see cref="TargetTriggerName"/>）——
+/// 装载时由装载链框架侧执行、卸载自动撤销。目标触发器由宿主卡按名解析（未命中＝隔离记录）。
+/// <see cref="BandName"/> 为空＝默认区段（默认 band 方案；P8a）；非空＝按名解析专门枚举成员（解析失败＝隔离记录）。
+/// </summary>
+/// <param name="TargetTriggerName">宿主具名触发器名（经宿主卡按名解析）。</param>
+/// <param name="BandName">区段名（空＝默认区段）。</param>
+/// <param name="EventId">本效果内的事件 id（handler 来源）。</param>
+/// <param name="Priority">区段内优先级。</param>
+public sealed record InjectPrefab(string TargetTriggerName, string? BandName, string EventId, int Priority = 0);
+
+/// <summary>
 /// 效果预制体（S-C5；三层之外层）：效果定义声明＝主触发器 + 其它触发器预制体 + moding 声明。
 /// <see cref="MountedHooks"/> 为计算属性：主触发器与其它被动触发器的 hooks 并集（＝"需挂载的 HookID"）。
 /// </summary>
@@ -235,7 +247,8 @@ public sealed class EffectPrefab
         TriggerPrefab mainTrigger,
         IEnumerable<TriggerPrefab>? otherTriggers = null,
         IEnumerable<ModingPrefab>? modings = null,
-        int version = 1)
+        int version = 1,
+        IEnumerable<InjectPrefab>? injects = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(mainTrigger);
@@ -278,10 +291,27 @@ public sealed class EffectPrefab
             }
         }
 
+        var injectList = new List<InjectPrefab>();
+        if (injects is not null)
+        {
+            foreach (var item in injects)
+            {
+                if (item is null)
+                {
+                    throw new ArgumentNullException(nameof(injects), "注入声明集合不能包含 null 元素。");
+                }
+
+                ArgumentException.ThrowIfNullOrWhiteSpace(item.TargetTriggerName);
+                ArgumentException.ThrowIfNullOrWhiteSpace(item.EventId);
+                injectList.Add(item);
+            }
+        }
+
         Id = id;
         MainTrigger = mainTrigger;
         OtherTriggers = others;
         Modings = modingList;
+        Injects = injectList;
         Version = version;
 
         var hooks = new List<string>(mainTrigger.Hooks);
@@ -311,6 +341,9 @@ public sealed class EffectPrefab
     /// <summary>moding 声明（声明序＝栈序）。</summary>
     public IReadOnlyList<ModingPrefab> Modings { get; }
 
+    /// <summary>注入声明（S5；声明序）。</summary>
+    public IReadOnlyList<InjectPrefab> Injects { get; }
+
     /// <summary>"需挂载的 HookID"（计算属性：主触发器与其它被动触发器 hooks 的并集，去重保序）。</summary>
     public IReadOnlyList<string> MountedHooks { get; }
 
@@ -324,8 +357,8 @@ public sealed class EffectPrefab
 /// </summary>
 public sealed class EffectSnapshot
 {
-    /// <summary>效果快照 schema 版本（本版＝1）。</summary>
-    public const int SchemaVersion = 1;
+    /// <summary>效果快照 schema 版本（本版＝2——S5 新增 <c>injects</c> 注入声明；旧版读出＝结构化失败、不静默降级）。</summary>
+    public const int SchemaVersion = 2;
 
     /// <summary>创建效果快照。</summary>
     /// <exception cref="ArgumentNullException">root 为 null。</exception>
@@ -383,6 +416,15 @@ public sealed class EffectSnapshot
                 EffectLoadStepKind.ApplyModing, main.StableKey, $"{moding.TargetEventId} <- {moding.Replacement.Id}"));
         }
 
+        foreach (var inject in Root.Injects)
+        {
+            var band = string.IsNullOrWhiteSpace(inject.BandName) ? "default" : inject.BandName!;
+            steps.Add(new EffectLoadStep(
+                EffectLoadStepKind.Inject,
+                inject.TargetTriggerName,
+                $"{inject.EventId} @ {band} (priority {inject.Priority})"));
+        }
+
         return new EffectLoadPlan(steps);
     }
 
@@ -419,6 +461,9 @@ public enum EffectLoadStepKind
 
     /// <summary>施加 moding（逻辑替换）。</summary>
     ApplyModing,
+
+    /// <summary>注入（把事件 handler 注册进宿主具名触发器——S5）。</summary>
+    Inject,
 }
 
 /// <summary>装载步骤（S-C5）：种类 + 目标（触发器稳定键）+ 明细（确定性文本）。</summary>

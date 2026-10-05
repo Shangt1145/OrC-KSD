@@ -2,7 +2,7 @@ using Orc.Game.Managers;
 
 namespace Orc.Game;
 
-/// <summary>对局级规则/开局配置（创建参数形态：配置对象；至少含"指挥点上限"）。</summary>
+/// <summary>对局级规则/开局配置（创建参数形态：配置对象；含指挥点上限、起手张数与首回合抽牌等开局规则）。</summary>
 public sealed class MatchOptions
 {
     /// <summary>指挥点上限（默认 12；须为正整数，非法配置于创建期抛参数校验异常）。</summary>
@@ -14,4 +14,25 @@ public sealed class MatchOptions
     /// （既有序列；供测试基建与"无换牌"变体装配）。
     /// </summary>
     public bool SkipMulligan { get; init; }
+
+    // ---------- K4 加性（开局常量配置化：起手张数／首回合抽牌） ----------
+
+    /// <summary>先手起手张数默认值（4）。</summary>
+    public const int DefaultOpeningHandSizeFirstPlayer = 4;
+
+    /// <summary>后手起手张数默认值（5）。</summary>
+    public const int DefaultOpeningHandSizeSecondPlayer = 5;
+
+    /// <summary>先手起手张数（默认 4；0 合法＝空起手、正常流程；负数于创建期抛参数校验异常）。</summary>
+    public int OpeningHandSizeFirstPlayer { get; init; } = DefaultOpeningHandSizeFirstPlayer;
+
+    /// <summary>后手起手张数（默认 5；0 合法＝空起手、正常流程；负数于创建期抛参数校验异常）。</summary>
+    public int OpeningHandSizeSecondPlayer { get; init; } = DefaultOpeningHandSizeSecondPlayer;
+
+    /// <summary>
+    /// 允许先手全局第 1 回合抽牌（缺省 false＝保持现行"先手第 1 回合不抽"的唯一抽牌例外；
+    /// true＝关闭该例外、第 1 回合照抽 1 张）。「后手首回合（全局回合 2）与其余回合照抽」的既有边界不受本开关影响
+    /// （开关仅贡献"第 1 回合不抽"这一唯一例外的有无）。
+    /// </summary>
+    public bool AllowFirstTurnDraw { get; init; }
 }

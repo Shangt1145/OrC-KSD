@@ -12,7 +12,7 @@ namespace Orc.Game;
 // ①服务面操作全集＝创建（Create）＋放置（Place）两原子：为效果提供「对局服务访问面」；
 //   复制/转换不设专属操作（＝效果侧原子组合：复制〔读源卡定义 → Create → Place〕、转换〔离场/销毁 → Create → Place〕）；
 //   类型增补不进本服务（属单位数据面受控入口——UnitCard.AddUnitTypeAsync）。
-// ②统一放置服务（四类去向）：手牌（尾部追加＋满手烧牌裁决）、阵线（既有「加入路径」语义——非部署、不扣费、发 unit.joined）、
+// ②统一放置服务（四类去向）：手牌（尾部追加＋满手爆牌裁决）、阵线（既有「加入路径」语义——非部署、不扣费、发 unit.joined）、
 //   卡组顶（取件端）、洗入（装入＋统一洗切动作面——发 deck.shuffled）；＋相邻空槽解析（与「邻位动态候选」同源；解析与选取分离）。
 // ③官方主形态＝「创建并放置」复合操作（一次复合调用；失败自动回收已创建实例——「不产生半放置态」由服务侧内建保证）。
 // ④归属（Owner）＝落点玩家：创建时即按落点玩家预归属；放置校验「实例归属＝目标玩家」（跨玩家放置＝明确拒绝）。
@@ -20,8 +20,8 @@ namespace Orc.Game;
 //   业务失败（槽被占/无相邻空槽/未选出槽位/类别不匹配等运行时竞争与约束）＝结果对象（不抛）。
 // ⑥门禁：仅「进行」态（先例＝随机服务取用门禁）；准备态/终局后对外操作＝明确拒绝（异常）；独立构造（无状态读取器）＝无门禁。
 // ⑦信号（接入既有/底层组合负责；服务不另发新信号）：手牌加入＝card.hand.add（恰一次、实际进入手牌路径）；
-//   阵线加入＝unit.joined（既有加入链）；洗入＝deck.shuffled（统一洗切动作面）；满手烧牌＝销毁（含 card.destroyed）→
-//   card.discarded 恰一次（hand.add/drawn 零次——生成路径烧牌口径）；卡组顶装入＝静默；回收＝游戏层信号零发射。
+//   阵线加入＝unit.joined（既有加入链）；洗入＝deck.shuffled（统一洗切动作面）；满手爆牌＝销毁（含 card.destroyed）→
+//   card.burned 恰一次（hand.add/drawn 零次——生成路径爆牌口径）；卡组顶装入＝静默；回收＝游戏层信号零发射。
 // ⑧动作作用域：服务不自行包载（由调用方〔效果执行/动作入口〕的既有作用域自然聚合；无作用域语境＝不产段、信号照发）。
 // ⑨可注入可测试：服务随对局装配（Match.CardService——注入各玩家「卡 → 玩家 → 服务」＋对局面动作），
 //   亦可独立构造（公开构造——依赖以可替换形态注入：支援线查询/阵线放置/洗切动作/状态读取器均可缺省）；
@@ -29,15 +29,15 @@ namespace Orc.Game;
 // ⑩接入面：效果运行期经 MatchCardService.ResolveFor（「卡 → 玩家 → 服务」——与 GameEnvironment/MatchRandomService 同构）取用。
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// <summary>卡牌放置结局状态（三态；成功 / 烧牌 / 失败）。</summary>
+/// <summary>卡牌放置结局状态（三态；成功 / 爆牌 / 失败）。</summary>
 public enum CardPlaceStatus
 {
     /// <summary>放置完成（实例实际进入目标区域）。</summary>
     Placed,
 
     /// <summary>
-    /// 烧牌（手牌目标专属）：满手（≥ <see cref="Player.HandLimit"/>）时放置到手牌＝KARDS 烧牌语义——
-    /// 不经手牌（直烧）、实例已销毁；信号＝销毁（含 card.destroyed）→ card.discarded 恰一次（hand.add 零次）。
+    /// 爆牌（手牌目标专属）：满手（≥ <see cref="Player.HandLimit"/>）时放置到手牌＝KARDS 爆牌语义——
+    /// 不经手牌（直爆）、实例已销毁；信号＝销毁（含 card.destroyed）→ card.burned 恰一次（hand.add 零次）。
     /// 结果为「成功」语义（裁决完成——非失败）。
     /// </summary>
     Burned,
@@ -46,7 +46,7 @@ public enum CardPlaceStatus
     Rejected,
 }
 
-/// <summary>卡牌放置失败原因（类别化；成功/烧牌＝null）。</summary>
+/// <summary>卡牌放置失败原因（类别化；成功/爆牌＝null）。</summary>
 public enum CardPlaceFailureReason
 {
     /// <summary>目标槽位非空（运行时状态竞争——业务失败、不抛）。</summary>
@@ -70,9 +70,9 @@ public enum CardPlaceFailureReason
 
 /// <summary>
 /// 卡牌放置结果对象（不抛；消费方读 <see cref="Status"/> ＋ <see cref="FailureReason"/> 分流）：
-/// 放置完成＝<see cref="CardPlaceStatus.Placed"/>；满手烧牌＝<see cref="CardPlaceStatus.Burned"/>（实例已销毁）；
+/// 放置完成＝<see cref="CardPlaceStatus.Placed"/>；满手爆牌＝<see cref="CardPlaceStatus.Burned"/>（实例已销毁）；
 /// 业务失败＝<see cref="CardPlaceStatus.Rejected"/>（携带原因类别）。<see cref="Card"/>＝关联实例
-/// （放置/烧牌/被回收的实例；策略性失败〔未创建实例〕＝null）。
+/// （放置/爆牌/被回收的实例；策略性失败〔未创建实例〕＝null）。
 /// </summary>
 public sealed class CardPlaceResult
 {
@@ -86,19 +86,19 @@ public sealed class CardPlaceResult
     /// <summary>结局状态（三态）。</summary>
     public CardPlaceStatus Status { get; }
 
-    /// <summary>失败原因（仅失败时非 null；成功/烧牌＝null）。</summary>
+    /// <summary>失败原因（仅失败时非 null；成功/爆牌＝null）。</summary>
     public CardPlaceFailureReason? FailureReason { get; }
 
-    /// <summary>关联实例（放置/烧牌/被回收的实例；策略性失败＝null）。失败回收后仍可读其生命周期（观察点＝Life.IsAlive）。</summary>
+    /// <summary>关联实例（放置/爆牌/被回收的实例；策略性失败＝null）。失败回收后仍可读其生命周期（观察点＝Life.IsAlive）。</summary>
     public CardBase? Card { get; }
 
-    /// <summary>是否成功（Placed 或 Burned——烧牌为成功语义的裁决完成）。</summary>
+    /// <summary>是否成功（Placed 或 Burned——爆牌为成功语义的裁决完成）。</summary>
     public bool IsSuccess => Status != CardPlaceStatus.Rejected;
 
     /// <summary>创建「放置完成」结果（框架内部）。</summary>
     internal static CardPlaceResult Placed(CardBase card) => new(CardPlaceStatus.Placed, failureReason: null, card);
 
-    /// <summary>创建「烧牌」结果（框架内部；满手裁决——实例已销毁）。</summary>
+    /// <summary>创建「爆牌」结果（框架内部；满手裁决——实例已销毁）。</summary>
     internal static CardPlaceResult Burned(CardBase card) => new(CardPlaceStatus.Burned, failureReason: null, card);
 
     /// <summary>创建「业务失败」结果（框架内部；card＝关联实例〔被回收者；策略性失败＝null〕）。</summary>
@@ -196,8 +196,8 @@ public sealed class MatchCardService
 
     /// <summary>
     /// 放置到手牌（尾部追加——「加入」语义）：实际进入手牌＝发 card.hand.add（恰一次——「其他来源」接入点）；
-    /// 满手（≥ <see cref="Player.HandLimit"/>）＝烧牌裁决（直烧：不经手牌；销毁〔含 card.destroyed〕→
-    /// card.discarded 恰一次；结果＝<see cref="CardPlaceStatus.Burned"/>）。
+    /// 满手（≥ <see cref="Player.HandLimit"/>）＝爆牌裁决（直爆：不经手牌；销毁〔含 card.destroyed〕→
+    /// card.burned 恰一次；结果＝<see cref="CardPlaceStatus.Burned"/>）。
     /// </summary>
     /// <exception cref="ArgumentNullException">card / player 为 null。</exception>
     /// <exception cref="InvalidOperationException">门禁；未加载归属；跨玩家；重复归属；已销毁（前置契约——明确拒绝）。</exception>
@@ -209,8 +209,8 @@ public sealed class MatchCardService
 
         if (HandLimitBurn.IsAtLimit(player))
         {
-            // 满手＝烧牌（G7 已交付口径；生成路径信号＝销毁（含 card.destroyed）→ card.discarded 恰一次；
-            // hand.add / drawn 零次——「未经手牌」；不经弃置动作——经共享烧牌单元〔K0·B12 统一〕）
+            // 满手＝爆牌（G7 已交付口径；生成路径信号＝销毁（含 card.destroyed）→ card.burned 恰一次；
+            // hand.add / drawn 零次——「未经手牌」；不经弃置动作——经共享爆牌单元〔K0·B12 统一；Kb 独立信号输出〕）
             await HandLimitBurn.BurnAsync(_engine, player, card, emitDrawn: false, ct);
             return CardPlaceResult.Burned(card);
         }
@@ -315,7 +315,7 @@ public sealed class MatchCardService
 
     // ---------- 复合操作（「创建并放置」——官方主形态；失败自动回收已创建实例） ----------
 
-    /// <summary>创建并放置到手牌（一次复合调用；失败自动回收——手牌去向的失败点＝烧牌为成功语义，回收仅防御兜底）。</summary>
+    /// <summary>创建并放置到手牌（一次复合调用；失败自动回收——手牌去向的失败点＝爆牌为成功语义，回收仅防御兜底）。</summary>
     public Task<CardPlaceResult> CreateAndPlaceToHandAsync(
         string definitionId, Player player, CancellationToken ct = default)
     {
