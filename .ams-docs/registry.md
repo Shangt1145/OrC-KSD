@@ -73,4 +73,9 @@
 | eeeac673-93a1-4042-b38e-4ae5ccd8c9f8 | 判定器机制实施 J4（验收核对＋全量回归＋记录）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\eeeac673-93a1-4042-b38e-4ae5ccd8c9f8\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 5b0160d4-38b0-4919-a171-4fb8191814ee | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\5b0160d4-38b0-4919-a171-4fb8191814ee\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 9dd6b5d2-57ab-4a22-8211-d552b4eb37a3 | K0·B12 烧牌统一 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\9dd6b5d2-57ab-4a22-8211-d552b4eb37a3\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| e573308a-cb48-4434-8cf2-3d5776e16720 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e573308a-cb48-4434-8cf2-3d5776e16720\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| e573308a-cb48-4434-8cf2-3d5776e16720 | 判定器收编（A+B）· K1（C1-C4 交战合法性判定族）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e573308a-cb48-4434-8cf2-3d5776e16720\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| d9824392-ed32-4326-89a1-85feb12b7970 | 判定器收编（A+B）· K2（C5+C6 反击/伏击）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d9824392-ed32-4326-89a1-85feb12b7970\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 76ab6fa5-52c4-4ee5-bd68-517f0541bf2b | K3 复验消重（C7+C8）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\76ab6fa5-52c4-4ee5-bd68-517f0541bf2b\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| c1b0ac07-996f-4568-b0cd-157a6c0eb237 | Requirements — 判定器收编 K4（B10 扣费写点统一＋B13 开局常量配置化） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\c1b0ac07-996f-4568-b0cd-157a6c0eb237\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 83367640-dab8-45d3-8f57-f1e4f7f80b54 | 需求阐明记录 — Kb·爆牌独立化与术语更名 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\83367640-dab8-45d3-8f57-f1e4f7f80b54\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 13ccd834-c9be-4a30-bed1-a454a392ae75 | K5·验收核对与收官 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\13ccd834-c9be-4a30-bed1-a454a392ae75\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |

@@ -71,6 +71,10 @@ _Avoid_: 计分板、监听器注册表
 **判定器**：
 由游戏规则预定义的独立无状态服务（对局加载时加载）；handler 按字符串名/ID 引用进行判定/取数/bool 判断；支持注入 delegate moding（与 handler moding 一致）且全局生效——承载"可被改写"的逻辑服务（如卡组顶特点判定、Targeter 选择规则包装）；无改写需要的逻辑直接在 handler 内联判定。
 
+**爆牌（burn）**：
+手牌上限（9）满时，新到手的牌被销毁的机制（KARDS burn 语义）；经**独立信号/触发器**承载——**不触发弃牌路线**（不复用弃牌信号）。
+_Avoid_: 烧牌（旧称）
+
 **期限**：
 修饰的生效时长（如"直到回合结束""直到下个友方回合开始"）。
 
@@ -114,6 +118,34 @@ _Avoid_: 配置项、插件位
 **Hook（本词表仅作指引，不重定义）**：
 内核窄义术语——"触发器构造期声明的要挂载到的更新字符串"；权威定义见 `.ams/context/orc-engine/CONTEXT.md`。**不得**以之指代广义的接入点/观察面/扩展点。
 _Avoid_: 用它称呼接入点、观察面、扩展点、监听器
+
+**卡牌数据体（Card data body）**：
+卡牌数据的持久化形态：一段元数据（`id` / `name`）＋ `components` 组件定义集（声明序）；明文 UTF-8、单卡一文件（`*.card.json`）。相同项对齐 KARDS 官方语义、Orc 额外项另加；官方语料经 `scripts/import_kards_cards.py` 单向导入（不做导出）。效果以"引用预制体 id"或"内联预制体文本"表达。
+_Avoid_: 卡牌配置、卡包数据、卡牌 JSON
+
+**组件定义（Component definition）**：
+数据体里的一段组件声明（内置六项：`factionCost` / `battleStats` / `tagData` / `typeCategory` / `keywords` / `effects`）；承载"数据体类型名 ＋ 从 JSON 反序列化自己（fail-fast 自校验）"。定义与实例分离——定义经组件 loader 装配成卡上实体。
+_Avoid_: 组件配置、组件块
+
+**组件 loader（Component loader）**：
+把组件定义装配到卡上的加载器（生成数据组件／填充字段／挂效果）。经**静态注册面**按组件类型名登记，注册序＝两段式加载的第一段顺序；内置项与社区扩展项以 `IsBuiltIn` 区分（相位分构造期／加载期）。
+_Avoid_: 组件加载器、组件注册表（注册表是登记面）
+
+**可反序列化组件（`ICardDataComponentDefinition`）**：
+标记接口（＋自报名 `ComponentName`）：要求可放入数据体的组件实现它——"可入数据体"的资格标记，与内核 `ISerializableEffect` 同构。
+_Avoid_: 序列化接口、数据组件接口
+
+**两段式加载（Two-phase component loading）**：
+卡牌加载器的组件装配顺序：第一段＝内置 loader 按**游戏层注册序**（防组件间依赖丢失）；第二段＝数据体里剩余（扩展／社区）组件按**数据体声明序**；两段均先于 `card.load` 广播。构造期组件（`factionCost` / `battleStats`）在卡实例构造时装配。
+_Avoid_: 分批加载、延迟加载
+
+**部署词条触发器（Deploy keyword trigger）**：
+单位卡上的主动触发器（默认区段）：部署时由部署链①段触发；"重放部署"由再触发服务**直接再调同一触发器**（定向、不发射链级信号）。部署类效果经效果预制体的 `injects` 声明注入（装载时框架侧注入、卸载自动撤销）。取代原 A4 部署逻辑路径（`DeploymentLogicData` 已退场）。
+_Avoid_: 部署逻辑组件（已退场）、部署触发器（那是打出链入口）
+
+**注入目标声明（inject 声明）**：
+效果预制体 `injects` 的条目（`{ target, band, event, priority }`）：把本效果内某事件的 handler 注册进**宿主具名触发器**（宿主卡按名解析；本版仅默认区段）——是"注入（Inject）"在数据体侧的落地形态。
+_Avoid_: hook 声明（那是挂总线）、订阅声明
 
 ## Sample Dialogue
 

@@ -21,3 +21,5 @@
 - [targeter](./targeter/CONTEXT.md) - Targeter 指示器（目标选择）：术语与决策摘要
 
 - [review-chain](./review-chain/CONTEXT.md) - 审查链（逻辑序列化与关系导出）：静态声明图、编排管理器、预制体与效果快照术语
+
+- [card-data-persistence](./card-data-persistence/CONTEXT.md) - 卡牌数据体持久化与加载：数据体格式、组件 loader、词条映射、部署词条触发器
