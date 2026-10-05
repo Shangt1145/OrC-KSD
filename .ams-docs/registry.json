@@ -79,7 +79,7 @@
   },
   {
     "agentId": "\u89E6\u53D1\u5668\u9A8C\u8BC1\u4E0ETargeter",
-    "title": "\u9700\u6C42 Grill \u8BA1\u5212 \u2014 \u89E6\u53D1\u5668\u9A8C\u8BC1\u4E0E Targeter\uFF08\u67B6\u6784\u6539\u8FDB\uFF09",
+    "title": "\u9700\u6C42 \u2014 \u89E6\u53D1\u5668\u9A8C\u8BC1\u4E0E Targeter\uFF08\u67B6\u6784\u6539\u8FDB\uFF09",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\\u89E6\u53D1\u5668\u9A8C\u8BC1\u4E0ETargeter\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
   },
@@ -121,13 +121,13 @@
   },
   {
     "agentId": "135c6dd2-072c-419b-a7ae-c84a32c9206c",
-    "title": "\u6E05\u7406\u4E0E\u672F\u8BED\u7EDF\u4E00\uFF08\u62A4\u76FE\u5220\u9664 / \u6CD5\u672F\u2192\u6307\u4EE4 / BaseFlows \u91CD\u547D\u540D\uFF09\u2014\u2014\u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "title": "\u6E05\u7406\u4E0E\u672F\u8BED\u7EDF\u4E00 \u5B9E\u73B0\u8BB0\u5F55\uFF08G1 \u62A4\u76FE\u5220\u9664 / G2 \u6CD5\u672F\u2192\u6307\u4EE4 / G3 BaseFlows \u91CD\u547D\u540D\uFF09",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
   },
   {
     "agentId": "exp1",
-    "title": "\u672A\u64B0\u5199",
+    "title": "\u9879\u76EE\u7EA7\u4E1A\u52A1\u89C4\u5219",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\COMMUNICATION.md",
     "parentAgentId": "isolate"
   },
@@ -145,7 +145,7 @@
   },
   {
     "agentId": "web-research",
-    "title": "Filament",
+    "title": "All rights reserved.",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\135c6dd2-072c-419b-a7ae-c84a32c9206c\\isolate\\exp1\\outputs\\web-research\\evaluate-readme.md",
     "parentAgentId": "outputs"
   },
@@ -175,7 +175,7 @@
   },
   {
     "agentId": "bc8a820a-3ff0-429b-890a-5479c74c3083",
-    "title": "W1-1 G12 \u5361\u724C\u5143\u6570\u636E\u7EF4\u5EA6 \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "title": "W1-1 G12 \u5361\u724C\u5143\u6570\u636E\u7EF4\u5EA6 \u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\bc8a820a-3ff0-429b-890a-5479c74c3083\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -205,7 +205,7 @@
   },
   {
     "agentId": "40a7de60-0fe0-4442-940b-92fad97fd4f9",
-    "title": "W3-2 \u4FEE\u590D\u8F6E\u8BB0\u5F55\uFF08\u9A73\u56DE\u9879\u4FEE\u590D\uFF09",
+    "title": "G5 \u8D39\u7528\u4FEE\u9970\u4E0E\u6709\u6548\u8D39\u7528\u67E5\u8BE2 \u2014\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\40a7de60-0fe0-4442-940b-92fad97fd4f9\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -217,7 +217,7 @@
   },
   {
     "agentId": "e7ca7a70-0aa7-4aaa-a615-c879d36ccefe",
-    "title": "G4 \u6301\u7EED/\u6761\u4EF6\u9759\u6001\u80FD\u529B \u2014\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "title": "W3-1 G4 \u6301\u7EED/\u6761\u4EF6\u9759\u6001\u80FD\u529B \u2014\u2014 \u5B9E\u73B0\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\e7ca7a70-0aa7-4aaa-a615-c879d36ccefe\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -247,13 +247,13 @@
   },
   {
     "agentId": "f6930901-71d9-4219-a340-f613843e4db6",
-    "title": "W1-B1 \u9700\u6C42\u9610\u660E \u2014 G8 \u6548\u679C\u7EA7\u968F\u673A\u670D\u52A1\uFF08\u7B2C 2 \u6279\uFF09",
+    "title": "W1-B1 G8 \u6548\u679C\u7EA7\u968F\u673A\u670D\u52A1 \u2014 \u5B9E\u73B0\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\f6930901-71d9-4219-a340-f613843e4db6\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
   {
     "agentId": "f4ef5b9a-ad3a-487f-bf52-76bea7299e39",
-    "title": "\u9700\u6C42\u9610\u660E \u2014 G10 \u4EA4\u4E92\u6269\u5C55\uFF08Targeter \u69FD\u4F4D\u7C7B\u578B\u65CF\uFF09",
+    "title": "\u6D4B\u8BD5\u8BC1\u636E \u2014 G10 \u4EA4\u4E92\u6269\u5C55\uFF08\u7B2C 2 \u6279\u00B7\u5B9E\u65BD\u59D4\u6258 C1\uFF09",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\f4ef5b9a-ad3a-487f-bf52-76bea7299e39\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -277,13 +277,13 @@
   },
   {
     "agentId": "verify-worktree",
-    "title": "\u672A\u64B0\u5199",
+    "title": "\u9879\u76EE\u7EA7\u4E1A\u52A1\u89C4\u5219",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\d5fc77d4-2efc-4abe-8135-40f12651eaec\\verify-worktree\\COMMUNICATION.md",
     "parentAgentId": "d5fc77d4-2efc-4abe-8135-40f12651eaec"
   },
   {
     "agentId": "context",
-    "title": "\u5361\u724C\u5F15\u64CE\uFF08\u89E6\u53D1\u5668\u7CFB\u7EDF\uFF09",
+    "title": "Context Map",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\d5fc77d4-2efc-4abe-8135-40f12651eaec\\verify-worktree\\.ams\\context\\CONTEXT-MAP.md",
     "parentAgentId": ".ams"
   },
@@ -301,7 +301,7 @@
   },
   {
     "agentId": "github-init",
-    "title": "Requirements \u2014 GitHub \u4ED3\u5E93\u521D\u59CB\u5316\u4E0E\u8FDB\u5EA6\u540C\u6B65",
+    "title": "Requirements Grill Plan \u2014 GitHub \u4ED3\u5E93\u521D\u59CB\u5316\u4E0E\u8FDB\u5EA6\u540C\u6B65",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\d5fc77d4-2efc-4abe-8135-40f12651eaec\\verify-worktree\\.ams\\context\\github-init\\implementation-grill-plan.md",
     "parentAgentId": "context"
   },
@@ -325,8 +325,32 @@
   },
   {
     "agentId": "a2546c77-266e-483d-a1fe-ebc2209648ce",
-    "title": "A3 \u8FD0\u884C\u65F6\u88C5\u8F7D\u4FEE\u590D \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "title": "A3 \u8FD0\u884C\u65F6\u88C5\u8F7D\u4FEE\u590D \u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\a2546c77-266e-483d-a1fe-ebc2209648ce\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "dbf21999-39e4-452e-afcf-9c32192e2c50",
+    "title": "A2 \u65B0\u8BCD\u6761\uFF089 \u9879\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\dbf21999-39e4-452e-afcf-9c32192e2c50\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "392bd36e-3073-4d46-9d28-8bb32d93e263",
+    "title": "A4 \u4EA1\u8BA1\u4E0E\u518D\u89E6\u53D1 \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\392bd36e-3073-4d46-9d28-8bb32d93e263\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "7757e1f5-be42-4099-830e-b85af393efb0",
+    "title": "S9 \u751F\u6210\u00B7\u590D\u5236\u00B7\u8F6C\u6362 \u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\7757e1f5-be42-4099-830e-b85af393efb0\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
+  },
+  {
+    "agentId": "d72d0827-b587-4abf-98f1-e6b671604137",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\d72d0827-b587-4abf-98f1-e6b671604137\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   }
 ]
