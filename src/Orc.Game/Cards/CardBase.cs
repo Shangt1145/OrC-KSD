@@ -72,11 +72,16 @@ public abstract class CardBase : Orc.Cards.Card
     internal Func<Player?>? TurnPlayerProvider { get; set; }
 
     /// <summary>
-    /// 词条装载上下文提供器（2C-A1 加性面；internal）：加载时（<see cref="LoadAsync"/> 的词条装载步骤）与运行时授予时
-    /// 装载词条组件运行逻辑所需的对局级服务（如「造成攻击伤害」触发器——伏击挂载点）；由对局加载路径经卡牌库注入（延迟读取）；
+    /// 词条装载上下文提供器（2C-A1 加性面；internal；A2 加性：存储内聚至词条管理组件——本属性为其转发面）：
+    /// 加载时（<see cref="LoadAsync"/> 的词条装载步骤）与运行时授予时装载词条组件运行逻辑所需的对局级服务
+    /// （如「造成攻击伤害」触发器——伏击/免疫/重甲挂载点；钳击/压制所需的对局服务）；由对局加载路径经卡牌库注入（延迟读取）；
     /// 独立构造（脱离对局）＝null（词条组件运行逻辑装载跳过注册、不抛错——功能不可用、加载不失败）。
     /// </summary>
-    internal Func<KeywordLoadContext?>? KeywordLoadContextProvider { get; set; }
+    internal Func<KeywordLoadContext?>? KeywordLoadContextProvider
+    {
+        get => Keywords.LoadContextProvider;
+        set => Keywords.LoadContextProvider = value;
+    }
 
     /// <summary>
     /// 效果装载上下文提供器（X2 加性面；internal）：加载时（<see cref="LoadAsync"/> 的效果装载步骤）装载卡牌效果
@@ -84,6 +89,13 @@ public abstract class CardBase : Orc.Cards.Card
     /// 由对局加载路径经卡牌库注入（延迟读取）；独立构造（脱离对局——不经卡牌库）＝null（效果装载整链跳过——不抛错、加载不失败、功能不可用）。
     /// </summary>
     internal Func<CardEffectLoadContext?>? EffectLoadContextProvider { get; set; }
+
+    /// <summary>
+    /// 部署逻辑装载语境提供器（A4 加性面；internal）：加载时（<see cref="LoadAsync"/> 的「部署逻辑生成」步骤）
+    /// 为单位卡生成并挂载部署逻辑组件（<see cref="DeploymentLogicData"/>）所需的装配源查询面；
+    /// 由对局加载路径经卡牌库注入（延迟读取）；独立构造（脱离对局——不经卡牌库）＝null（生成步骤跳过——不抛错、加载不失败、功能不可用）。
+    /// </summary>
+    internal Func<DeploymentLogicLoadContext?>? DeploymentLogicLoadContextProvider { get; set; }
 
     /// <summary>
     /// 对局级卡牌 ID（W1-1 加性面；internal）：加载时分配——由 <see cref="MatchCardIdProvider"/> 取新值；
@@ -106,12 +118,14 @@ public abstract class CardBase : Orc.Cards.Card
     /// ② 重建/装配步骤（可重写扩展点 <see cref="RebuildFromPersistence"/>；默认空实现——持久化重建后置、本批无重建逻辑）；
     /// ③ 对局级卡牌 ID 分配（W1-1 加性：经提供器分配自增 ID；幂等——已分配保持原值；先于 card.load 广播）；
     /// ④ 元数据装配（W1-1 加性：从定义读国籍/稀有度/开放 tag → 装配 TagData；先于 card.load 广播——消费者查询不到未就绪状态）；
-    /// ⑤ 词条装载（2C-A1 加性：从定义读词条声明〔标识＋可选参值〕→ 逐条经词条管理组件的授予链挂载
+    /// ⑤ 部署逻辑生成（A4 加性：数据装配组收尾——仅单位卡、经装配源查询〔无登记＝不生成〕，
+    ///    为单位卡生成并挂载部署逻辑组件；先于 card.load 广播——「加载时生成部署组件」；生成失败＝记录、不阻断加载）；
+    /// ⑥ 词条装载（2C-A1 加性：从定义读词条声明〔标识＋可选参值〕→ 逐条经词条管理组件的授予链挂载
     ///    〔存在性置位 → 运行逻辑装载＋内嵌效果装载 → OnGrant；伏击在运行逻辑装载时挂到「造成攻击伤害」〕；
     ///    无词条卡＝无副作用；装载先于 card.load 广播——消费者查询不到未就绪状态）；
-    /// ⑥ 效果装载（X2 加性：从装配源解析效果声明 → 构造＋登记＋装载被动效果〔挂主触发器＋OnMount；含监听 handler 注册〕
+    /// ⑦ 效果装载（X2 加性：从装配源解析效果声明 → 构造＋登记＋装载被动效果〔挂主触发器＋OnMount；含监听 handler 注册〕
     ///    ＋托管登记〔卸载自动按来源撤销修饰器〕；无装配源＝跳过；先于 card.load 广播——消费者查询不到未就绪状态）；
-    /// ⑦ 广播 card.load（载荷 {Card, Player}——Card＝本实例、Player＝所属卡组玩家）。
+    /// ⑧ 广播 card.load（载荷 {Card, Player}——Card＝本实例、Player＝所属卡组玩家）。
     /// 加载路径保证每卡恰一次调用；失败直接上抛（初始化 fail-fast）。
     /// </summary>
     /// <exception cref="ArgumentNullException">owner 为 null。</exception>
@@ -123,6 +137,7 @@ public abstract class CardBase : Orc.Cards.Card
         RebuildFromPersistence(owner);
         LoadMatchCardId();
         LoadTagData();
+        GenerateDeploymentLogic();
         LoadKeywords();
         await LoadEffectsAsync(ct);
         await GameUpdates.EmitCardLoad(_engine, owner, this, ct);
@@ -154,6 +169,63 @@ public abstract class CardBase : Orc.Cards.Card
         }
 
         AddData(data);
+    }
+
+    /// <summary>
+    /// 部署逻辑生成（A4；加载时＝与 card.load 同时完成——「加载时生成部署组件」）：
+    /// 仅单位卡（部署链为单位路径；非单位卡不生成/不消费）；无装配源（context 为 null）＝跳过；
+    /// 无登记条目＝不生成（缺省——消费端已「无组件＝跳过」）；生成＝挂载 <see cref="DeploymentLogicData"/>
+    /// 组件＋按登记序逐条 Add（登记序＝触发顺序依据）；装配期生成失败＝记录、不阻断加载（对齐加载链防御口径）。
+    /// 相遇语义（对齐容器语义）：卡上已有同类型组件（手动登记先遇）＝生成环节跳过并申报（记录）；
+    /// 手动登记（组件层 <see cref="DeploymentLogicData.Add"/>）继续合法、并存。
+    /// </summary>
+    private void GenerateDeploymentLogic()
+    {
+        if (this is not UnitCard)
+        {
+            return; // 生成面只为单位卡生成（非单位卡不生成/不消费）
+        }
+
+        var context = DeploymentLogicLoadContextProvider?.Invoke();
+        if (context is null)
+        {
+            return; // 无装配源（独立构造/未注入）：跳过（不抛错、加载不失败）
+        }
+
+        try
+        {
+            var entries = context.Entries;
+            if (entries.Count == 0)
+            {
+                return; // 无部署效果卡＝无组件（生成面缺省——不生成）
+            }
+
+            if (TryGetData<DeploymentLogicData>(out _))
+            {
+                _engine.RootStream.WriteLog(
+                    "部署逻辑生成",
+                    $"卡牌 '{Name}' 已存在部署逻辑组件（手动登记先遇）——生成环节跳过（容器「每类型恰一份」语义）。",
+                    LogLevel.Info,
+                    new[] { "deployment-logic", "generate-skip" });
+                return; // 相遇语义：生成环节幂等跳过（申报）
+            }
+
+            var data = new DeploymentLogicData();
+            foreach (var entry in entries)
+            {
+                data.Add(entry.Name, entry.Handler); // 按登记序逐条搬运
+            }
+
+            AddData(data);
+        }
+        catch (Exception ex)
+        {
+            _engine.RootStream.WriteLog(
+                "部署逻辑生成",
+                $"卡牌 '{Name}' 的部署逻辑生成失败（隔离：不阻断加载）：{ex.Message}",
+                LogLevel.Error,
+                new[] { "deployment-logic", "error", $"exception:{ex.GetType().Name}" });
+        }
     }
 
     /// <summary>

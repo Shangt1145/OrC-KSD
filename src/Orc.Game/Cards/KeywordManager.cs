@@ -6,7 +6,8 @@ namespace Orc.Game.Cards;
 
 /// <summary>
 /// 词条管理组件（2C-A1；卡上伴生、构造期常驻——轻量伴生非数据组件，对齐卡侧修饰器组件先例）：
-/// 词条组件的注册与索引（有无/参值查询）＋词条集合管理（授予/移除/参值改写入口面）。
+/// 词条组件的注册与索引（有无/参值查询）＋词条集合管理（授予/移除/参值改写入口面）＋清空处置面（A2 加性）。
+/// 宿主＝引擎薄容器 <see cref="Card"/>（A2 泛化：单位与 HQ 同族承载——对齐修饰机制 W3-3 泛化先例）。
 /// 与旧三口的关系＝合并替代（不保留为独立可查询组件）：标识登记 → 本组件注册与索引；逻辑装载 → 词条组件
 /// 自含运行逻辑（个体卸载替代整体注销）；运行计数器 → 词条组件自含数据（不保留通用字符串键计数器形态）。
 /// 查询面：无词条卡/无该词条/词条无参值＝false/null（不抛错——动态查询语义、存在性判定不含异常面）；
@@ -18,18 +19,24 @@ namespace Orc.Game.Cards;
 /// </summary>
 public sealed class KeywordManager
 {
-    private readonly CardBase _card;
+    private readonly Card _card;
     private readonly LogicEngine _engine;
     private readonly Dictionary<string, KeywordComponent> _components = new(StringComparer.Ordinal);
     private readonly List<KeywordComponent> _active = new(); // 行为态（登记序；死亡注销清空——存在性/参值保留）
 
-    internal KeywordManager(CardBase card, LogicEngine engine)
+    internal KeywordManager(Card card, LogicEngine engine)
     {
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(engine);
         _card = card;
         _engine = engine;
     }
+
+    /// <summary>
+    /// 词条装载上下文提供器（A2 加性：自宿主属性内聚至本组件——CardBase 与 HQ 装配时各自转注；
+    /// 授予链经此取装载上下文〔延迟读取〕；未装配＝null＝组件运行逻辑装载跳过注册、不抛错）。
+    /// </summary>
+    internal Func<KeywordLoadContext?>? LoadContextProvider { get; set; }
 
     // ---------- 查询面（统一读口：有无＋参值；无词条卡/无该词条等价） ----------
 
@@ -73,6 +80,25 @@ public sealed class KeywordManager
         return false;
     }
 
+    /// <summary>
+    /// 按标识寻址词条组件（行为态面；A4 加性——「按行为态取组件」的查询承载，如亡计执行面解析）：
+    /// 仅当组件已注册（<see cref="Has"/> 面）且处于行为态时命中；死亡注销后＝false
+    /// （行为态已清空——登记/参值保留、照常可读，但不可执行）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">无（null/空白＝false、不抛错——与查询面一致）。</exception>
+    public bool TryGetActiveComponent<T>(string keyword, [NotNullWhen(true)] out T? component)
+        where T : KeywordComponent
+    {
+        if (TryGetComponent(keyword, out var found) && found is T typed && _active.Contains(found))
+        {
+            component = typed;
+            return true;
+        }
+
+        component = null;
+        return false;
+    }
+
     // ---------- 操作面（统一写口：授予/移除/参值改写；对已死亡卡＝拒绝——终态） ----------
 
     /// <summary>
@@ -91,8 +117,31 @@ public sealed class KeywordManager
                 $"卡牌 '{_card.Name}' 已死亡（终态）：词条授予被拒绝（查询面保持可用）。");
         }
 
-        var context = _card.KeywordLoadContextProvider?.Invoke();
+        var context = LoadContextProvider?.Invoke();
         return Task.FromResult(GrantCore(keyword, value, context));
+    }
+
+    /// <summary>
+    /// 授予（携带内容载荷形态；A4 加性——「获得亡计」的承载）：与标识授予（<see cref="GrantAsync(string, int?)"/>）同一机制——
+    /// 存在性置位 → 运行逻辑装载＋内嵌效果装载 → OnGrant；幂等/回滚/终态语义一致（内容生命周期随词条组件生灭：
+    /// 授予＝内容装载；移除/死亡注销＝内容卸载；授予失败回滚＝无残留）。
+    /// 内容载荷在组件创建后、装载遍历前经组件「内容装载点」（<see cref="KeywordComponent.AttachContent"/>）注入
+    /// （内容型词条覆写吸收；非内容型词条＝忽略——内容不进入承载）；空内容（null）＝合法
+    /// （空内容授予——结算时无操作、静默跳过）。参值位不随本形态携带（内容型词条的参值位无语义）。
+    /// </summary>
+    /// <exception cref="ArgumentException">keyword 为 null/空白。</exception>
+    /// <exception cref="InvalidOperationException">对已死亡卡授予（终态拒绝）；或标识未注册/组件构造失败（fail-fast）。</exception>
+    public Task<bool> GrantWithContentAsync(string keyword, Effect? content)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        if (IsDead())
+        {
+            throw new InvalidOperationException(
+                $"卡牌 '{_card.Name}' 已死亡（终态）：词条授予被拒绝（查询面保持可用）。");
+        }
+
+        var context = LoadContextProvider?.Invoke();
+        return Task.FromResult(GrantCore(keyword, value: null, context, content));
     }
 
     /// <summary>
@@ -138,14 +187,65 @@ public sealed class KeywordManager
         component.OverrideValue(value);
     }
 
+    // ---------- 清空处置面（A2 加性：抑制＝清空处置的「清空词条」承载） ----------
+
+    /// <summary>
+    /// 清空词条（「除保留项外全部」——抑制清空处置的第一件套；A2 加性）：
+    /// 除 <paramref name="preserveKeyword"/>（功能保留位——保住「被抑制」自身存续）外，对全部登记词条
+    /// 逐一走移除路径（完整卸载：OnRevoke → 运行逻辑注销＋内嵌效果卸载 → 存在性清除）；
+    /// 含其它施加物（被压制）与防护标记（无法被压制/无法被抑制）——字面全量、无保护名单（Q&A-11）。
+    /// 逐条异常隔离（记录、继续完成——「卸载力求完成」先例）；返回实际清除数。
+    /// 对已死亡卡＝拒绝（终态；死亡注销已完成行为撤销）。
+    /// </summary>
+    /// <exception cref="ArgumentException">preserveKeyword 为 null/空白。</exception>
+    /// <exception cref="InvalidOperationException">对已死亡卡清空（终态拒绝）。</exception>
+    public Task<int> ClearAllExceptAsync(string preserveKeyword, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(preserveKeyword);
+        if (IsDead())
+        {
+            throw new InvalidOperationException(
+                $"卡牌 '{_card.Name}' 已死亡（终态）：清空词条被拒绝（查询面保持可用）。");
+        }
+
+        var toRevoke = new List<string>();
+        foreach (var keyword in _components.Keys)
+        {
+            if (!string.Equals(keyword, preserveKeyword, StringComparison.Ordinal))
+            {
+                toRevoke.Add(keyword);
+            }
+        }
+
+        var cleared = 0;
+        foreach (var keyword in toRevoke) // 快照遍历（RevokeCore 修改注册表）
+        {
+            try
+            {
+                if (RevokeCore(keyword))
+                {
+                    cleared++;
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteError("词条清空", $"词条 '{keyword}' 移除异常（隔离：继续完成清空）", ex);
+            }
+        }
+
+        return Task.FromResult(cleared);
+    }
+
     // ---------- 装载链核心（加载期固有词条与运行时动态授予同一机制） ----------
 
     /// <summary>
     /// 授予链核心：①存在性置位（数据面可见）→ ②运行逻辑装载＋内嵌效果装载 → ③OnGrant（最后）。
     /// 装载链内失败（构造/挂载/回调抛）＝fail-fast：逆序整体回滚（②→①；存在性回 false、零残留）、异常上抛。
     /// 已存在＝幂等无操作（false）；不做死亡校验（公开面已校验、加载期为未死亡卡）。
+    /// A4 加性：<paramref name="content"/>＝内容载荷（携带内容形态的授予；组件创建后、装载遍历前经内容装载点注入——
+    /// 注入失败＝未置位、无状态变更）。
     /// </summary>
-    internal bool GrantCore(string keyword, int? value, KeywordLoadContext? context)
+    internal bool GrantCore(string keyword, int? value, KeywordLoadContext? context, Effect? content = null)
     {
         if (_components.ContainsKey(keyword))
         {
@@ -153,6 +253,7 @@ public sealed class KeywordManager
         }
 
         var component = KeywordRegistry.Create(_card, keyword, value); // 构造失败＝fail-fast（未置位、无状态变更）
+        component.AttachContent(content); // A4：内容载荷注入（内容型词条吸收；默认忽略）——失败＝fail-fast（未置位、无状态变更）
         _components.Add(keyword, component);
         _active.Add(component); // ① 存在性置位（数据面可见）
 

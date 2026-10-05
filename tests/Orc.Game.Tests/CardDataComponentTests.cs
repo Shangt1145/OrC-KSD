@@ -49,7 +49,7 @@ public class CardDataComponentTests
     }
 
     [Fact]
-    public void UnitStateData_Defaults_And_ReadWrite()
+    public async Task UnitStateData_Defaults_And_ReadWrite()
     {
         var state = new UnitStateData();
 
@@ -64,11 +64,16 @@ public class CardDataComponentTests
 
         // 基础读写：位置（Slot 引用）、类型列表（0 个/多个均合法）
         // 三值/损伤量写面已收窄（W2b）：装配期填充经 CreateInitial（见下用例）、运行期变更经门户操作面（StatPortalTests）。
+        // S9 随改（旧→新：state.UnitTypes.Add 直写×2 → 经受控入口 UnitCard.AddUnitTypeAsync×2）：类型列表写面已收窄
+        // （受控入口＝唯一合规增补路径）；「多个合法＋登记序」的验证经受控入口完成——信号副作用不涉本断言
+        // （独立引擎无订阅者；受控入口完整行为——去重/信号/实例级——见 CardServiceTests 专项）。
         var line = new BattleLine(4);
         state.Position = line[1];
         state.IsDestroyed = true;
-        state.UnitTypes.Add(UnitType.Infantry);
-        state.UnitTypes.Add(UnitType.Tank);
+        var host = CreateUnitCard();
+        host.AddData(state);
+        await host.AddUnitTypeAsync(UnitType.Infantry);
+        await host.AddUnitTypeAsync(UnitType.Tank);
 
         Assert.Same(line[1], state.Position);
         Assert.True(state.IsDestroyed);

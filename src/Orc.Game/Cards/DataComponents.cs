@@ -10,6 +10,10 @@ namespace Orc.Game.Cards;
 /// 伤害扣减/修复＝<see cref="UnitCard"/> 门户方法）；三值与本组件内数值字段的直接运行期写面收窄
 /// （<c>internal set</c>：跨程序集不可写；程序集内直写一经出现即为非合规路径）。
 /// 装配期填充（单位化初始值复制 <see cref="CreateInitial"/>）为列明例外（保留直写）。
+/// S9 收窄（类型列表）：<see cref="UnitTypes"/> 写路径唯一化——运行期增补经受控入口
+/// （<see cref="UnitCard.AddUnitTypeAsync"/>：去重/校验/变更信号）；装配期填充经内部例外
+/// （<see cref="FillInitialTypes"/>——不经受控入口、不发信号；与三实时值「装配期填充＝列明例外」同族）；
+/// 公开面收窄为只读暴露（形态对齐定义侧只读先例），外部直改不再可行。
 /// 防御力上限语义（本体＝损伤量）：本体状态＝<see cref="DefenseLoss"/>（loss＝有效上限−当前值，≥0）；
 /// 有效上限＝对战组件基准＋Σ加防修饰（链输出）；当前值＝上限−loss（数值表现钳制不低于 0；≤0 触发死亡判定）。
 /// 「加防同步加上限／伤害扣减只扣当前不减上限／修复＝恢复到上限」由链公式与门户操作共同导出。
@@ -18,10 +22,11 @@ namespace Orc.Game.Cards;
 /// </summary>
 public sealed class UnitStateData
 {
+    private readonly List<UnitType> _unitTypes = new();
+
     /// <summary>创建空组件（位置 null、未摧毁、类型列表空、实时值 0——初值请经 <see cref="CreateInitial"/> 或直接赋值装载）。</summary>
     public UnitStateData()
     {
-        UnitTypes = new List<UnitType>();
     }
 
     /// <summary>所在位置（槽位引用；未部署＝null）。</summary>
@@ -30,8 +35,33 @@ public sealed class UnitStateData
     /// <summary>是否被摧毁（初始 false；摧毁判定/处理属后续批次）。</summary>
     public bool IsDestroyed { get; set; }
 
-    /// <summary>单位类型枚举列表（允许 0 个/多个、不设非空校验；顺序＝登记序）。</summary>
-    public List<UnitType> UnitTypes { get; }
+    /// <summary>
+    /// 单位类型枚举列表（只读暴露；允许 0 个/多个、不设非空校验；顺序＝登记序）。
+    /// 写路径唯一化（S9）：运行期增补经受控入口（<see cref="UnitCard.AddUnitTypeAsync"/>）、装配期填充经内部例外
+    /// （<see cref="FillInitialTypes"/>——列明例外、静默）；集合外部直改不再可行。
+    /// </summary>
+    public IReadOnlyList<UnitType> UnitTypes => _unitTypes;
+
+    /// <summary>
+    /// 装配期填充（S9；列明例外——不经受控入口、不发信号；与三实时值「装配期填充＝列明例外」同族）：
+    /// 单位化（部署/加入/转换入场）时从定义填充初始类型；调用点收口＝<see cref="UnitCard"/> 单位化段。
+    /// </summary>
+    internal void FillInitialTypes(IEnumerable<UnitType> types) => _unitTypes.AddRange(types);
+
+    /// <summary>
+    /// 运行期受控增补（S9；内部执行面——由 <see cref="UnitCard.AddUnitTypeAsync"/> 受控入口调用，为其唯一调用者）：
+    /// 已含＝false（幂等无操作——不重复登记）；实际改变集合＝true（调用方负责变更信号发射）。
+    /// </summary>
+    internal bool TryAddRuntimeType(UnitType type)
+    {
+        if (_unitTypes.Contains(type))
+        {
+            return false;
+        }
+
+        _unitTypes.Add(type);
+        return true;
+    }
 
     /// <summary>实时行动费（运行值；初始＝对战组件值；运行期变更经门户操作面——直写为非合规路径）。</summary>
     public int OperateCost { get; internal set; }

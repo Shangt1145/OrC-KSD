@@ -40,9 +40,11 @@ public abstract class KeywordComponent
     /// <summary>
     /// 运行逻辑装载（可选覆写；授予链调用——加载期固有词条与运行时动态授予同一机制）：把词条行为挂到相关更新 hook
     /// （如伏击向「造成攻击伤害」注册改写）。
+    /// 宿主＝引擎薄容器 <see cref="Card"/>（W3-A2 加性：词条宿主泛化至 Card——HQ 等非卡实体与单位同族承载；
+    /// 与修饰机制 W3-3 泛化先例同构）。
     /// 装载上下文经提供器注入；context 为 null（独立构造场景）＝防御跳过（不抛错、功能不可用）——沿用词条装载上下文先例。
     /// </summary>
-    internal virtual void Mount(CardBase card, KeywordLoadContext? context)
+    internal virtual void Mount(Card card, KeywordLoadContext? context)
     {
     }
 
@@ -52,10 +54,10 @@ public abstract class KeywordComponent
     }
 
     /// <summary>
-    /// 部署链收尾挂钩（扣费完成后、链返回前；仅部署路径调用）：闪击在此置位两 bool。
-    /// 默认无操作（非闪击词条不参与部署链收尾）。
+    /// 部署链收尾挂钩（扣费完成后、链返回前；仅部署路径调用）：闪击在此置位两 bool；钳击在此发起同伴选择（可选）。
+    /// 默认无操作（非该类词条不参与部署链收尾）。宿主＝引擎薄容器 <see cref="Card"/>（A2 泛化）。
     /// </summary>
-    internal virtual Task OnDeployChainFinalizedAsync(CardBase card, CancellationToken ct) => Task.CompletedTask;
+    internal virtual Task OnDeployChainFinalizedAsync(Card card, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>授予回调（作者覆写；挂载链最后一步调用——此时存在性已置位、运行逻辑与内嵌效果均已装载完成）。</summary>
     protected internal virtual void OnGrant()
@@ -78,11 +80,24 @@ public abstract class KeywordComponent
         _embeddedEffects.Add(effect);
     }
 
+    /// <summary>
+    /// 内容装载点（A4 加性；内容载荷注入——授予链在组件创建后、装载遍历前调用；默认忽略）。
+    /// 内容型词条组件覆写吸收（如亡计：内容经 <see cref="EmbedEffect"/> 进入内嵌效果通道、
+    /// 生命周期随词条组件生灭——授予装载/移除卸载/授予失败回滚无残留，全部继承内嵌效果既有口径）；
+    /// 非内容型词条＝忽略（内容不进入承载）。
+    /// </summary>
+    internal virtual void AttachContent(Effect? content)
+    {
+    }
+
     /// <summary>内嵌效果清单（登记序；体系装载/卸载驱动的依据）。</summary>
     internal IReadOnlyList<Effect> EmbeddedEffects => _embeddedEffects;
 
-    /// <summary>参值改写（统一读改写口的受控变更；纯存储改写——A1 不重载行为面）。</summary>
-    internal void OverrideValue(int? value) => Value = value;
+    /// <summary>
+    /// 参值改写（统一读改写口的受控变更；纯存储改写——A1 不重载行为面；A2 加性：改为 virtual——
+    /// 参值域型词条（如重甲/情报：下限 0、封顶 3）在组件侧钳制「写入/增改」）。
+    /// </summary>
+    internal virtual void OverrideValue(int? value) => Value = value;
 }
 
 /// <summary>

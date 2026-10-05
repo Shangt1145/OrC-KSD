@@ -9,7 +9,8 @@ namespace Orc.Game;
 /// <summary>
 /// 游戏更新常量集：统一承载回合五连（<c>turn.*</c>）、通用三项（<c>card.played</c> / <c>card.drawn</c> / <c>card.stat.changed</c>）、
 /// 第二批 hooks 六项（<c>card.load</c> / <c>card.hand.add</c> / <c>card.died</c> / <c>unit.joined</c> / <c>unit.deployed</c> / <c>unit.position.changed</c>）
-/// 与 W4-1（G14 收尾）洗切一项（<c>deck.shuffled</c>）、G7 弃置一项（<c>card.discarded</c>）——合计 16 条。
+/// 与 W4-1（G14 收尾）洗切一项（<c>deck.shuffled</c>）、G7 弃置一项（<c>card.discarded</c>）、
+/// S9 类型变更一项（<c>unit.types.changed</c>）——合计 17 条。
 /// 全部为新定义、与 Orc 既有常量集无重叠；字面值为对外订阅契约，一经定稿即冻结（引擎总线同一性＝ordinal 序数、大小写敏感）。
 /// 发射统一经引擎总线 <see cref="LogicEngine.Emit"/>（本类提供可选静态发射助手，内部即走该通路）。
 /// 实际发射（2B 后）：turn 五连、card.drawn 与 card.drawn→card.hand.add 连发（抽牌链路；粒度不同、并存）、card.load（初始化逐张加载）
@@ -109,6 +110,19 @@ public static class GameUpdates
     /// </summary>
     public const string DeckShuffled = "deck.shuffled";
 
+    // ---------- S9（G6+G13）类型变更一项：单位信号 ----------
+
+    /// <summary>
+    /// 单位类型变更（"unit.types.changed"；S9 新增——16→17 条；载荷＝{ Unit, AddedType }——被变更单位＋新增类型〔增量〕）。
+    /// 语义＝「实际发生变更才发、恰一次」（重复增补/无变化＝零发射——「无变零发射」原则）；载荷为增量形态
+    /// （完整类型集由监听者从单位读取——「读取现势」原则）。
+    /// 调用点＝类型增补受控入口（<see cref="Cards.UnitCard.AddUnitTypeAsync"/>——运行时受控路径唯一）；
+    /// 装配期初始化填充不发射（「初始化设定 ≠ 变更」——部署/加入/转换入场静默）。
+    /// 消费用途＝供「类型条件类观察者」消费（如以类型为条件的持续效果/触发联动）；本批不建特定生产消费者
+    /// （信号为机制面；验收在测试内监听）。
+    /// </summary>
+    public const string UnitTypesChanged = "unit.types.changed";
+
     // ---------- 载荷键（对外订阅契约；实现内部引用常量而非裸字符串） ----------
 
     /// <summary>载荷键：玩家（值＝<see cref="Player"/> 对象引用；turn 五连与 card.drawn 携带）。</summary>
@@ -137,6 +151,9 @@ public static class GameUpdates
 
     /// <summary>载荷键：卡组（值＝<see cref="CardList"/> 对象引用；deck.shuffled 携带——被洗切卡组；与 <see cref="PayloadPlayer"/> 归属并列）。</summary>
     public const string PayloadDeck = "Deck";
+
+    /// <summary>载荷键：新增类型（值＝<see cref="Cards.UnitType"/>；unit.types.changed 携带——本次增补的类型〔增量〕）。</summary>
+    public const string PayloadAddedType = "AddedType";
 
     // ---------- 发射助手（可选便捷层；统一走总线 Emit 通路） ----------
 
@@ -172,6 +189,26 @@ public static class GameUpdates
             {
                 [PayloadPlayer] = player,
                 [PayloadDeck] = deck,
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// 发射 unit.types.changed（S9；载荷＝{ Unit, AddedType }——被变更单位＋新增类型〔增量〕）。
+    /// 语义＝实际发生变更才发（无变化零发射——调用方不得在无变化时调用；恰一次）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
+    public static Task EmitUnitTypesChanged(
+        LogicEngine engine, Card unit, Cards.UnitType addedType, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        return engine.Emit(
+            UnitTypesChanged,
+            new Dictionary<string, object?>
+            {
+                [PayloadUnit] = unit,
+                [PayloadAddedType] = addedType,
             },
             ct);
     }

@@ -25,7 +25,7 @@ public class KeywordComponentTests
 
     private static readonly object RegistrationGate = new();
 
-    private static void EnsureRegistered(string keyword, Func<CardBase, int?, KeywordComponent> factory)
+    private static void EnsureRegistered(string keyword, Func<Card, int?, KeywordComponent> factory)
     {
         lock (RegistrationGate)
         {

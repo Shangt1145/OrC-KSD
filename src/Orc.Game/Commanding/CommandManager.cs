@@ -40,6 +40,13 @@ namespace Orc.Game.Commanding;
 //   触发者引用置于尾部、不参与复验（去重后计数允许多余项）。
 // ②X2 效果卸载（死亡链）——修饰器清理之后、card.died 之前逐效果走统一卸载链（容器移除＋OnUnmount＋撤销登记
 //   ＋总线卸载；托管清理幂等——修饰器已清、零发射），保持「先数值变化→清理→card.died」观察序。
+// A4 加性（亡计与再触发）：
+// ①亡计结算（死亡链新增步）——完整次序：槽位释放 → 置毁 → **亡计结算** → 词条死亡注销 → 修饰器清理 →
+//   钳击失效通知 → 效果卸载 → 位置字段置空 → card.died；结算于「死亡前可观察状态」完整时执行（已置毁、
+//   位置字段可读、词条行为态仍在、修饰仍生效、效果仍装载）；异常隔离（记录、不中断死亡流程）；
+//   执行经再触发服务统一执行面（单源＋重入防护；无服务＝直调执行面降级）。
+// ②「亡计再触发」不伴随死亡——由再触发机制（总线包装底层触发器）另行承载（见 RetriggerSystem.cs），
+//   不属本死亡步语义。
 // W3-3 G11 加性（HQ 实体化）：
 // ①HQ 目标承载＝HQ 实体引用（hq.Ref）——候选/交互/执行以实体引用为准（槽位引用不再作为 HQ 目标产出；
 //   槽位关系仅用于布局语义判定〔占位/邻位/守护/轰炸机拦截/范围矩阵基准〕）；
@@ -68,11 +75,13 @@ public sealed class CommandManager
     private readonly IReadOnlyList<Player> _players;
     private readonly Func<Player?> _currentPlayerProvider;
     private readonly MatchLifecycle? _lifecycle;
+    private readonly RetriggerSystem? _retrigger; // A4：再触发服务（亡计结算执行面/防护的统一入口；可空＝独立构造降级）
     private readonly Trigger<CardTriggerView> _defenseDepletionTrigger; // W2b：防御归零检查（被动；挂载于更新总线）
     private readonly Trigger<CardTriggerView> _hqZeroTrigger; // W3-3：HQ 归零检查（被动；挂载于更新总线）
 
     private readonly HashSet<UnitCard> _guardedUnits = new();
     private readonly HashSet<Hq> _guardedHqs = new(); // W3-3：被守护 HQ 以 HQ 实体为单元
+    private readonly PincerRegistry _pincers = new(); // A2：钳击关系注册表（对局级——一对一占用约束）
 
     /// <summary>
     /// 创建指挥管理器（创建四个内置流程触发器并装配默认链；订阅位置/入场/死亡更新以维护被守护状态）。
@@ -83,6 +92,7 @@ public sealed class CommandManager
     /// <param name="players">双玩家（敌我判定；行动方＋其对手）。</param>
     /// <param name="currentPlayerProvider">当前行动方提供器（延迟读取；缺省＝null＝回合未就绪——发起校验将拒绝）。</param>
     /// <param name="lifecycle">对局生命周期（终局门禁＋胜者记录——后置项 B；缺省＝null＝独立构造场景无门禁）。</param>
+    /// <param name="retrigger">再触发服务（A4；亡计结算执行面/防护的统一入口——缺省＝null＝独立构造降级：死亡链直调亡计执行面〔无重入防护〕）。</param>
     /// <exception cref="ArgumentNullException">engine / battlefield / targeterManager / players 为 null。</exception>
     /// <exception cref="ArgumentException">players 不是两名玩家。</exception>
     public CommandManager(
@@ -91,7 +101,8 @@ public sealed class CommandManager
         TargeterManager targeterManager,
         IReadOnlyList<Player> players,
         Func<Player?>? currentPlayerProvider = null,
-        MatchLifecycle? lifecycle = null)
+        MatchLifecycle? lifecycle = null,
+        RetriggerSystem? retrigger = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -108,6 +119,7 @@ public sealed class CommandManager
         _players = players;
         _currentPlayerProvider = currentPlayerProvider ?? (() => null);
         _lifecycle = lifecycle;
+        _retrigger = retrigger;
 
         // ① 指挥触发器（内置；默认链＝指挥流程编排）
         CommandTrigger = new Trigger<CommandTriggerView>("指挥触发器");
@@ -126,8 +138,11 @@ public sealed class CommandManager
         AttackDamageTrigger = new Trigger<AttackDamageTriggerView>("造成攻击伤害触发器");
         AttackDamageTrigger.Register("默认基础互伤", HandleDefaultAttackDamageAsync, DefaultDamagePriority);
 
-        // 词条装载上下文（卡牌加载时取用；伏击注册「造成攻击伤害」改写）
-        KeywordLoadContext = new KeywordLoadContext(engine, AttackDamageTrigger);
+        // 词条装载上下文（卡牌加载时取用；伏击注册「造成攻击伤害」改写）。
+        // A2 加性：随带对局服务——钳击（同伴选择交互/候选枚举/关系注册表）与压制（当前行动方）组件的运行逻辑取用；
+        // lambda 免——直接引用（构造时点这些字段均已赋值）。
+        KeywordLoadContext = new KeywordLoadContext(
+            engine, AttackDamageTrigger, _targeterManager, _battlefield, _pincers, _currentPlayerProvider);
 
         // 守护维护：由位置/入场/死亡更新驱动（凡影响占用布局的变动均等效触达；词条效果不直接发射更新）
         _engine.Subscribe((updateType, _, _) =>
@@ -186,8 +201,62 @@ public sealed class CommandManager
     /// <summary>「造成攻击伤害」共享流程触发器（内置；单位 vs 单位攻击结算必经；伏击挂载点）。</summary>
     public Trigger<AttackDamageTriggerView> AttackDamageTrigger { get; }
 
-    /// <summary>词条装载上下文（卡牌加载时取用；经对局装配注入卡牌库）。</summary>
+    /// <summary>词条装载上下文（卡牌加载时取用；经对局装配注入卡牌库）。
+    /// A2 加性：随带对局服务面（目标选择管理器／战场／钳击关系注册表／当前行动方提供器——钳击与压制组件的运行逻辑取用）。</summary>
     public KeywordLoadContext KeywordLoadContext { get; }
+
+    /// <summary>钳击关系注册表（A2 加性；对局级服务——一对一占用约束的查询与登记；只读转发面）。</summary>
+    public PincerRegistry Pincers => _pincers;
+
+    // ---------- 离场受控入口（S9 加性；转换等「非死亡离场」组合的公共面） ----------
+
+    /// <summary>
+    /// 离场（S9；单位「不再在场」——转换等「非死亡离场」组合的公共受控入口）：
+    /// 槽位释放（变空槽）→ <see cref="UnitStateData.Position"/> 置空（「有位置」判据失效）→
+    /// 离场失效通知（关系类观察者——钳击配对失效、对侧即时失去；「不再在场」判据与死亡路径同源）。
+    /// 非死亡路径：不发 card.died（非死亡——不得误导「被消灭」类观察）、不发 card.discarded（非弃置）、
+    /// 不发 unit.position.changed（专属移动语义）；不执行死亡链其余步骤（亡计/词条注销/修饰器清理/效果卸载）——
+    /// 销毁经配套销毁面（<see cref="LogicEngine.DestroyCard"/>——杀＋card.destroyed＋资源清理）由调用方组合完成
+    /// （转换组合＝离场＋销毁＋Create＋Place；顺序与失败一致性由组合承载方〔效果语义/测试组合〕设计与申报）。
+    /// 光环/门禁类为「读取时判定」（未在场自然不命中），无需额外通知。
+    /// 终局门禁：对局已结束＝拒绝。独立构造路径（无生命周期）＝无门禁。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">unit 为 null。</exception>
+    /// <exception cref="InvalidOperationException">对局已结束；或单位尚未单位化／已死亡已毁／不在场（前置契约不符——明确拒绝）。</exception>
+    public async Task LeaveBattlefieldAsync(UnitCard unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+
+        if (_lifecycle?.IsEnded == true)
+        {
+            throw new InvalidOperationException("对局已结束（终局），离场动作被拒绝。");
+        }
+
+        if (!unit.TryGetData<UnitStateData>(out var state))
+        {
+            throw new InvalidOperationException(
+                $"单位 '{unit.Name}' 尚未单位化（离场动作被拒绝——前置契约不符）。");
+        }
+
+        if (state.IsDestroyed)
+        {
+            throw new InvalidOperationException(
+                $"单位 '{unit.Name}' 已死亡/已毁（离场动作被拒绝——前置契约不符）。");
+        }
+
+        if (state.Position is not { } slot)
+        {
+            throw new InvalidOperationException(
+                $"单位 '{unit.Name}' 当前不在场（离场动作被拒绝——前置契约不符）。");
+        }
+
+        // ① 槽位释放（变空槽）→ ② 不再在场（Position 置空——「有位置」判据失效）
+        slot.Clear();
+        state.Position = null;
+
+        // ③ 离场失效通知（关系类观察者——既有「离场失效通知」面；死亡路径之外的第二接入点，转换路径接入）
+        await PincerRules.OnUnitLeftBattlefieldAsync(unit, _pincers, ct);
+    }
 
     /// <summary>防御归零检查触发器（内置；被动——挂载更新总线、响应 card.stat.changed；公开只读）。
     /// 用途：内置事件（「防御归零检查」）的寻址面——注册项句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（moding（逻辑替换）等场景）。</summary>
@@ -319,6 +388,12 @@ public sealed class CommandManager
             return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
         }
 
+        // A2：被压制（不能移动或攻击——行动合法性消费面读「被压制」标记）
+        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
+        {
+            return CommandActionAvailability.Blocked(CommandBlockReason.Suppressed);
+        }
+
         // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
         if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
@@ -365,6 +440,12 @@ public sealed class CommandManager
         if (!command.CanAttack)
         {
             return CommandActionAvailability.Blocked(CommandBlockReason.FlagFalse);
+        }
+
+        // A2：被压制（不能移动或攻击——行动合法性消费面读「被压制」标记）
+        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
+        {
+            return CommandActionAvailability.Blocked(CommandBlockReason.Suppressed);
         }
 
         // W2b：行动费读「有效值」（修饰贡献叠加后的缓存有效值——读取面统一、防旁路直读）
@@ -951,8 +1032,10 @@ public sealed class CommandManager
         // 默认基础互伤：按反击豁免判定表（后置项 A）——同时结算、以互扣前有效值为基准；豁免方不结算反击伤害
         // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常）
         // W2b：伤害值与扣减一律接改——伤害读「攻击力有效值」；扣减经门户（损伤量→跑链→有变更集中触发）。
-        var damageToTarget = attacker.Modifiers.GetEffectiveValue(CardStatFields.Attack);
-        var damageToAttacker = target.Modifiers.GetEffectiveValue(CardStatFields.Attack);
+        // A2：伤害修正读取（handler 链介入——免疫归零／重甲减伤在默认结算 handler 之前登记；修正后照常走
+        // 「0 伤害」路径——净伤害＝0 不算「受到伤害」，与动员失去等消费一致）。
+        var damageToTarget = ResolveIncomingDamage(resolution, attacker, target);
+        var damageToAttacker = ResolveIncomingDamage(resolution, target, attacker);
         var counterAttacks = CounterAttackRules.CanCounterAttack(attacker, target);
 
         await target.ApplyDefenseDamageAsync(damageToTarget, ct); // 门户：伤害＝即时变更（只扣当前、不减上限）
@@ -978,12 +1061,33 @@ public sealed class CommandManager
     }
 
     /// <summary>
+    /// 受方伤害解析（A2 加性）：基准＝来源方攻击力有效值；修正＝结算记录中登记的归零（免疫——置 0）与
+    /// 减伤（重甲——扣减）。归零优先（结果 0）；减伤下限 0 自然收敛（不足减则归 0；与免疫叠加结果一致）。
+    /// 归零/减伤均在默认结算 handler 之前由对应词条 handler 登记（「伤害结算 handler 之前把伤害设为 0」）。
+    /// </summary>
+    private static int ResolveIncomingDamage(
+        AttackDamageResolution resolution, UnitCard source, UnitCard receiver)
+    {
+        if (resolution.IsDamageZeroed(receiver))
+        {
+            return 0; // 免疫归零
+        }
+
+        var raw = source.Modifiers.GetEffectiveValue(CardStatFields.Attack);
+        return Math.Max(0, raw - resolution.GetDamageReduction(receiver)); // 重甲减伤（下限 0）
+    }
+
+    /// <summary>
     /// 统一死亡流程（攻击结算判定死亡后调用；伏击改写的攻击者死亡同走此流程）。
-    /// 清理最小口径：①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③词条死亡注销（2C-A1：仅行为撤销——登记/参值保留） ＋ 修饰器清理
-    /// （W2b：含期限订阅随销；数值整合至最终态、零新发射——死亡清理为内部特殊路径）＋ 效果卸载
-    /// （X2：统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；托管清理幂等）→
-    /// ④UnitStateData.Position 置空（实例保留可查询）→ ⑤card.died 发射（恰一次；死亡状态就绪后）。
-    /// 不发 unit.position.changed（该更新专属移动语义）。
+    /// 完整次序（A4 定稿·唯一权威口径——《需求文档》Q&A-1）：
+    /// ①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③**亡计结算**（新增步：仅含亡计词条的卡驱动其内部效果动作一次；
+    /// 「死亡前可观察状态」完整时执行——位置字段可读、词条行为态仍在、修饰仍生效、效果仍装载、IsDestroyed 已置位；
+    /// 异常隔离〔记录、不中断死亡流程〕；恰一次保证＝流程内步骤位次＋执行面行为态解析〔死亡注销后天然跳过〕＋执行中重入防护）→
+    /// ④词条死亡注销（2C-A1：仅行为撤销——登记/参值保留）→ ⑤修饰器清理
+    /// （W2b：含期限订阅随销；数值整合至最终态、零新发射——死亡清理为内部特殊路径）→ ⑥钳击失效通知（A2；位置保持现状）→
+    /// ⑦效果卸载（X2：统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；托管清理幂等）→
+    /// ⑧UnitStateData.Position 置空（实例保留可查询）→ ⑨card.died 发射（恰一次；死亡状态就绪后）。
+    /// 不发 unit.position.changed（该更新专属移动语义）。HQ 不入死亡/销毁链——本流程不适用（边界）。
     /// </summary>
     private async Task ProcessDeathAsync(UnitCard unit, CancellationToken ct)
     {
@@ -991,9 +1095,25 @@ public sealed class CommandManager
 
         state.Position?.Clear();
         state.IsDestroyed = true;
+
+        // A4：亡计结算（新增步——置毁之后、词条死亡注销之前；清理前结算）。
+        // 经再触发服务统一执行面（单源＋重入防护）；独立构造（无服务）＝直调执行面降级（无重入防护）。
+        if (_retrigger is not null)
+        {
+            await _retrigger.ExecuteDeathrattleAsync(unit, ct);
+        }
+        else
+        {
+            await DeathrattleRules.ExecuteAsync(unit, _engine, ct);
+        }
+
         KeywordRules.RevokeAllOnDeath(unit); // 2C-A1：词条死亡注销（经静态助手转发——仅行为撤销：OnRevoke 序列＋运行逻辑注销＋内嵌效果卸载；登记/参值保留可查询）
 
         await unit.Modifiers.ClearAllForDeathAsync(ct); // W2b：注销全部修饰器（含期限订阅随销）＋数值整合至最终态（零新发射）
+
+        // A2：钳击关系失效通知（一方离场〔不再在场〕——另一方即时失去；同事务内落定）。置于死亡清理之后：
+        // 离场方自身修饰器已清（本通知对其幂等、零新发射——「发射契约以致死变更为界」保持）；对侧撤销正常落定。
+        await PincerRules.OnUnitLeftBattlefieldAsync(unit, _pincers, ct);
 
         // X2：效果卸载（统一卸载链收口——容器移除＋OnUnmount＋撤销登记＋总线卸载；含托管清理〔幂等：
         // 修饰器已清、零操作〕）——清理就绪后方发 card.died（「先数值变化→清理→card.died」观察序保持）。
@@ -1093,6 +1213,12 @@ public sealed class CommandManager
             return false;
         }
 
+        // A2：被压制（不能移动或攻击——复验与可用性同源）
+        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
+        {
+            return false;
+        }
+
         // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
         if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
         {
@@ -1158,6 +1284,12 @@ public sealed class CommandManager
         }
 
         if (state.IsDestroyed || !command.CanAttack)
+        {
+            return false;
+        }
+
+        // A2：被压制（不能移动或攻击——复验与可用性同源）
+        if (KeywordRules.HasKeyword(attacker, KeywordIds.Suppressed))
         {
             return false;
         }

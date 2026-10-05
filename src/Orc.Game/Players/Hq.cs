@@ -39,6 +39,10 @@ public sealed class Hq : Card
         AddData(new HqStateData());
         Modifiers = new CardModifierComponent(this, engine);
         Modifiers.RegisterDetector(new HqHealthUpdateDetector(this));
+
+        // A2 加性：HQ 词条面（同族承载——「友方总部具有免疫」类文本的授予/查询基座；
+        // 宿主＝引擎薄容器 Card，与卡牌侧同一管理组件与同一挂载/卸载机制；空管理面零行为负担）。
+        Keywords = new KeywordManager(this, engine);
     }
 
     /// <summary>归属玩家（HQ 随 Player 创建——恒非空）。</summary>
@@ -46,6 +50,13 @@ public sealed class Hq : Card
 
     /// <summary>卡侧修饰器组件（W2a G3 机制；W3-3 起 HQ 亦持有——「链/检测/集中触发」的挂载与读取面）。</summary>
     public CardModifierComponent Modifiers { get; }
+
+    /// <summary>
+    /// 词条管理组件（A2 加性：HQ 词条面——单位与 HQ 同族承载「免疫」等词条；宿主＝引擎薄容器 Card）。
+    /// 运行时授予/移除/查询经本面（如「友方总部具有免疫」＝授予「免疫」）；装载上下文提供器经装配期注入
+    /// （延迟读取——HQ 免疫的归零改写器挂载不经上下文，缺省亦可用；注入保持与卡牌侧一致的可扩展性）。
+    /// </summary>
+    public KeywordManager Keywords { get; }
 
     /// <summary>有效血量（读面；跑链落定后的缓存——「始终读有效值」；未跑过链＝本体值）。</summary>
     public int Health => Modifiers.GetEffectiveValue(CardStatFields.HqHealth);

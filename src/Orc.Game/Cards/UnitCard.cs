@@ -18,6 +18,8 @@ namespace Orc.Game.Cards;
 /// 门户（W2b G3；单位数值受控变更面——防御语义）：伤害扣减 <see cref="ApplyDefenseDamageAsync"/>（损伤量增加）与
 /// 修复 <see cref="RepairDefenseAsync"/>（恢复到上限）＝运行期数值本体的合规变更入口（配合卡侧修饰容器＝修饰加值/撤销）；
 /// 变更一律经「门户 → 跑链（修饰机制管线）→ 有变更集中触发」。
+/// 门户（S9 G13；类型增补）：<see cref="AddUnitTypeAsync"/>＝单位类型集合的唯一合规运行期增补路径
+/// （去重幂等/非法值拒绝/变更信号——实际改变集合恰发一次 unit.types.changed）。
 /// 触发数据约定：Card＝本卡、Player＝所有者（可缺省/可空——加入路径不要求归属）、Position＝目标槽位（Slot 对象）。
 /// 加载模板与其余装配沿用基类（<see cref="CardBase"/>）；持久化重建经基类扩展点。
 /// </summary>
@@ -100,40 +102,10 @@ public class UnitCard : CardBase
             return;
         }
 
-        // ① 部署逻辑检查＋部署词条效果：按登记序触发有效条目（handler 非空）；无组件或有效条目为空＝跳过（部署不因此失败）。
-        //    逐条异常隔离（记录并继续）——单个部署效果异常不阻断部署链与后续效果。
-        if (unit.TryGetData<DeploymentLogicData>(out var logic))
-        {
-            foreach (var entry in logic.Entries)
-            {
-                if (entry.Handler is null)
-                {
-                    continue; // 「handler 非空」检查：空 handler 条目＝无效、跳过
-                }
-
-                try
-                {
-                    await entry.Handler(new DeploymentLogicContext(unit, slot, _chainEngine), ct);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw; // 取消类异常不隔离（沿用引擎口径）
-                }
-                catch (Exception ex)
-                {
-                    _chainEngine.RootStream.WriteLog(
-                        "部署逻辑",
-                        ex.Message,
-                        LogLevel.Error,
-                        new[] { $"exception:{ex.GetType().Name}" },
-                        new Dictionary<string, object?>
-                        {
-                            ["exceptionType"] = ex.GetType().FullName,
-                            ["message"] = ex.Message,
-                        });
-                }
-            }
-        }
+        // ① 部署逻辑检查＋部署词条效果：单源执行段（A4：DeploymentLogicRules——部署链①段与再触发「部署重放」共享
+        //    同一执行实现；同序〔登记序〕／同「handler 非空」检查／同逐条异常隔离／同上下文／同留痕形态）。
+        //    无组件或有效条目为空＝跳过（部署不因此失败）。
+        await DeploymentLogicRules.RunEffectSegmentAsync(unit, slot, _chainEngine, ct);
 
         // ② 单位化（共用：加组件＋入槽）
         await unit.UnitizeTrigger.InvokeAsync(_chainEngine, BuildUnitData(unit, view.Player as Player, slot), ct);
@@ -187,7 +159,7 @@ public class UnitCard : CardBase
         }
 
         var state = UnitStateData.CreateInitial(unit.GetData<BattleStatsData>());
-        state.UnitTypes.AddRange(unit.Definition.UnitTypes); // 2C：单位类型清单从定义填充（部署/加入两路径一致）
+        state.FillInitialTypes(unit.Definition.UnitTypes); // 2C：单位类型清单从定义填充（部署/加入两路径一致）；S9：装配期填充＝列明例外（静默面）
         state.Position = slot;
         unit.AddData(state);
         unit.AddData(new CommandData());
@@ -219,6 +191,14 @@ public class UnitCard : CardBase
         }
 
         state.DefenseLoss += amount; // 受控写入（门户面；运行期直写收窄）
+
+        // A2：动员——「受到伤害」（净伤害＞0、防御实际扣减）后失去（伤害被完全吸收/归零〔amount=0〕＝不算；
+        // 失去走词条移除链、既得 +1/+1 保留）。先记伤害、后失去、末跑链（数值落定）。
+        if (amount > 0)
+        {
+            await MobilizeRules.OnUnitDamagedAsync(this);
+        }
+
         await Modifiers.RequestRerunAsync(ct); // 变更经门户 → 跑链 → 变化时集中触发
     }
 
@@ -239,6 +219,35 @@ public class UnitCard : CardBase
 
         state.DefenseLoss = 0;
         await Modifiers.RequestRerunAsync(ct);
+    }
+
+    /// <summary>
+    /// 门户：类型增补（S9；单位类型集合的唯一合规运行期增补路径——「也算作」类效果的受控入口）：
+    /// 集合语义（「确保该类型在集合中」）——已含该类型＝幂等无操作（不重复登记、不重复发信号）；null 不可达（值类型）；
+    /// 未定义枚举值＝拒绝（非法值）；未单位化（无单位数据组件）＝明确异常（装配性错误）；
+    /// 实际改变集合＝恰发射一次 <see cref="GameUpdates.UnitTypesChanged"/>（载荷＝本单位＋新增类型——增量；
+    /// 完整类型集由监听者从单位读取「读取现势」）。
+    /// 生效即时（判定读点动态读取当前实例类型集——无需修改读点代码）；实例级（仅作用于本实例、不写回定义；
+    /// 不迁移同定义其他实例）；转换产生的静态新实例不携带本增补（新实例＝从定义重建）。
+    /// </summary>
+    /// <param name="type">单位类型（须为已定义枚举值；非法值＝拒绝）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">type 为未定义枚举值（非法值——明确拒绝）。</exception>
+    /// <exception cref="InvalidOperationException">尚未单位化（缺单位数据组件——装配性错误）。</exception>
+    public async Task AddUnitTypeAsync(UnitType type, CancellationToken ct = default)
+    {
+        if (!Enum.IsDefined(type))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(type), type, "未定义的单位类型枚举值（非法值——明确拒绝）。");
+        }
+
+        var state = RequireUnitState();
+        if (!state.TryAddRuntimeType(type))
+        {
+            return; // 幂等（已含该类型）：无操作、不重复发信号——集合语义「确保在集合中」、结果成功
+        }
+
+        await GameUpdates.EmitUnitTypesChanged(_chainEngine, this, type, ct); // 实际变更：恰一次（先落定、后发射）
     }
 
     /// <summary>

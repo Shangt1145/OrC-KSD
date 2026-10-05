@@ -114,12 +114,14 @@ internal static class CommandTestKit
 
     /// <summary>创建指挥测试对局（双方步兵 x10 卡组＋定制定义集；可选目标选择桥接）。
     /// W2c X2 加性：可选效果注册表（卡牌加载时效果装载的装配源）与追加定义集（测试专用卡；
-    /// 与既有 id 重复的条目将导致初始化注册期 fail-fast——测试自行避免）。</summary>
+    /// 与既有 id 重复的条目将导致初始化注册期 fail-fast——测试自行避免）。
+    /// A4 加性：可选部署逻辑注册表（卡牌加载时「部署逻辑生成」步骤的装配源）。</summary>
     public static Match CreateCommandMatch(
         MockTargeterBridge? bridge = null,
         int seed = 42,
         CardEffectRegistry? effectRegistry = null,
-        IEnumerable<CardDefinitionEntry>? extraDefinitions = null)
+        IEnumerable<CardDefinitionEntry>? extraDefinitions = null,
+        DeploymentLogicRegistry? deploymentLogicRegistry = null)
         => new(
             new CardList(Enumerable.Repeat(InfantryId, 10)),
             new CardList(Enumerable.Repeat(InfantryId, 10)),
@@ -128,7 +130,8 @@ internal static class CommandTestKit
             firstPlayerIndex: null,
             options: null,
             targeterBridge: bridge,
-            effectRegistry: effectRegistry);
+            effectRegistry: effectRegistry,
+            deploymentLogicRegistry: deploymentLogicRegistry);
 
     /// <summary>实例化＋加载一张定制卡（归属＝player；可选放入手牌）。</summary>
     public static async Task<UnitCard> InstantiateLoadedAsync(Match match, Player player, string id = InfantryId, bool toHand = false)

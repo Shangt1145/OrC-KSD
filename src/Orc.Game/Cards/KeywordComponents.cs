@@ -1,3 +1,4 @@
+using Orc.Cards;
 using Orc.Core;
 using Orc.Game.Commanding;
 
@@ -22,7 +23,7 @@ public sealed class BlitzKeywordComponent : KeywordComponent
     }
 
     /// <inheritdoc />
-    internal override Task OnDeployChainFinalizedAsync(CardBase card, CancellationToken ct)
+    internal override Task OnDeployChainFinalizedAsync(Card card, CancellationToken ct)
     {
         if (card.TryGetData<CommandData>(out var command))
         {
@@ -70,7 +71,7 @@ public sealed class AmbushKeywordComponent : KeywordComponent
 {
     private Trigger<AttackDamageTriggerView>? _trigger;
     private TriggerRegistration? _registration;
-    private CardBase? _card;
+    private Card? _card;
 
     /// <summary>创建伏击词条组件。</summary>
     public AmbushKeywordComponent()
@@ -79,7 +80,7 @@ public sealed class AmbushKeywordComponent : KeywordComponent
     }
 
     /// <inheritdoc />
-    internal override void Mount(CardBase card, KeywordLoadContext? context)
+    internal override void Mount(Card card, KeywordLoadContext? context)
     {
         _card = card;
         if (context is null)

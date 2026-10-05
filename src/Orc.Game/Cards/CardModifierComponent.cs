@@ -522,6 +522,29 @@ public sealed class CardModifierComponent
         await RequestRerunAsync(ct); // 单交接点：一次完成、一次衔接
     }
 
+    // ---------- 清空面（A2 加性：抑制＝清空处置的「清空修饰器」承载） ----------
+
+    /// <summary>
+    /// 清空全部修饰器（常规路径；A2 加性）：注销全部修饰器（子类钩子自清理——含期限订阅随销；
+    /// 清理异常隔离记录、列表一致性优先）→ 修饰集合清空 → 一次衔接（变更经跑链、有变更才发）。
+    /// 与死亡清理（<see cref="ClearAllForDeathAsync"/>）的差异＝发射语义（本路径照常发射、死亡清理零发射）。
+    /// 幂等（无修饰＝空清理＋零变化零发射）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">跑链执行中（重入）。</exception>
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        EnsureNotRunning();
+
+        var toClear = _modifiers.ToArray();
+        foreach (var modifier in toClear)
+        {
+            UnmountModifier(modifier); // 逐条清理、异常隔离（含期限订阅随销）
+        }
+
+        _modifiers.Clear();
+        await RequestRerunCoreAsync(ct); // 一次衔接（有变更才发；无修饰＝零变化、零发射）
+    }
+
     // ---------- 死亡清理（W2b；死亡流程内部特殊路径） ----------
 
     /// <summary>

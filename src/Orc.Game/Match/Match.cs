@@ -13,14 +13,14 @@ namespace Orc.Game;
 /// <summary>
 /// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条＋后置项补全）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
 /// 与对局级触发器注册表（2A 机制：登记本体＋分层分类；2C 起内置流程触发器注册为底层）。
-/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）。
+/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）、可选部署逻辑注册表（A4 加性装配输入——卡牌加载时「部署逻辑生成」步骤的装配源）。
 /// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）→〔HQ≤0 时〕"结束"态（立即终局：状态置结束＋胜者记录）。
 /// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）；
 /// 终局后（"结束"态）：所有游戏动作入口拒绝（指挥/打出/移动/攻击/回合推进/初始化等——对外面拒绝、零副作用）、
 /// 只读查询面（状态/胜者/玩家与 HQ/战场/管理器/集合）保持可用、更新流不再增长（其后所有效果不再处理）。
 /// 失败模式：无效创建参数 → 创建期抛参数校验异常；初始化中异常直接传播（不承诺回滚；失败可重建对局）。
-/// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 指挥管理器〔2C：流程触发器创建＋底层注册〕）→
-/// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机服务〔G8：确定性单流〕、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
+/// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性＋A4 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 再触发服务〔A4：接收触发器创建＋总线挂载〕→ 指挥管理器〔2C：流程触发器创建＋底层注册；A4：注入再触发服务〕→ 玩家注入（环境/随机服务/A4 再触发服务））→
+/// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机服务〔G8：确定性单流〕、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、部署逻辑生成〔A4〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
 /// ID 水位线快照〔W1-1：起手装载之前〕→ 起手装载（静默、不发更新；先手 4 / 后手 5）→
 /// 〔2C 接线：回合恢复钩子〕→ 先手回合开始序列（3 条更新入总流）→ 置"进行"。
 /// </summary>
@@ -44,10 +44,13 @@ public sealed class Match
     private TargeterManager? _targeterManager;
     private PlayManager? _playManager;
     private CommandManager? _commandManager;
+    private RetriggerSystem? _retriggerSystem; // A4：再触发服务（对局装配期创建——收束于管理器群）
     private readonly ITargeterBridge? _targeterBridge;
     private readonly CardEffectRegistry? _effectRegistry;
+    private readonly DeploymentLogicRegistry? _deploymentLogicRegistry; // A4：部署逻辑登记/生成面的装配输入
     private readonly MatchLifecycle _lifecycle = new();
     private GameEnvironment? _environment; // W3-1 G4：游戏环境（对局装配期创建；多对局相互独立）
+    private MatchCardService? _cardService; // S9：对局卡牌服务（服务面——卡牌工厂＋放置面；对局装配期创建）
 
     /// <summary>
     /// 创建对局（准备态；内部新建 LogicEngine 并公开）。装配校验：卡组名单非 null、非空、不含 null/空白 id；
@@ -61,6 +64,7 @@ public sealed class Match
     /// <param name="options">可选规则配置（指挥点上限；默认 12）。</param>
     /// <param name="targeterBridge">可选目标选择桥接（第六员〔目标选择管理器〕的装配输入；缺省＝null＝允许无桥接装配——Targeting 被调用时以失败结局暴露、不抛）。</param>
     /// <param name="effectRegistry">可选效果工厂注册表（X2 加性装配输入；卡牌加载时效果装载的装配源；缺省＝null＝无效果源——卡加载时无「声明效果」装载，装载语境照常〔卡上手动装配的效果仍被装载〕）。</param>
+    /// <param name="deploymentLogicRegistry">可选部署逻辑注册表（A4 加性装配输入；卡牌加载时「部署逻辑生成」步骤的装配源〔为单位卡生成并挂载部署逻辑组件〕；缺省＝null＝无装配源——不生成、加载照常）。</param>
     /// <exception cref="ArgumentNullException">deckForPlayerA / deckForPlayerB / cardDefinitions 为 null。</exception>
     /// <exception cref="ArgumentException">卡组名单为空或含 null/空白 id；定义集含 null 条目。</exception>
     /// <exception cref="ArgumentOutOfRangeException">先手指定越界；指挥点上限非正整数。</exception>
@@ -72,7 +76,8 @@ public sealed class Match
         int? firstPlayerIndex = null,
         MatchOptions? options = null,
         ITargeterBridge? targeterBridge = null,
-        CardEffectRegistry? effectRegistry = null)
+        CardEffectRegistry? effectRegistry = null,
+        DeploymentLogicRegistry? deploymentLogicRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(deckForPlayerA);
         ArgumentNullException.ThrowIfNull(deckForPlayerB);
@@ -118,6 +123,7 @@ public sealed class Match
         _options = resolvedOptions;
         _targeterBridge = targeterBridge;
         _effectRegistry = effectRegistry;
+        _deploymentLogicRegistry = deploymentLogicRegistry;
         Engine = new LogicEngine();
     }
 
@@ -191,6 +197,13 @@ public sealed class Match
     /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
     public CommandManager CommandManager => RequireReady(_commandManager);
 
+    /// <summary>
+    /// 再触发服务（A4 加性：发布面＋接收触发器〔包装底层触发器〕＋执行面驱动＋重入防护；随管理器群在 Initialize 内
+    /// 加性生成——创建时点为卡牌加载之前）。独立构造路径不受影响；未 Initialize 时经本属性访问＝沿用既有门禁模式（抛错）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
+    public RetriggerSystem RetriggerSystem => RequireReady(_retriggerSystem);
+
     // ---------- 构筑外判定（W1-1 G12 加性面） ----------
 
     /// <summary>
@@ -216,6 +229,23 @@ public sealed class Match
         MatchState.InProgress => _randomService,
         MatchState.Ended => throw new InvalidOperationException("对局已结束（终局），随机服务对外取用被拒绝。"),
         _ => throw new InvalidOperationException("对局尚未进入'进行'态：随机服务对外取用不可用（须先成功完成 Initialize）。"),
+    };
+
+    // ---------- 对局卡牌服务（S9 G6+G13） ----------
+
+    /// <summary>
+    /// 对局卡牌服务（对外取用面；S9 加性——「卡牌工厂＋放置面」：创建 Create / 放置 Place〔手牌/阵线/卡组顶/洗入〕
+    /// / 相邻空槽解析 / 「创建并放置」复合操作；效果运行期经「卡 → 玩家 → 服务」接入面取用——服务操作自身
+    /// 亦含「仅"进行"态」门禁）。**仅"进行"态可用**：准备态对外请求与终局后取用＝明确拒绝
+    /// （抛错——风格与随机服务/既有管理器门禁对齐）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态；或对局已结束（终局）。</exception>
+    public MatchCardService CardService => State switch
+    {
+        MatchState.InProgress => _cardService
+            ?? throw new InvalidOperationException("对局卡牌服务尚未装配（初始化链时序错误——须先成功完成 Initialize）。"),
+        MatchState.Ended => throw new InvalidOperationException("对局已结束（终局），卡牌服务对外取用被拒绝。"),
+        _ => throw new InvalidOperationException("对局尚未进入'进行'态：卡牌服务对外取用不可用（须先成功完成 Initialize）。"),
     };
 
     // ---------- 对局受控动作面（W4-1 G14 收尾） ----------
@@ -304,6 +334,7 @@ public sealed class Match
         // 2C：加注词条装载上下文提供器——词条装载〔伏击挂载〕的延迟读取来源；
         // W1-1：加注对局级卡牌 ID 提供器——加载时分配自增 ID〔构筑外判定基础〕的延迟读取来源；
         // X2：加注效果装载上下文提供器〔对局装载语境——效果源可空；注册表缺省时声明为空、装载照常〕；
+        // A4：加注部署逻辑装载语境提供器〔装配源可空——缺省时条目为空、生成跳过〕；
         // lambda 延迟求值：加载期读取可能早于目标对象创建，运行期（使用）时已就绪）
         _cardLibrary = new CardLibrary(
             Engine,
@@ -311,7 +342,8 @@ public sealed class Match
             () => _commandManager?.KeywordLoadContext,
             () => _playerManager?.NextCardId()
                 ?? throw new InvalidOperationException("卡牌 ID 分配不可用：玩家管理器尚未创建（加载链时序错误）。"),
-            cardId => new CardEffectLoadContext(_effectRegistry, cardId));
+            cardId => new CardEffectLoadContext(_effectRegistry, cardId),
+            cardId => new DeploymentLogicLoadContext(_deploymentLogicRegistry, cardId));
         foreach (var entry in _cardDefinitions)
         {
             _cardLibrary.Register(entry.Id, entry.Definition);
@@ -339,26 +371,64 @@ public sealed class Match
             player.ConfigureRandomService(_randomService);
         }
 
+        // S9 加性：对局卡牌服务（服务面——卡牌工厂＋放置面）——随对局装配创建（战场/玩家就绪后，卡加载前）；
+        // 动作面经延迟读取 lambda 注入（支援线查询〔战场就绪〕／阵线放置〔打出管理器创建较晚〕／洗切动作面〔统一经
+        // ShuffleDeckAsync〕／状态读取器〔生命周期门禁〕）；并注入各玩家（「卡 → 玩家 → 服务」读取路径的玩家环节）。
+        _cardService = new MatchCardService(
+            Engine,
+            _cardLibrary,
+            player => _battlefieldManager?.Battlefield.GetSupportLine(player)
+                ?? throw new InvalidOperationException("卡牌服务支援线查询不可用：战场管理器尚未创建（装配链时序错误）。"),
+            (card, slot, ct) => _playManager?.JoinUnitAsync(card, slot, ct)
+                ?? throw new InvalidOperationException("卡牌服务阵线放置不可用：打出管理器尚未创建（装配链时序错误）。"),
+            (player, ct) => ShuffleDeckAsync(player, ct),
+            () => _lifecycle.State);
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureCardService(_cardService);
+        }
+
         // 第六员（加性，随管理器群生成）：目标选择管理器——桥接可选注入（缺省 null＝允许无桥接装配，
         // Targeting 被调用时以失败结局暴露、不抛）；留痕经引擎既有渠道（总流）。
         // 终局门禁（后置项 B）：装配终局读取提供器——对局已结束＝发起（新入队）即时失败、零副作用。
         _targeterManager = new TargeterManager(_targeterBridge, new EventStreamTargetingTrace(Engine.RootStream));
         _targeterManager.GameEndedProvider = () => _lifecycle.IsEnded;
 
+        // A4 加性：再触发服务（对局级——创建接收触发器〔包装底层触发器〕并挂载更新总线；请求＝机制内部导航、
+        // 发布—接收—执行同一同步链）。创建时点＝指挥管理器之前（指挥管理器死亡链的「亡计结算」经其统一执行面；
+        // 与归零检查触发器同批装配、均在卡牌加载之前）。
+        _retriggerSystem = new RetriggerSystem(Engine, _lifecycle);
+
         // 2C 加性：指挥管理器（引擎侧创建四个内置流程触发器——指挥 / 单位移动 / 单位攻击 / 造成攻击伤害）
         // ＋注册为底层触发器（进注册表、分层可查询）；创建时点＝卡牌加载之前（词条装载依赖「造成攻击伤害」就绪）。
         // 后置项 B 加性：注入对局生命周期（终局门禁＋HQ≤0 胜者记录）。
+        // A4 加性：注入再触发服务（死亡链的亡计结算统一执行面——单源＋重入防护）。
         _commandManager = new CommandManager(
             Engine,
             _battlefieldManager.Battlefield,
             _targeterManager,
             _playerManager.Players,
             () => _turnManager?.CurrentPlayer,
-            _lifecycle);
+            _lifecycle,
+            _retriggerSystem);
         TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.AttackDamageTrigger, TriggerLayer.LowLevel);
+
+        // A2 加性：HQ 词条面的装载上下文提供器注入（延迟读取——与卡牌侧同构；HQ 免疫等词条运行时授予的
+        // 上下文来源；对 HQ 归零改写器挂载非必需〔不经上下文〕——注入保持与卡牌侧一致的可扩展性）。
+        foreach (var player in _playerManager.Players)
+        {
+            player.Hq.Keywords.LoadContextProvider = () => _commandManager?.KeywordLoadContext;
+        }
+
+        // A4 加性：再触发服务注入各玩家——「卡 → 玩家 → 服务」读取路径的玩家环节（效果运行期经
+        // RetriggerSystem.ResolveFor / RetriggerRules 取用；时序：先于卡加载，显式、可测试——无隐藏全局单例）。
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureRetriggerService(_retriggerSystem);
+        }
 
         // W3-3（G11 HQ 实体化）：HQ 数值路径「装配完成点」——初始基线快照（与单位化先例一致：
         // 以基准状态建立修饰机制比较基线；本时点无修饰/无损伤＝零变化、零发射）。

@@ -1,5 +1,6 @@
 using Orc.Core;
 using Orc.Game.Board;
+using Orc.Game.Cards;
 using Orc.Game.Collections;
 
 namespace Orc.Game.Players;
@@ -109,5 +110,53 @@ public sealed class Player
         }
 
         RandomService = service;
+    }
+
+    /// <summary>
+    /// 再触发服务（A4 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （效果运行期经 <see cref="RetriggerSystem.ResolveFor"/> 取用）；
+    /// 脱局场景（未注入）＝null（无服务面——解析自然产出 null、不抛错）。
+    /// </summary>
+    internal RetriggerSystem? RetriggerService { get; private set; }
+
+    /// <summary>
+    /// 装配期注入再触发服务（A4；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">service 为 null。</exception>
+    /// <exception cref="InvalidOperationException">再触发服务已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureRetriggerService(RetriggerSystem service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        if (RetriggerService is not null)
+        {
+            throw new InvalidOperationException("玩家再触发服务已注入（重复注入被拒绝）。");
+        }
+
+        RetriggerService = service;
+    }
+
+    /// <summary>
+    /// 对局卡牌服务（S9 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （效果运行期经 <see cref="MatchCardService.ResolveFor"/> 取用——生成/复制/转换的「卡牌工厂＋放置面」）；
+    /// 脱局场景（未注入）＝null（无服务面——解析自然产出 null、不抛错）。
+    /// </summary>
+    internal MatchCardService? CardService { get; private set; }
+
+    /// <summary>
+    /// 装配期注入对局卡牌服务（S9；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">service 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌服务已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureCardService(MatchCardService service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        if (CardService is not null)
+        {
+            throw new InvalidOperationException("玩家卡牌服务已注入（重复注入被拒绝）。");
+        }
+
+        CardService = service;
     }
 }

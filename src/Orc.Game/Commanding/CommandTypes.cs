@@ -1,3 +1,4 @@
+using Orc.Cards;
 using Orc.Core;
 using Orc.Game.Targeting;
 
@@ -77,6 +78,10 @@ public enum CommandBlockReason
 
     /// <summary>无合法候选（移动：非支援线单位或前线无空槽；攻击：范围矩阵/烟幕/守护筛选后无合法目标）。</summary>
     NoCandidates,
+
+    /// <summary>被压制（A2 加性）：被压制单位不能移动或攻击（行动合法性消费面读「被压制」标记——
+    /// 施加即时生效；「额外压制一回」只影响持续、不改变本阻断）。</summary>
+    Suppressed,
 }
 
 /// <summary>
@@ -238,15 +243,50 @@ internal sealed class CommandFlowBox
 }
 
 /// <summary>
-/// 攻击伤害结算记录（「造成攻击伤害」触发器数据面；伏击改写标志承载）：
+/// 攻击伤害结算记录（「造成攻击伤害」触发器数据面；伏击改写标志承载；A2 加性：伤害归零/减伤承载）：
 /// 伏击逻辑（按改写条件命中时）置 <see cref="IsRewritten"/>；默认基础互伤处理器读取——已改写＝替代默认（攻击者死亡、被攻击者不受伤）。
 /// 改写先判定——成立＝替代默认；不成立＝执行默认基础互伤（目标侧单命中；不引入多源改写并存排序）。
+/// A2 伤害介入承载（handler 注入——免疫归零／重甲减伤，均为「默认结算 handler 之前」登记、默认结算读取）：
+/// 归零＝该卡在本轮结算中受到的伤害整体置 0（含攻击方向与反击方向，按卡引用判定）；
+/// 减伤＝登记对该卡伤害的减免量（累加；结算时下限 0 自然收敛）。两者随结算记录同生同灭、不跨轮存续。
 /// </summary>
 public sealed class AttackDamageResolution
 {
+    private readonly HashSet<Card> _damageZeroed = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Card, int> _damageReductions = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>是否已改写（伏击命中；默认互伤的替代标志）。</summary>
     public bool IsRewritten { get; private set; }
 
     /// <summary>置改写标志（伏击逻辑命中时调用）。</summary>
     public void MarkRewritten() => IsRewritten = true;
+
+    /// <summary>标记该卡在本轮结算中受到的伤害归零（免疫 handler 注入；幂等）。</summary>
+    public void MarkDamageZeroed(Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        _damageZeroed.Add(card);
+    }
+
+    /// <summary>该卡在本轮结算中受到的伤害是否已归零（默认结算读取）。</summary>
+    public bool IsDamageZeroed(Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return _damageZeroed.Contains(card);
+    }
+
+    /// <summary>登记对该卡伤害的减免量（重甲 handler 注入；累加、下限 0）。</summary>
+    public void AddDamageReduction(Card card, int amount)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        _damageReductions[card] = GetDamageReduction(card) + amount;
+    }
+
+    /// <summary>读取对该卡伤害的减免量（无登记＝0；默认结算读取）。</summary>
+    public int GetDamageReduction(Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return _damageReductions.TryGetValue(card, out var amount) ? amount : 0;
+    }
 }

@@ -294,7 +294,7 @@ public class EffectRemountAndStrategyTests
     private static int AttackOf(UnitCard unit) => unit.Modifiers.GetEffectiveValue(CardStatFields.Attack);
 
     /// <summary>词条注册（进程级静态注册面；锁保护＋存在性检查——跨测试类共存安全）。</summary>
-    private static void EnsureKeywordRegistered(string keyword, Func<CardBase, int?, KeywordComponent> factory)
+    private static void EnsureKeywordRegistered(string keyword, Func<Card, int?, KeywordComponent> factory)
     {
         lock (KeywordRegistrationGate)
         {
