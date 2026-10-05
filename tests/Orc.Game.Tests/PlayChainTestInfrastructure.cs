@@ -44,14 +44,14 @@ internal static class PlayChainTestKit
     };
 
     /// <summary>创建打出链测试对局（双方轻单位 x10 卡组＋定制定义集；可选目标选择桥接）。</summary>
-    public static Match CreatePlayMatch(MockTargeterBridge? bridge = null, int seed = 42)
+    public static Match CreatePlayMatch(MockTargeterBridge? bridge = null, int seed = 42, bool skipMulligan = true)
         => new(
             new CardList(Enumerable.Repeat(UnitCheapId, 10)),
             new CardList(Enumerable.Repeat(UnitCheapId, 10)),
             CreateDefinitions(),
             seed,
             firstPlayerIndex: null,
-            options: null,
+            options: new MatchOptions { SkipMulligan = skipMulligan },
             targeterBridge: bridge);
 
     /// <summary>实例化＋加载一张定制卡（归属＝player；可选放入手牌——离手/取消断言需要）。</summary>

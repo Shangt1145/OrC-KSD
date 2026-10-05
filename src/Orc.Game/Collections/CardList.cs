@@ -6,7 +6,8 @@ namespace Orc.Game.Collections;
 /// <summary>
 /// 卡牌 id 序列（卡组名单形态；2A 起条目化）：可重复、有序；条目＝id（与卡牌库注册键一致）＋可选加载实例（<see cref="CardBase"/>）。
 /// 对外读面保持 id 形态（Count / 索引 / 枚举＝id；卡组计数语义＝剩余可抽张数、加载不改计数）；实例读面经加载通道
-/// （<see cref="AttachInstanceAt"/> 装配 / <see cref="DrawInstance"/> 取件——「加载时实例化的卡＝对局后续使用的实例」）。
+/// （<see cref="AttachInstanceAt"/> 装配 / <see cref="DrawInstance"/> 取件 / <see cref="PeekInstance"/> 只读读取
+///〔J3 加性——不移除的读点〕——「加载时实例化的卡＝对局后续使用的实例」）。
 /// 纯容器：不校验 id 格式（空白 id 的创建期校验由对局装配层负责）。
 /// 方法语义：Add / AddRange 尾部装填；Insert 指定位置插入（越界抛错）；Draw 取首张并移除（空集合抛错）；
 /// Shuffle 以传入的确定性随机源（受控源形态 <see cref="IRandomSource"/>）就地打乱（Fisher–Yates；集合自身不持有随机源）；
@@ -107,6 +108,30 @@ public sealed class CardList : IReadOnlyList<string>
         }
 
         _items.RemoveAt(0);
+        return entry.Instance;
+    }
+
+    /// <summary>
+    /// 按索引只读读取条目的加载实例（J3 加性——只读读取面；命名/返回/索引参数对称参考 <see cref="CardSet.Peek"/> 先例）：
+    /// 不移除、不改计数（只读、无副作用——对齐既有「加载不改计数」语义；与 <see cref="DrawInstance"/> 的「取件并移除」相对）。
+    /// 用途＝读取指定条目（如索引 0＝卡组顶）的加载实例（「读取不得移除条目」的读点；消费方如卡组顶特点判定）。
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">index 越界（合法范围：0..Count−1——明确拒绝、可区分；读取后集合不变）。</exception>
+    /// <exception cref="InvalidOperationException">该条目未装配加载实例（未加载态经实例通道读取＝明确错误——沿用 DrawInstance「未装配实例＝明确错误」先例）。</exception>
+    public CardBase PeekInstance(int index)
+    {
+        if (index < 0 || index >= _items.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"读取位置越界（合法范围：0..{_items.Count - 1}）。");
+        }
+
+        var entry = _items[index];
+        if (entry.Instance is null)
+        {
+            throw new InvalidOperationException(
+                $"卡组第 {index} 条（id '{entry.Id}'）尚未装配加载实例（未加载态经实例通道读取＝明确错误）。");
+        }
+
         return entry.Instance;
     }
 

@@ -53,6 +53,9 @@ public enum CommandFailureReason
 
     /// <summary>发起拒绝：对局已结束（终局后所有游戏动作入口拒绝——零副作用、状态不推进）。</summary>
     GameEnded,
+
+    /// <summary>发起拒绝：非"进行"相位（准备／换牌相位下指挥入口拒绝——零副作用、状态不推进）。</summary>
+    PhaseBlocked,
 }
 
 /// <summary>

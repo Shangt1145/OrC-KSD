@@ -1,6 +1,12 @@
+using System.Reflection;
+using System.Text.Json;
 using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
+using Orc.Game.Judicators;
+using Orc.Game.Managers;
+using Orc.Game.Output;
+using Orc.Game.Triggers;
 using Xunit;
 
 namespace Orc.Game.Tests;
@@ -167,5 +173,188 @@ public class GameHooksTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitCardDied(engine, null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitUnitJoined(engine, unit, null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => GameUpdates.EmitUnitPositionChanged(engine, unit, null!, line[1]));
+    }
+
+    // ---------- 03-hook定义 S6：清单层 ↔ 代码一致性核对 ----------
+
+    [Fact]
+    public void GameHooks_Reexports_All_GameUpdates_Constants_Without_Copying_Literals()
+    {
+        var constants = typeof(GameUpdates)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (field.Name, Value: (string)field.GetRawConstantValue()!))
+            .ToList();
+
+        var signals = constants.Where(c => !c.Name.StartsWith("Payload", StringComparison.Ordinal))
+            .Select(c => c.Value).ToList();
+        var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
+            .Select(c => c.Value).ToList();
+
+        Assert.Equal(17, signals.Count);
+        Assert.Equal(10, payloadKeys.Count);
+        Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
+            GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
+        Assert.Equal(payloadKeys.OrderBy(v => v, StringComparer.Ordinal),
+            GameHooks.PayloadKeys.OrderBy(v => v, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void GameHooks_Reexports_All_JudicatorNames_And_TriggerLayers()
+    {
+        var names = typeof(JudicatorNames)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToList();
+
+        Assert.Equal(6, names.Count);
+        Assert.Equal(names.OrderBy(v => v, StringComparer.Ordinal),
+            GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal));
+
+        // 装配面：4 内置固定注册段 + 2 外部装配段 = 全量 6
+        Assert.Equal(4, GameHooks.BuiltInJudicatorNames.Count);
+        Assert.Equal(2, GameHooks.ExternalJudicatorNames.Count);
+        Assert.Equal(GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal),
+            GameHooks.BuiltInJudicatorNames.Concat(GameHooks.ExternalJudicatorNames)
+                .OrderBy(v => v, StringComparer.Ordinal));
+
+        Assert.Equal(Enum.GetValues<TriggerLayer>(), GameHooks.TriggerLayers);
+    }
+
+    [Fact]
+    public void Every_Signal_Has_A_Static_Emit_Callpoint()
+    {
+        // 12 条经 GameUpdates.Emit* 助手；5 条 turn.* 经 TurnManager.EmitTurnAsync 直发（无助手）
+        var helpers = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [GameHooks.CardPlayed] = "EmitCardPlayed",
+            [GameHooks.CardDrawn] = "EmitCardDrawn",
+            [GameHooks.CardStatChanged] = "EmitCardStatChanged",
+            [GameHooks.CardLoad] = "EmitCardLoad",
+            [GameHooks.CardHandAdd] = "EmitCardHandAdd",
+            [GameHooks.CardDiscarded] = "EmitCardDiscarded",
+            [GameHooks.CardDied] = "EmitCardDied",
+            [GameHooks.UnitJoined] = "EmitUnitJoined",
+            [GameHooks.UnitDeployed] = "EmitUnitDeployed",
+            [GameHooks.UnitPositionChanged] = "EmitUnitPositionChanged",
+            [GameHooks.DeckShuffled] = "EmitDeckShuffled",
+            [GameHooks.UnitTypesChanged] = "EmitUnitTypesChanged",
+        };
+        var turnSignals = new[]
+        {
+            GameHooks.TurnStartBefore, GameHooks.TurnStart, GameHooks.TurnStartAfter,
+            GameHooks.TurnEndBefore, GameHooks.TurnEnd,
+        };
+
+        Assert.Equal(12, helpers.Count);
+        foreach (var (signal, method) in helpers)
+        {
+            Assert.Contains(signal, GameHooks.Signals);
+            Assert.NotNull(typeof(GameUpdates).GetMethod(method, BindingFlags.Public | BindingFlags.Static));
+        }
+
+        foreach (var signal in turnSignals)
+        {
+            Assert.Contains(signal, GameHooks.Signals);
+        }
+        Assert.NotNull(typeof(TurnManager).GetMethod(
+            "EmitTurnAsync", BindingFlags.NonPublic | BindingFlags.Instance));
+
+        // 12 + 5 = 17，无遗漏、无重复
+        Assert.Equal(GameHooks.Signals.Count,
+            helpers.Keys.Concat(turnSignals).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public async Task Judicator_Assembly_Matches_Initialize_Fixed_Section_Plus_External_Segment()
+    {
+        var match = GameTestData.CreateStandardMatch(seed: 42);
+        await match.Initialize();
+
+        // 固定注册段（Match.Initialize 内置段）：4 条验证类恒可达
+        foreach (var name in GameHooks.BuiltInJudicatorNames)
+        {
+            Assert.NotNull(match.Judicators.Resolve(name));
+        }
+
+        // 外部装配段（judicatorAssembly）：未注入 ⇒ 2 条示范类不可达（fail-fast）
+        foreach (var name in GameHooks.ExternalJudicatorNames)
+        {
+            Assert.Throws<KeyNotFoundException>(() => match.Judicators.Resolve(name));
+        }
+    }
+
+    [Fact]
+    public async Task Trigger_Layers_Are_Wired_To_LowLevel_BuiltIn_Triggers()
+    {
+        var match = GameTestData.CreateStandardMatch(seed: 42);
+        await match.Initialize();
+
+        Assert.Equal(Enum.GetValues<TriggerLayer>(), GameHooks.TriggerLayers);
+
+        Assert.All(match.TriggerRegistry.Entries, entry => Assert.True(Enum.IsDefined(entry.Layer)));
+        // 指挥流程 + 单位移动 + 单位攻击 + 造成攻击伤害（Match.Initialize 注册的 4 个内置流程触发器）
+        Assert.True(match.TriggerRegistry.GetByLayer(TriggerLayer.LowLevel).Count >= 4);
+    }
+
+    [Fact]
+    public void Pending_Layer_Covers_All_27_Kards_Triggers_With_Status()
+    {
+        Assert.Equal(27, GameHooks.PendingTriggers.Count);
+        Assert.Equal(27, GameHooks.PendingTriggers
+            .Select(p => p.KardsTrigger).Distinct(StringComparer.Ordinal).Count());
+
+        Assert.Equal(6, GameHooks.PendingTriggers.Count(p => p.Status == GameHookPendingStatus.Available));
+        Assert.Equal(13, GameHooks.PendingTriggers.Count(p => p.Status == GameHookPendingStatus.Deferred));
+        Assert.Equal(8, GameHooks.PendingTriggers.Count(p => p.Status == GameHookPendingStatus.NotPlanned));
+
+        var flowAllowList = new[] { GameHooks.FlowUnitAttack };
+        foreach (var pending in GameHooks.PendingTriggers)
+        {
+            // 任何对位都必须是「17 信号 或 流程位白名单」之一（防伪对位）
+            Assert.All(pending.OrcCounterparts, counterpart => Assert.True(
+                GameHooks.Signals.Contains(counterpart) || flowAllowList.Contains(counterpart),
+                $"待补项 '{pending.KardsTrigger}' 的对位 '{counterpart}' 不在信号集/流程位白名单内。"));
+
+            if (pending.Status == GameHookPendingStatus.Available)
+            {
+                Assert.NotEmpty(pending.OrcCounterparts);
+            }
+            if (pending.Status == GameHookPendingStatus.NotPlanned)
+            {
+                Assert.Empty(pending.OrcCounterparts);
+            }
+        }
+
+        // 权威清单（docs/kards-diy-可参考语料报告.md §2.1）抽样锚点
+        Assert.Contains(GameHooks.PendingTriggers, p => p.KardsTrigger == "unitDeployed");
+        Assert.Contains(GameHooks.PendingTriggers, p => p.KardsTrigger == "unitMobilized");
+        Assert.Contains(GameHooks.PendingTriggers, p => p.KardsTrigger == "chargeNow");
+    }
+
+    [Fact]
+    public void Exporter_Emits_Parseable_Json_Covering_Signals_Judicators_Layers_And_Pending()
+    {
+        using var document = JsonDocument.Parse(GameHooksJson.Serialize(indented: true));
+        var root = document.RootElement;
+
+        Assert.Equal(17, root.GetProperty("signals").GetArrayLength());
+        Assert.Equal(6, root.GetProperty("judicators").GetArrayLength());
+        Assert.Equal(GameHooks.TriggerLayers.Count, root.GetProperty("triggerLayers").GetArrayLength());
+        Assert.Equal(27, root.GetProperty("pending").GetArrayLength());
+
+        foreach (var signal in root.GetProperty("signals").EnumerateArray())
+        {
+            Assert.False(string.IsNullOrWhiteSpace(signal.GetProperty("name").GetString()));
+            Assert.True(signal.GetProperty("payloadKeys").GetArrayLength() > 0);
+            Assert.True(signal.GetProperty("emitters").GetArrayLength() > 0);
+        }
+
+        foreach (var pending in root.GetProperty("pending").EnumerateArray())
+        {
+            Assert.Contains(pending.GetProperty("orcStatus").GetString(),
+                new[] { "已具备", "后置", "不做" });
+        }
     }
 }

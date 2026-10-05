@@ -53,6 +53,9 @@ public enum PlayFailureReason
 
     /// <summary>对局已结束（终局门禁：打出链各入口拒绝——零副作用、状态不推进）。</summary>
     GameEnded,
+
+    /// <summary>非"进行"相位（相位门禁：准备／换牌相位下打出链各入口拒绝——零副作用、状态不推进）。</summary>
+    PhaseBlocked,
 }
 
 /// <summary>

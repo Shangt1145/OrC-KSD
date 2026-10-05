@@ -1,5 +1,6 @@
 using Orc.Core;
 using Orc.Game.Players;
+using Orc.Game.Targeting;
 using Orc.Game.Triggers;
 
 namespace Orc.Game.Cards;
@@ -52,6 +53,13 @@ public class CommandCard : CardBase
 
     /// <summary>打出触发器（费用校验＋默认链：复验＋宣告＋主动 handler 集＋收尾）。</summary>
     public Trigger<CardTriggerView> PlayTrigger { get; }
+
+    /// <summary>
+    /// 手牌起始指向槽位声明（S2：由指令卡自行声明——基类不持 targeter）：指令＝手牌打出时指向单位/HQ
+    /// （候选域由打出/交互路径填充）；槽位参数＝本卡（起始卡牌）。声明固定、随实例复用。
+    /// </summary>
+    public IReadOnlyList<TargetSlot> HandOriginSlots { get; } =
+        new TargetSlot[] { new SingleSelectSlot(SelectorSlots.HandOrigin) };
 
     /// <summary>
     /// 预打出 handler 装配入口（增强入口；装配/加载阶段注册——本批不设运行期动态注册）：

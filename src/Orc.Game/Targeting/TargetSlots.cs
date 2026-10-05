@@ -17,6 +17,9 @@ public enum TargetSlotKind
 
     /// <summary>卡牌选择器（载荷两形态：名单〔非引用·产出标识〕/ 引用集〔引用·产出卡引用〕；min..max）。</summary>
     CardPicker,
+
+    /// <summary>换牌选择（开局 mulligan 专用：候选＝己方手牌卡引用〔允许集〕、min..max、专属呈现与动画；引用类）。</summary>
+    MulliganSelect,
 }
 
 /// <summary>
@@ -36,6 +39,9 @@ public enum TargetSlotPresentation
 
     /// <summary>卡牌阵列（卡牌选择器：屏幕中央呈现多张卡牌 → 选择 → 确认）。</summary>
     CardArray,
+
+    /// <summary>换牌选择（mulligan 专属呈现：开局换牌的特殊表现与动画——区别于常规手牌选择）。</summary>
+    MulliganSelect,
 }
 
 /// <summary>

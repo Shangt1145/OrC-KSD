@@ -1,0 +1,172 @@
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
+
+namespace Orc.Game.Output;
+
+/// <summary>
+/// 游戏层接入点／信号面导出器（03-hook定义 S5；<c>invariants.json</c> 式映射）。
+/// 风格对齐 <c>src/Orc/Output/*</c>（静态类 + <c>Serialize(...)</c> → string、不写文件），
+/// 但**不复用** <c>Orc.Output.JsonValueWriter</c>——其为 <c>Orc</c> 程序集 <c>internal</c> 且内核本批不触动；
+/// 本导出器自持 <see cref="Utf8JsonWriter"/> 手写写出（定深结构、无递归）。
+/// </summary>
+public static class GameHooksJson
+{
+    /// <summary>序列化为 JSON 文本（确定性；覆盖全部信号、判定器、触发器分层、待补层）。</summary>
+    public static string Serialize(bool indented = false)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = indented }))
+        {
+            writer.WriteStartObject();
+
+            writer.WriteStartArray("signals");
+            foreach (var signal in SignalMetadata)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("name", signal.Name);
+                WriteStringArray(writer, "payloadKeys", signal.PayloadKeys);
+                WriteStringArray(writer, "emitters", signal.Emitters);
+                WriteStringArray(writer, "subscribersHint", signal.SubscribersHint);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("judicators");
+            foreach (var judicator in JudicatorMetadata)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("name", judicator.Name);
+                WriteStringArray(writer, "implementations", judicator.Implementations);
+                writer.WriteBoolean("builtIn", judicator.BuiltIn);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("triggerLayers");
+            foreach (var layer in GameHooks.TriggerLayers)
+            {
+                writer.WriteStringValue(layer.ToString());
+            }
+            writer.WriteEndArray();
+
+            writer.WriteStartArray("pending");
+            foreach (var pending in GameHooks.PendingTriggers)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("kardsTrigger", pending.KardsTrigger);
+                writer.WriteString("orcStatus", pending.StatusText);
+                WriteStringArray(writer, "orcCounterparts", pending.OrcCounterparts);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteStringArray(Utf8JsonWriter writer, string name, IReadOnlyList<string> values)
+    {
+        writer.WriteStartArray(name);
+        foreach (var value in values)
+        {
+            writer.WriteStringValue(value);
+        }
+        writer.WriteEndArray();
+    }
+
+    /// <summary>信号描述（名称／载荷键／发射点〔文件:行·成员〕／订阅者提示）。</summary>
+    private sealed record SignalEntry(
+        string Name,
+        IReadOnlyList<string> PayloadKeys,
+        IReadOnlyList<string> Emitters,
+        IReadOnlyList<string> SubscribersHint);
+
+    /// <summary>判定器描述（名称／实现类／是否内置固定注册段）。</summary>
+    private sealed record JudicatorEntry(
+        string Name,
+        IReadOnlyList<string> Implementations,
+        bool BuiltIn);
+
+    private static readonly IReadOnlyList<string> TurnPayload =
+        [GameHooks.PayloadPlayer, GameHooks.PayloadTurnNumber];
+
+    private static readonly IReadOnlyList<string> CardPlayerPayload =
+        [GameHooks.PayloadCard, GameHooks.PayloadPlayer];
+
+    /// <summary>17 条信号的权威描述表（与 03-hook定义 S2 对齐）。</summary>
+    private static IReadOnlyList<SignalEntry> SignalMetadata { get; } = new[]
+    {
+        new SignalEntry(GameHooks.TurnStartBefore, TurnPayload,
+            ["Managers/TurnManager.cs:100·BeginTurnAsync"], []),
+        new SignalEntry(GameHooks.TurnStart, TurnPayload,
+            ["Managers/TurnManager.cs:101·BeginTurnAsync"],
+            ["Commanding/CommandManager.cs·在场回合数计数"]),
+        new SignalEntry(GameHooks.TurnStartAfter, TurnPayload,
+            ["Managers/TurnManager.cs:111·BeginTurnAsync"], []),
+        new SignalEntry(GameHooks.TurnEndBefore, TurnPayload,
+            ["Managers/TurnManager.cs:86·EndTurn"], []),
+        new SignalEntry(GameHooks.TurnEnd, TurnPayload,
+            ["Managers/TurnManager.cs:87·EndTurn"],
+            ["Cards/KeywordComponents2.cs·回合末词条"]),
+        new SignalEntry(GameHooks.CardPlayed,
+            [GameHooks.PayloadCard, GameHooks.PayloadPlayer],
+            ["Cards/UnitCard.cs:97·HandlePlayChainAsync", "Cards/CommandCard.cs:98·HandlePlayAnnounceAsync"],
+            ["Cards/KeywordComponents2.cs·打出时词条"]),
+        new SignalEntry(GameHooks.CardDrawn,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadCard],
+            ["Managers/PlayerManager.cs:156·DrawCard（烧牌）", "Managers/PlayerManager.cs:162·DrawCard（常规）"],
+            ["Match/MatchCardService.cs·进手牌链路"]),
+        new SignalEntry(GameHooks.CardStatChanged,
+            [GameHooks.PayloadCard, GameHooks.PayloadChangedFields],
+            ["Cards/CardModifierComponent.cs:632·RequestRerunCoreAsync"],
+            ["Commanding/CommandManager.cs·防御归零检查触发器", "Commanding/CommandManager.cs·HQ 归零检查触发器"]),
+        new SignalEntry(GameHooks.CardLoad, CardPlayerPayload,
+            ["Cards/CardBase.cs:177·LoadAsync"], []),
+        new SignalEntry(GameHooks.CardHandAdd, CardPlayerPayload,
+            ["Match/MatchCardService.cs:220·PlaceToHandAsync", "Managers/PlayerManager.cs:163·DrawCard"], []),
+        new SignalEntry(GameHooks.CardDiscarded, CardPlayerPayload,
+            ["Match/MatchCardService.cs:215·PlaceToHandAsync（烧牌）", "Managers/PlayerManager.cs:255·DestroyAndEmitDiscardedAsync"], []),
+        new SignalEntry(GameHooks.CardDied,
+            [GameHooks.PayloadCard],
+            ["Commanding/CommandManager.cs:1349·ProcessDeathAsync"],
+            ["Commanding/CommandManager.cs·守护维护"]),
+        new SignalEntry(GameHooks.UnitJoined,
+            [GameHooks.PayloadUnit, GameHooks.PayloadPosition],
+            ["Cards/UnitCard.cs:159·HandleJoinChainAsync"],
+            ["Commanding/CommandManager.cs·守护维护"]),
+        new SignalEntry(GameHooks.UnitDeployed,
+            [GameHooks.PayloadUnit, GameHooks.PayloadPosition],
+            ["Cards/UnitCard.cs:138·HandleDeployChainAsync"],
+            ["Commanding/CommandManager.cs·守护维护"]),
+        new SignalEntry(GameHooks.UnitPositionChanged,
+            [GameHooks.PayloadUnit, GameHooks.PayloadOldPosition, GameHooks.PayloadNewPosition],
+            ["Commanding/CommandManager.cs:1177·HandleUnitMoveAsync"],
+            ["Commanding/CommandManager.cs·守护维护"]),
+        new SignalEntry(GameHooks.DeckShuffled,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadDeck],
+            ["Match/Match.cs:348·ShuffleDeckAsync"], []),
+        new SignalEntry(GameHooks.UnitTypesChanged,
+            [GameHooks.PayloadUnit, GameHooks.PayloadAddedType],
+            ["Cards/UnitCard.cs:266·AddUnitTypeAsync"], []),
+    };
+
+    /// <summary>6 条判定器的权威描述表（与 03-hook定义 S3-3 对齐）。</summary>
+    private static IReadOnlyList<JudicatorEntry> JudicatorMetadata { get; } = new[]
+    {
+        new JudicatorEntry(GameHooks.JudicatorCostCheck,
+            ["Judicators/CostCheckJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorCounterUse,
+            ["Judicators/CounterUseJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorMoveRecheck,
+            ["Judicators/MoveRevalidationJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorAttackRecheck,
+            ["Judicators/AttackRevalidationJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorDeckTopTag,
+            ["Judicators/DeckTopTagJudicator.cs"], false),
+        new JudicatorEntry(GameHooks.JudicatorTargetCandidateEligibility,
+            ["Judicators/TargetEligibilityJudicator.cs"], false),
+    };
+}

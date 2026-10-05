@@ -12,8 +12,9 @@ namespace Orc.Game.Targeting;
 /// （区别于"场上目标点选"；呈现提示、非策略指令）。
 /// 空允许集＝失败（不进交互——对齐"必须非空槽位空集＝失败"；min=0 的空集边角对齐既有 MultiSelect 语义、不新增特例）。
 /// "己方"由构造方约定（允许集隐含界定）——框架不引入玩家/归属语义（槽位声明不携带归属标识）。
+/// 可派生（库内特化）：<see cref="MulliganSelectSlot"/>（开局换牌——附加专属 Kind/呈现与动画标注）。
 /// </summary>
-public sealed class HandSelectSlot : TargetSlot
+public class HandSelectSlot : TargetSlot
 {
     /// <summary>创建手牌选择槽位。</summary>
     /// <param name="min">至少须选到的个数（≥0；0＝允许空选完成）。</param>

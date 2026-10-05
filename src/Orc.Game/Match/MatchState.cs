@@ -11,4 +11,11 @@ public enum MatchState
 
     /// <summary>结束：HQ≤0 立即终局（状态置结束＋胜者记录；其后所有游戏动作入口拒绝、只读查询面保持可用）。</summary>
     Ended = 2,
+
+    /// <summary>
+    /// 换牌（mulligan；A1 加性——追加于末尾以保持既有值不变）：Initialize 完成装配与起手装载后、
+    /// 双方确认前的相位；动作入口一律拒绝（相位门禁统一经 <see cref="MatchLifecycle.IsActionAllowed"/> 判定）；
+    /// 双方确认后置"进行"并执行先手第 1 回合。
+    /// </summary>
+    Mulligan = 3,
 }

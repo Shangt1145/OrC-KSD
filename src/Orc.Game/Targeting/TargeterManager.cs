@@ -406,6 +406,14 @@ public sealed class TargeterManager
                 break;
         }
 
+        object? parameter = null;
+        var hasParameter = false;
+        if (context is not null && context.TryGetSlotParameter(slot.Name, out var fetchedParameter))
+        {
+            parameter = fetchedParameter;
+            hasParameter = true;
+        }
+
         return new TargetSlotDescription(
             slot.Name,
             slot.Kind,
@@ -414,7 +422,9 @@ public sealed class TargeterManager
             slot.Presentation,
             allowedReferences,
             options,
-            cardListings);
+            cardListings,
+            hasParameter,
+            parameter);
     }
 
     // ---------- 接入面解析（卡 → 玩家 → 目标选择管理器；C2 加性——与 MatchCardService/MatchRandomService.ResolveFor 同构） ----------

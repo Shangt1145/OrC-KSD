@@ -121,14 +121,15 @@ internal static class CommandTestKit
         int seed = 42,
         CardEffectRegistry? effectRegistry = null,
         IEnumerable<CardDefinitionEntry>? extraDefinitions = null,
-        DeploymentLogicRegistry? deploymentLogicRegistry = null)
+        DeploymentLogicRegistry? deploymentLogicRegistry = null,
+        bool skipMulligan = true)
         => new(
             new CardList(Enumerable.Repeat(InfantryId, 10)),
             new CardList(Enumerable.Repeat(InfantryId, 10)),
             CreateDefinitions().Concat(extraDefinitions ?? Enumerable.Empty<CardDefinitionEntry>()),
             seed,
             firstPlayerIndex: null,
-            options: null,
+            options: new MatchOptions { SkipMulligan = skipMulligan },
             targeterBridge: bridge,
             effectRegistry: effectRegistry,
             deploymentLogicRegistry: deploymentLogicRegistry);

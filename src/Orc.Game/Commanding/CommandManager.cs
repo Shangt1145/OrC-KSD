@@ -257,9 +257,11 @@ public sealed class CommandManager
     {
         ArgumentNullException.ThrowIfNull(unit);
 
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null && !_lifecycle.IsActionAllowed)
         {
-            throw new InvalidOperationException("对局已结束（终局），离场动作被拒绝。");
+            throw new InvalidOperationException(_lifecycle.IsEnded
+                ? "对局已结束（终局），离场动作被拒绝。"
+                : "对局不在进行相位（准备/换牌），离场动作被拒绝。");
         }
 
         if (!unit.TryGetData<UnitStateData>(out var state))
@@ -316,9 +318,17 @@ public sealed class CommandManager
         RequireUnitized(unit);
 
         // 终局门禁（后置项 B）：对局已结束＝动作入口拒绝（零副作用、状态不推进；只读查询面不经此入口）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return CommandResult.Failure(CommandFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return CommandResult.Failure(CommandFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return CommandResult.Failure(CommandFailureReason.PhaseBlocked);
+            }
         }
 
         // 发起判定（纯查询、与流程内部同源）
@@ -351,6 +361,164 @@ public sealed class CommandManager
         await CommandTrigger.InvokeAsync(_engine, data, ct);
 
         return box.Result ?? CommandResult.Failure(CommandFailureReason.CommandFlowFault);
+    }
+
+    // ---------- ①′ 独立移动/攻击入口（I3-a：各自跑限定候选交互、复用同一执行链） ----------
+
+    /// <summary>
+    /// 独立移动入口（I3-a；与拖拽入口 <see cref="BeginCommandAsync"/> 共用执行真源）：
+    /// 发起判定（与 <see cref="GetCommandAvailability"/> 同源）→ 限定候选交互（候选＝移动候选＝前线空槽；
+    /// 槽位参数＝本单位〔被拖动单位〕）→ 确认＝复用同一移动执行链（验证→执行→扣费→清位）；
+    /// 取消/发起拒绝＝零副作用（不发更新、不扣费、不清位）；执行复验拒绝＝不消耗行动（不扣费、不清位）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">unit 为 null。</exception>
+    /// <exception cref="InvalidOperationException">单位尚未单位化（装配性错误、fail-fast）。</exception>
+    public async Task<CommandResult> BeginMoveAsync(UnitCard unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        RequireUnitized(unit);
+
+        if (_lifecycle is not null)
+        {
+            if (_lifecycle.IsEnded)
+            {
+                return CommandResult.Failure(CommandFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return CommandResult.Failure(CommandFailureReason.PhaseBlocked);
+            }
+        }
+
+        var availability = GetCommandAvailability(unit);
+        if (availability.IneligibleReason is { } ineligible)
+        {
+            return CommandResult.Failure(MapIneligible(ineligible));
+        }
+
+        if (!availability.Move.CanUse)
+        {
+            return CommandResult.Failure(CommandFailureReason.NoActionAvailable);
+        }
+
+        await using var _actionScope = _engine.BeginAction();
+
+        var (kind, selected, targeting) = await RunSelectorAsync(unit, availability.Move.Candidates, ct);
+        if (kind == SelectorOutcomeKind.Cancelled)
+        {
+            return CommandResult.Cancelled(targeting); // 取消＝零副作用
+        }
+
+        if (kind != SelectorOutcomeKind.Confirmed || selected is null)
+        {
+            return CommandResult.Failure(CommandFailureReason.TargetingFailed, targeting);
+        }
+
+        var box = new CommandFlowBox();
+        await DispatchMoveAsync(unit, selected, box, new Context(), ct, triggerCard: null);
+        return box.Result ?? CommandResult.Failure(CommandFailureReason.CommandFlowFault);
+    }
+
+    /// <summary>
+    /// 独立攻击入口（I3-a；与拖拽入口 <see cref="BeginCommandAsync"/> 共用执行真源）：
+    /// 发起判定（与 <see cref="GetCommandAvailability"/> 同源）→ 限定候选交互（候选＝攻击候选＝合法敌方单位/敌方 HQ；
+    /// 槽位参数＝本单位〔被拖动单位〕）→ 确认＝复用同一攻击执行链（验证→执行→扣费→清位）；
+    /// 取消/发起拒绝＝零副作用；执行复验拒绝＝不消耗行动（不扣费、不清位）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">unit 为 null。</exception>
+    /// <exception cref="InvalidOperationException">单位尚未单位化（装配性错误、fail-fast）。</exception>
+    public async Task<CommandResult> BeginAttackAsync(UnitCard unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        RequireUnitized(unit);
+
+        if (_lifecycle is not null)
+        {
+            if (_lifecycle.IsEnded)
+            {
+                return CommandResult.Failure(CommandFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return CommandResult.Failure(CommandFailureReason.PhaseBlocked);
+            }
+        }
+
+        var availability = GetCommandAvailability(unit);
+        if (availability.IneligibleReason is { } ineligible)
+        {
+            return CommandResult.Failure(MapIneligible(ineligible));
+        }
+
+        if (!availability.Attack.CanUse)
+        {
+            return CommandResult.Failure(CommandFailureReason.NoActionAvailable);
+        }
+
+        await using var _actionScope = _engine.BeginAction();
+
+        var (kind, selected, targeting) = await RunSelectorAsync(unit, availability.Attack.Candidates, ct);
+        if (kind == SelectorOutcomeKind.Cancelled)
+        {
+            return CommandResult.Cancelled(targeting); // 取消＝零副作用
+        }
+
+        if (kind != SelectorOutcomeKind.Confirmed || selected is null)
+        {
+            return CommandResult.Failure(CommandFailureReason.TargetingFailed, targeting);
+        }
+
+        var box = new CommandFlowBox();
+        await DispatchAttackAsync(unit, selected, box, new Context(), ct, triggerCard: null);
+        return box.Result ?? CommandResult.Failure(CommandFailureReason.CommandFlowFault);
+    }
+
+    /// <summary>
+    /// 限定候选交互（独立入口共用；场景＝场上单位指向）：单选槽（槽位参数＝被拖动单位）＋候选集合粗筛；
+    /// 一次 Begin 一次 Complete 按槽位名回填（沿用既有桥接契约）。取消/失败经三态类别表达。
+    /// </summary>
+    private async Task<(SelectorOutcomeKind Kind, Ref<Entity>? Selected, TargetingResult? Result)> RunSelectorAsync(
+        UnitCard unit, IReadOnlyList<Ref<Entity>> candidates, CancellationToken ct)
+    {
+        var allowedSet = new HashSet<Ref<Entity>>(candidates);
+        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
+        var slot = new SingleSelectSlot(SelectorSlots.FieldUnit);
+        var context = new TargetingRequestContext().WithSlotParameter(SelectorSlots.FieldUnit, unit);
+        var targeter = _targeterManager.CreateTargeter(filter, new TargetSlot[] { slot }, context);
+        var targeting = await targeter.Targeting();
+
+        if (targeting.Status == TargetingStatus.Cancelled)
+        {
+            return (SelectorOutcomeKind.Cancelled, null, targeting);
+        }
+
+        if (targeting.Status != TargetingStatus.Success)
+        {
+            return (SelectorOutcomeKind.Failed, null, targeting);
+        }
+
+        var selected = targeting.Outcome!.Single;
+        if (selected is null || !selected.IsAlive)
+        {
+            return (SelectorOutcomeKind.Failed, null, targeting);
+        }
+
+        return (SelectorOutcomeKind.Confirmed, selected, targeting);
+    }
+
+    /// <summary>独立入口选择结局（内部；三态）。</summary>
+    private enum SelectorOutcomeKind
+    {
+        /// <summary>确认（携带选中引用）。</summary>
+        Confirmed,
+
+        /// <summary>取消（前端主动；零副作用）。</summary>
+        Cancelled,
+
+        /// <summary>失败（无可用候选/交互异常等；细节经结果对象透传）。</summary>
+        Failed,
     }
 
     // ---------- ② 动作可用性聚合判定（公开面；纯查询、与流程内部同源） ----------

@@ -222,7 +222,7 @@ public sealed class Hq : Card
             return; // 防御降级：脱局（无对局服务）＝静默跳过（不发射、不抛错）
         }
 
-        lifecycle.End(winner);
+        lifecycle.End(winner, MatchEndReason.HqZero);
     }
 
     private static string NameOf(Player owner)

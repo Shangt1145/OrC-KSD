@@ -22,6 +22,7 @@ public sealed class TargetingRequestContext
     private readonly Dictionary<string, IReadOnlyList<Ref<Entity>>> _referencesBySlot = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<Ref<Entity>, bool>> _validatorsBySlot = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<CardListing>> _listingsBySlot = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, object?> _parametersBySlot = new(StringComparer.Ordinal);
 
     /// <summary>创建空请求上下文（按需经 With 系列方法绑定槽位数据）。</summary>
     public TargetingRequestContext()
@@ -121,11 +122,44 @@ public sealed class TargetingRequestContext
         return this;
     }
 
+    /// <summary>
+    /// 绑定槽位参数（请求级；如"起始卡牌"实例）——随请求描述（<see cref="TargetSlotDescription.Parameter"/>）交付前端，
+    /// 供前端还原交互起点（呈现/引导提示）；纯交付数据、不参与后端校验。
+    /// 与既有三类绑定同构：请求构造期绑定、按槽位名、请求结束即弃。
+    /// </summary>
+    /// <param name="slotName">槽位名（须与声明槽位名一致；归一口径同槽位）。</param>
+    /// <param name="value">参数值（可为 null——仍视为"已绑定"，与未绑定区分）。</param>
+    /// <returns>本上下文（链式绑定）。</returns>
+    /// <exception cref="ArgumentException">slotName 为 null/空白；该槽位已绑定参数（重复绑定被拒绝）。</exception>
+    public TargetingRequestContext WithSlotParameter(string slotName, object? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(slotName);
+
+        if (_parametersBySlot.ContainsKey(slotName))
+        {
+            throw new ArgumentException($"槽位 '{slotName}' 的参数已绑定（重复绑定被拒绝）。", nameof(slotName));
+        }
+
+        _parametersBySlot.Add(slotName, value);
+        return this;
+    }
+
     // ---------- 框架内部读面 ----------
 
-    /// <summary>已绑定的槽位名（三类绑定的并集；构造期校验用）。</summary>
+    /// <summary>已绑定的槽位名（四类绑定的并集；构造期校验用）。</summary>
     internal IEnumerable<string> BoundSlotNames
-        => _referencesBySlot.Keys.Concat(_validatorsBySlot.Keys).Concat(_listingsBySlot.Keys).Distinct();
+        => _referencesBySlot.Keys
+            .Concat(_validatorsBySlot.Keys)
+            .Concat(_listingsBySlot.Keys)
+            .Concat(_parametersBySlot.Keys)
+            .Distinct();
+
+    /// <summary>是否绑定了槽位参数。</summary>
+    internal bool HasSlotParameter(string slotName) => _parametersBySlot.ContainsKey(slotName);
+
+    /// <summary>尝试读取槽位参数（已绑定＝true；参数值本身可为 null）。</summary>
+    internal bool TryGetSlotParameter(string slotName, out object? value)
+        => _parametersBySlot.TryGetValue(slotName, out value);
 
     /// <summary>是否绑定了槽位引用集。</summary>
     internal bool HasReferences(string slotName) => _referencesBySlot.ContainsKey(slotName);

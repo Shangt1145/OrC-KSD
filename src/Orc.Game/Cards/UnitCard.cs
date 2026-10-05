@@ -1,6 +1,7 @@
 using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Players;
+using Orc.Game.Targeting;
 using Orc.Game.Triggers;
 
 namespace Orc.Game.Cards;
@@ -73,6 +74,13 @@ public class UnitCard : CardBase
 
     /// <summary>单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位）。</summary>
     public Trigger<CardTriggerView> UnitizeTrigger { get; }
+
+    /// <summary>
+    /// 手牌起始指向槽位声明（S2：由单位卡自行声明——基类不持 targeter）：单位＝手牌打出时指向空槽
+    /// （候选域由打出路径填充）；槽位参数＝本卡（起始卡牌）。声明固定、随实例复用。
+    /// </summary>
+    public IReadOnlyList<TargetSlot> HandOriginSlots { get; } =
+        new TargetSlot[] { new SingleSelectSlot(SelectorSlots.HandOrigin) };
 
     // ---------- 默认链（构造期装配；链只经公开触发器面驱动） ----------
 

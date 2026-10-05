@@ -23,4 +23,14 @@ public static class JudicatorNames
 
     /// <summary>攻击复验（单位攻击验证点专属；执行前兜底复验——与移动复验相互独立改写）。</summary>
     public const string AttackRecheck = "validation.attack.recheck";
+
+    // ---------- J3（两示范落地）：示范判定器（两条；注册经既有装配期注册面〔外部装配段〕——见 J3 实现记录） ----------
+
+    /// <summary>卡组顶特点判定（示范①；签名＝（玩家，特点标识）→ bool）：默认按真实卡组顶求值（TagData 开放 tag）；
+    /// 卡组空＝不满足（false 降级）；恒真/恒假改写经 moding（全局生效）、注销回退。</summary>
+    public const string DeckTopTag = "deck.top.tag";
+
+    /// <summary>目标候选合法性判定（示范②；签名＝（候选引用）→ bool）：默认规则＝在场单位可选；
+    /// 改写用例＝允许/禁止某类目标可选（经 moding 整体更换选择规则）。</summary>
+    public const string TargetCandidateEligibility = "targeting.candidate.eligibility";
 }

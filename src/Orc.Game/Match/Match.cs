@@ -54,6 +54,7 @@ public sealed class Match
     private readonly PlayerDeckConfiguration? _deckConfigForPlayerB; // S10：玩家B 构筑配置
     private readonly Action<JudicatorRegistry>? _judicatorAssembly; // J1：判定器装配段（对局装配期一次性执行判定器注册——注册表创建之后、卡加载之前）
     private readonly MatchLifecycle _lifecycle = new();
+    private MulliganManager? _mulliganManager; // A1：换牌管理器（换牌相位承载——Initialize 内创建）
     private GameEnvironment? _environment; // W3-1 G4：游戏环境（对局装配期创建；多对局相互独立）
     private MatchCardService? _cardService; // S9：对局卡牌服务（服务面——卡牌工厂＋放置面；对局装配期创建）
     private MatchHistoryService? _historyService; // S10：对局历史读取服务（最小历史读取面；对局装配期创建）
@@ -149,14 +150,30 @@ public sealed class Match
     /// <summary>对局引擎（公开；外部经此访问总线/总流以订阅更新——订阅须在 <see cref="Initialize"/> 前挂接）。</summary>
     public LogicEngine Engine { get; }
 
-    /// <summary>对局状态（准备 / 进行 / 结束——经生命周期对象读；"结束"＝HQ≤0 立即终局，不可逆）。</summary>
+    /// <summary>对局状态（准备 / 换牌 / 进行 / 结束——经生命周期对象读；"结束"＝HQ≤0 或认输立即终局，不可逆）。</summary>
     public MatchState State => _lifecycle.State;
+
+    /// <summary>
+    /// 对局相位（R1 公开读面；**派生投影**——单一真源＝<see cref="State"/>，不独立存储以避免双真源）：
+    /// 换牌／进行／结束；准备态读取＝抛错（未就绪——沿用管理器门禁模式）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未就绪（准备态——须先成功完成 Initialize）。</exception>
+    public MatchPhase Phase => State switch
+    {
+        MatchState.Mulligan => MatchPhase.Mulligan,
+        MatchState.InProgress => MatchPhase.Play,
+        MatchState.Ended => MatchPhase.Ended,
+        _ => throw new InvalidOperationException("对局尚未就绪：相位不可用（须先成功完成 Initialize）。"),
+    };
 
     /// <summary>
     /// 胜者（只读面；仅终局后非 null：＝使对方 HQ 归零的一方；非终局＝null）。
     /// 平局不处理（本批无同时归零路径、不定义平局值）。
     /// </summary>
     public Player? Winner => _lifecycle.Winner;
+
+    /// <summary>终局原因（只读面；仅终局后非 null——HQ 归零／认输，与胜者并列记录）。</summary>
+    public MatchEndReason? EndReason => _lifecycle.EndReason;
 
     /// <summary>本次实际使用的随机种子（传入则＝传入值；未传入则＝自动生成值，支撑事后复现）。</summary>
     public int Seed { get; }
@@ -206,6 +223,13 @@ public sealed class Match
     /// </summary>
     /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
     public PlayManager PlayManager => RequireReady(_playManager);
+
+    /// <summary>
+    /// 换牌管理器（A1；开局换牌相位的承载）：换牌交互与"该方是否已确认"读面；
+    /// 随管理器群在 Initialize 内加性生成；准备态访问＝抛错（沿用管理器门禁模式）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入就绪相位。</exception>
+    public MulliganManager MulliganManager => RequireReady(_mulliganManager);
 
     /// <summary>
     /// 指挥管理器（2C 加性：指挥流程入口 / 动作可用性聚合判定 / 移动·攻击触发器 / 「造成攻击伤害」共享触发器 /
@@ -558,13 +582,98 @@ public sealed class Match
         // 打出管理器（2B 加性：随管理器群生成——打出链服务与交互入口；回合管理器为反制「仅己方回合」真源；
         // 后置项 B 加性：注入对局生命周期——终局门禁）
         _playManager = new PlayManager(Engine, _targeterManager, _battlefieldManager.Battlefield, _turnManager, _lifecycle);
-        await _turnManager.StartFirstTurn(firstPlayer, ct);
 
-        _lifecycle.MarkInProgress();
+        // A1 加性：换牌管理器（开局换牌相位承载——特制槽位交互＋换牌执行；双方确认＝执行先手第 1 回合＋置"进行"）
+        var turnManager = _turnManager!;
+        var playerManager = _playerManager!;
+        var targeterManager = _targeterManager!;
+        var cardService = _cardService!;
+        _mulliganManager = new MulliganManager(
+            Engine,
+            targeterManager,
+            playerManager,
+            _randomService,
+            _lifecycle,
+            card => cardService.TryResolveDefinitionId(card, out var definitionId) ? definitionId : null,
+            async enterCt =>
+            {
+                await turnManager.StartFirstTurn(firstPlayer, enterCt);
+                _lifecycle.MarkInProgress();
+            });
+
+        if (_options.SkipMulligan)
+        {
+            // 无换牌装配（既有序列）：先手回合开始序列 → 置"进行"
+            await turnManager.StartFirstTurn(firstPlayer, ct);
+            _lifecycle.MarkInProgress();
+        }
+        else
+        {
+            // A1 受控变更（缺省）：置"换牌"相位——先手回合延后至双方确认（见 MulliganManager）
+            _lifecycle.MarkMulligan();
+        }
     }
 
-    /// <summary>结束回合（主路径；无参、自动取当前行动方；仅"进行"态可调用；终局后拒绝）。</summary>
-    /// <exception cref="InvalidOperationException">对局已结束（终局，不能推进回合）；或对局尚未进入"进行"态（准备态推进被拒绝）。</exception>
+    // ---------- 对局全流程动作面（A1：开局换牌／认输） ----------
+
+    /// <summary>
+    /// 开局换牌（A1；M2=a 唯一对外换牌入口）：仅"换牌"相位且该方未确认——
+    /// 经**特制槽位**（<see cref="Targeting.MulliganSelectSlot"/>；M1=b：专用 Kind／呈现标注供前端播放专属动画；
+    /// 槽位参数＝该玩家）交互选择退回卡组的手牌（0..手牌数）；确认＝换牌（重洗恰一条 deck.shuffled、抽等量静默）
+    /// 并**自动确认该方**；取消＝零副作用；空手牌＝零交互直接确认。
+    /// 双方确认＝置"进行"并执行先手第 1 回合。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">player 为 null。</exception>
+    /// <exception cref="InvalidOperationException">对局尚未就绪（换牌管理器未装配）。</exception>
+    /// <exception cref="ArgumentException">指定玩家不属于本对局。</exception>
+    public Task<MulliganResult> BeginMulliganAsync(Player player, CancellationToken ct = default)
+        => MulliganManager.BeginMulliganAsync(player, ct);
+
+    /// <summary>
+    /// 确认换牌（不换牌直接确认；M2=a 第二入口）：语义同 <see cref="BeginMulliganAsync"/> 的确认段——
+    /// 仅"换牌"相位且该方未确认；双方确认＝置"进行"并执行先手第 1 回合；重复确认＝明确拒绝（零副作用）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">player 为 null。</exception>
+    /// <exception cref="InvalidOperationException">对局尚未就绪（换牌管理器未装配）。</exception>
+    /// <exception cref="ArgumentException">指定玩家不属于本对局。</exception>
+    public Task<MulliganResult> MulliganDone(Player player, CancellationToken ct = default)
+        => MulliganManager.ConfirmAsync(player, ct);
+
+    /// <summary>
+    /// 认输（A1／S3）：仅"进行"相位；置**对手为胜者**、相位置"结束"——与 HQ≤0 **共用同一"置结束"单源路径**
+    /// （<see cref="MatchLifecycle.End"/>；原因＝<see cref="MatchEndReason.Concede"/>）。
+    /// 重复认输／非进行相位＝明确拒绝（零副作用、状态不推进）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">player 为 null。</exception>
+    /// <exception cref="InvalidOperationException">对局尚未就绪（玩家管理器不可用）。</exception>
+    /// <exception cref="ArgumentException">指定玩家不属于本对局。</exception>
+    public ConcedeResult Concede(Player player, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(player);
+
+        var players = PlayerManager.Players; // 就绪门禁（未 Initialize＝抛错）
+        if (!players.Contains(player))
+        {
+            throw new ArgumentException("指定玩家不属于本对局（认输被拒绝）。", nameof(player));
+        }
+
+        if (_lifecycle.IsEnded)
+        {
+            return ConcedeResult.Rejected(ConcedeFailureReason.GameEnded);
+        }
+
+        if (!_lifecycle.IsActionAllowed)
+        {
+            return ConcedeResult.Rejected(ConcedeFailureReason.PhaseBlocked);
+        }
+
+        var opponent = players[(player.Index + 1) % 2];
+        _lifecycle.End(opponent, MatchEndReason.Concede);
+        return ConcedeResult.Accepted();
+    }
+
+    /// <summary>结束回合（主路径；无参、自动取当前行动方；仅"进行"态可调用；准备/换牌/终局后拒绝）。</summary>
+    /// <exception cref="InvalidOperationException">对局已结束（终局）；或对局不在"进行"相位（准备/换牌推进被拒绝）。</exception>
     public async Task EndTurn(CancellationToken ct = default)
     {
         if (State == MatchState.Ended)
@@ -574,7 +683,9 @@ public sealed class Match
 
         if (State != MatchState.InProgress)
         {
-            throw new InvalidOperationException("对局尚未进入'进行'态，不能推进回合（须先成功完成 Initialize）。");
+            throw new InvalidOperationException(State == MatchState.Mulligan
+                ? "对局处于换牌（mulligan）相位，不能推进回合（须先由双方确认）。"
+                : "对局尚未进入'进行'态，不能推进回合（须先成功完成 Initialize）。");
         }
 
         // 动作作用域（UI 消费桥接）：结束回合链产生的事件聚合为一段。

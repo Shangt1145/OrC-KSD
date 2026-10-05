@@ -76,9 +76,17 @@ public sealed class PlayManager
         var owner = RequireOwner(card);
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（不触发预打出、不发起 targeter 请求、零副作用）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return PlayResult.Failure(PlayFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return PlayResult.Failure(PlayFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return PlayResult.Failure(PlayFailureReason.PhaseBlocked);
+            }
         }
 
         // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段（外层优先——内部衔接的打出链合并入本段）。
@@ -91,6 +99,7 @@ public sealed class PlayManager
             {
                 [GameUpdates.PayloadCard] = card,
                 [GameUpdates.PayloadPlayer] = owner,
+                [nameof(CardTriggerView.SelectorSlots)] = card.HandOriginSlots,
             },
             ct);
 
@@ -153,9 +162,17 @@ public sealed class PlayManager
         var owner = RequireOwner(card);
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return PlayResult.Failure(PlayFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return PlayResult.Failure(PlayFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return PlayResult.Failure(PlayFailureReason.PhaseBlocked);
+            }
         }
 
         if (!target.IsEmpty)
@@ -203,9 +220,17 @@ public sealed class PlayManager
         ArgumentNullException.ThrowIfNull(target);
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return PlayResult.Failure(PlayFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return PlayResult.Failure(PlayFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return PlayResult.Failure(PlayFailureReason.PhaseBlocked);
+            }
         }
 
         if (!target.IsEmpty)
@@ -238,27 +263,49 @@ public sealed class PlayManager
         };
     }
 
-    // ---------- ④ 指令（预打出→打出；一次调用链，自动衔接） ----------
+    // ---------- ④ 指令（统一两段式「预行为」：预打出→打出；确认自动衔接） ----------
 
     /// <summary>
-    /// 指令打出（一次调用链，自动衔接）：
+    /// 指令预行为入口（统一两段式「预行为」形态；S4）：UI 只调本入口——引擎在入口内完成验证与交互编排，
+    /// 桥接确认/取消应答驱动后续执行链；不暴露第二段执行 API（与单位 <see cref="BeginUnitPrePlayAsync"/> 同形）。
     /// ①预打出段：触发预打出触发器（内含指挥点验证——不足＝拒绝）；执行预打出 handler 集（装配期注册；登记序；
     ///   异常沿用引擎隔离；捕获经 <see cref="CardCaptureBox"/> 提交；取消经 <see cref="CardCaptureBox.CancelPrePlay"/> 显式请求）；
-    /// ②打出段：触发打出触发器（复验指挥点）——card.played → 主动 handler 集（登记序）→ 收尾（扣费→离手）；
+    ///   选择器槽位声明（<c>SelectorSlots</c>）随触发数据提供，交互经桥接应答驱动；
+    /// ②打出段（确认后自动衔接）：触发打出触发器（复验指挥点）——card.played → 主动 handler 集（登记序）→ 收尾（扣费→离手）；
     ///   捕获结果自动移交为 object? 参数（单引用/列表/targeter 皆可承载）。
     /// 预打出段失败/取消 ⇒ 打出不发生（零副作用——不发更新、卡留手、无扣费/离手）。
     /// </summary>
     /// <exception cref="ArgumentNullException">card 为 null。</exception>
     /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
-    public async Task<PlayResult> PlayCommandAsync(CommandCard card, CancellationToken ct = default)
+    public Task<PlayResult> BeginCommandPrePlayAsync(CommandCard card, CancellationToken ct = default)
+        => RunCommandChainAsync(card, ct);
+
+    /// <summary>
+    /// 指令打出（兼容入口；受控变更登记：原对外形态保留、内部收敛到预行为入口 <see cref="BeginCommandPrePlayAsync"/>，
+    /// 行为不变——同一实现、一次调用链）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
+    public Task<PlayResult> PlayCommandAsync(CommandCard card, CancellationToken ct = default)
+        => RunCommandChainAsync(card, ct);
+
+    private async Task<PlayResult> RunCommandChainAsync(CommandCard card, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return PlayResult.Failure(PlayFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return PlayResult.Failure(PlayFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return PlayResult.Failure(PlayFailureReason.PhaseBlocked);
+            }
         }
 
         // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段（预打出段＋打出段合并入本段）。
@@ -273,6 +320,7 @@ public sealed class PlayManager
                 [GameUpdates.PayloadCard] = card,
                 [GameUpdates.PayloadPlayer] = owner,
                 [nameof(CardTriggerView.CaptureBox)] = captureBox,
+                [nameof(CardTriggerView.SelectorSlots)] = card.HandOriginSlots,
             },
             ct);
 
@@ -326,9 +374,17 @@ public sealed class PlayManager
         var owner = RequireOwner(card);
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（激活/取消均拒绝；零副作用、状态不推进）
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null)
         {
-            return PlayResult.Failure(PlayFailureReason.GameEnded);
+            if (_lifecycle.IsEnded)
+            {
+                return PlayResult.Failure(PlayFailureReason.GameEnded);
+            }
+
+            if (!_lifecycle.IsActionAllowed)
+            {
+                return PlayResult.Failure(PlayFailureReason.PhaseBlocked);
+            }
         }
 
         if (_turnManager is null)

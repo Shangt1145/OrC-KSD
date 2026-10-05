@@ -70,9 +70,11 @@ public sealed class TurnManager
     /// <exception cref="InvalidOperationException">对局已结束（终局，不能推进回合）；或回合尚未开始，不能结束回合。</exception>
     public async Task EndTurn(CancellationToken ct = default)
     {
-        if (_lifecycle?.IsEnded == true)
+        if (_lifecycle is not null && !_lifecycle.IsActionAllowed)
         {
-            throw new InvalidOperationException("对局已结束（终局），不能推进回合。");
+            throw new InvalidOperationException(_lifecycle.IsEnded
+                ? "对局已结束（终局），不能推进回合。"
+                : "对局不在进行相位（准备/换牌），不能推进回合。");
         }
 
         if (_currentPlayer is null)

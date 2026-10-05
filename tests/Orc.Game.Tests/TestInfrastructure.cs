@@ -2,6 +2,7 @@ using Orc.Core;
 using Orc.Game;
 using Orc.Game.Cards;
 using Orc.Game.Collections;
+using Orc.Game.Managers;
 using Orc.Game.Targeting;
 
 namespace Orc.Game.Tests;
@@ -28,14 +29,28 @@ internal static class GameTestData
     public static CardList CreateDeck(int count = StandardDeckSize)
         => new(Enumerable.Range(1, count).Select(i => $"c{i:D2}"));
 
-    /// <summary>标准对局：双方标准卡组＋标准定义集；默认种子 42、默认先手＝玩家A；可选目标选择桥接（第六员装配输入）。</summary>
+    /// <summary>标准对局：双方标准卡组＋标准定义集；默认种子 42、默认先手＝玩家A；可选目标选择桥接（第六员装配输入）。
+    /// A1 随改：缺省装配 <c>SkipMulligan=true</c>（既有 setup 保持"Initialize 后即进行"）；
+    /// <paramref name="skipMulligan"/>=false 供换牌（mulligan）相位用例使用。</summary>
     public static Match CreateStandardMatch(
         int? seed = 42,
         int? firstPlayerIndex = null,
         MatchOptions? options = null,
         int deckSize = StandardDeckSize,
-        ITargeterBridge? targeterBridge = null)
-        => new(CreateDeck(deckSize), CreateDeck(deckSize), CreateDefinitions(deckSize), seed, firstPlayerIndex, options, targeterBridge);
+        ITargeterBridge? targeterBridge = null,
+        bool skipMulligan = true)
+        => new(
+            CreateDeck(deckSize),
+            CreateDeck(deckSize),
+            CreateDefinitions(deckSize),
+            seed,
+            firstPlayerIndex,
+            new MatchOptions
+            {
+                MaxPointSlots = options?.MaxPointSlots ?? ResourceManager.DefaultMaxPointSlots,
+                SkipMulligan = skipMulligan,
+            },
+            targeterBridge);
 }
 
 /// <summary>更新记录器：经 <see cref="LogicEngine.Subscribe"/> 挂接（测试订阅渠道），记录更新类型与载荷（注册序）。</summary>

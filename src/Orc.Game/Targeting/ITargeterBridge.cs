@@ -132,7 +132,9 @@ public sealed class TargetSlotDescription
         TargetSlotPresentation presentation,
         IReadOnlyList<Ref<Entity>>? allowedReferences,
         IReadOnlyList<OptionEntry>? options,
-        IReadOnlyList<CardListing>? cardListings)
+        IReadOnlyList<CardListing>? cardListings,
+        bool hasParameter = false,
+        object? parameter = null)
     {
         Name = name;
         Kind = kind;
@@ -142,6 +144,8 @@ public sealed class TargetSlotDescription
         AllowedReferences = allowedReferences;
         Options = options;
         CardListings = cardListings;
+        HasParameter = hasParameter;
+        Parameter = parameter;
     }
 
     /// <summary>槽位名（缺省槽位＝<see cref="TargetSlot.DefaultName"/>；提交键须与之一致）。</summary>
@@ -171,4 +175,13 @@ public sealed class TargetSlotDescription
 
     /// <summary>卡牌名单条目（卡牌选择器〔名单形态〕：定义级标识＋可读名称——屏中卡牌阵列要素；其余槽位类别＝null）。</summary>
     public IReadOnlyList<CardListing>? CardListings { get; }
+
+    /// <summary>是否携带槽位参数（请求级交付数据；<see cref="Parameter"/> 为 null 时仍可与"未绑定"区分）。</summary>
+    public bool HasParameter { get; }
+
+    /// <summary>
+    /// 槽位参数（请求级交付数据；如"起始卡牌"实例）——供前端还原交互起点（呈现/引导提示、非策略指令）；
+    /// 未绑定＝<see cref="HasParameter"/>＝false。纯交付数据、不参与后端校验。
+    /// </summary>
+    public object? Parameter { get; }
 }

@@ -1,6 +1,7 @@
 using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
+using Orc.Game.Targeting;
 
 namespace Orc.Game.Triggers;
 
@@ -37,4 +38,13 @@ public class CardTriggerView
     [Optional]
     [Read]
     public virtual object? Argument { get; set; }
+
+    /// <summary>
+    /// 选择器槽位声明（可选；S3 加性扩展）：本卡在预打出阶段可用的选择器槽位（由打出链自卡牌声明注入——
+    /// 单位/指令各自声明；装配方预打出 handler 据此发起交互；槽位参数经交互请求描述交付前端）。
+    /// 空＝本卡预打出无选择器需求（沿用默认无交互、零更新）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual IReadOnlyList<TargetSlot>? SelectorSlots { get; set; }
 }
