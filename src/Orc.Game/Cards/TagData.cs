@@ -4,7 +4,9 @@ namespace Orc.Game.Cards;
 /// 国籍 / 阵营枚举（KARDS 已知国家全量 11 值；W1-1 G12 引入）。
 /// 成员清单与来源数据（docs/kards官方卡牌.json）faction 字段一致——Germany / Soviet / USA / Britain / Japan /
 /// France / Italy / Poland / Finland / Anzac / Neutral；五大主国（德国/苏联/美国/英国/日本）在内。
-/// 用途：卡牌定义的必填槽位值域（<see cref="CardDefinition.Faction"/>）；「日本精英空军」式组合筛选的维度之一。
+/// 用途：卡牌定义的必填槽位值域（<see cref="CardDefinition.Faction"/>）；「主国牌」「日本精英空军」式组合筛选的维度之一。
+/// S10 起：作为卡牌实例「国籍」的读取面承载于【阵营〔国籍〕＋部署费】合并组件（<see cref="FactionCostData"/>）——
+/// 不再经 <see cref="TagData"/> 承载（国籍槽位自 TagData 移出；单一真源）。
 /// </summary>
 public enum Faction
 {
@@ -64,9 +66,11 @@ public enum Rarity
 
 /// <summary>
 /// 强类型槽位（W1-1 G12；泛型约束形态＝<c>where TTag : struct, Enum</c>）：以泛型参数承载槽位值域，
-/// 不同槽位（国籍 / 稀有度）为不同类型、彼此不可混用（强类型约束）。
+/// 不同槽位（如国籍 / 稀有度）为不同类型、彼此不可混用（强类型约束）。
 /// 值恒有且只读：构造即固定（<see cref="Value"/> 无写面）——实例侧只读（本批不支持运行时修改）。
 /// fail-fast：未定义枚举值在构造期被拒绝（沿用既有 Enum 校验风格）。
+/// S10 起：本类型由 <see cref="TagData"/> 的稀有度槽位使用（国籍槽位自 TagData 移出——国籍承载于
+/// <see cref="FactionCostData"/> 合并组件、经受控写面可修改，不再经只读槽位承载）。
 /// </summary>
 /// <typeparam name="TTag">槽位值域枚举（值类型枚举）。</typeparam>
 public sealed class TagSlot<TTag>
@@ -91,8 +95,9 @@ public sealed class TagSlot<TTag>
 
 /// <summary>
 /// 卡牌标签数据组件（W1-1 G12；以引擎数据组件形态挂载——加载时装配、<c>GetData&lt;T&gt;</c> 读取）：
-/// ① 必填强类型槽位：国籍（<see cref="TagSlot{T}"/> of <see cref="Faction"/>）＋ 稀有度（<see cref="TagSlot{T}"/> of <see cref="Rarity"/>）——
-///    恒有值且实例侧只读（随定义声明固定；本批不支持运行时修改）；
+/// ① 必填强类型槽位：稀有度（<see cref="TagSlot{T}"/> of <see cref="Rarity"/>）——恒有值且实例侧只读
+///    （随定义声明固定；本批不支持运行时修改）。S10 起：国籍槽位自本组件移出——国籍承载于
+///    【阵营〔国籍〕＋部署费】合并组件（<see cref="FactionCostData"/>；可修改形态）；本组件槽位集＝稀有度。
 /// ② 开放 tag 集合（子类别：海军 / T-34 / 谢尔曼等）：平等的一组开放 tag 值（单一「子类别」性质集合、不另立命名维度）；
 ///    完全开放值域（任意非空白字符串可增删、无受控清单）；支持运行时增删（作用于目标卡牌实例、不影响定义与同定义的其它实例）；
 ///    增删为静默数据变更（不产生任何更新 / 通知——无消费方，读取与筛选随动即观测面）。
@@ -104,21 +109,14 @@ public sealed class TagData
     private readonly List<string> _tags = new();
 
     /// <summary>创建标签数据（槽位值经 <see cref="TagSlot{T}"/> 装配与校验；开放 tag 初始为空——后续经 <see cref="AddTag"/> 登记）。</summary>
-    /// <exception cref="ArgumentOutOfRangeException">faction / rarity 为未定义枚举值。</exception>
-    public TagData(Faction faction, Rarity rarity)
+    /// <exception cref="ArgumentOutOfRangeException">rarity 为未定义枚举值。</exception>
+    public TagData(Rarity rarity)
     {
-        FactionSlot = new TagSlot<Faction>(faction);
         RaritySlot = new TagSlot<Rarity>(rarity);
     }
 
-    /// <summary>国籍槽位（必填、只读；槽位值经 <see cref="TagSlot{T}.Value"/> 读取）。</summary>
-    public TagSlot<Faction> FactionSlot { get; }
-
     /// <summary>稀有度槽位（必填、只读；槽位值经 <see cref="TagSlot{T}.Value"/> 读取）。</summary>
     public TagSlot<Rarity> RaritySlot { get; }
-
-    /// <summary>国籍便捷读面（＝<see cref="FactionSlot"/>.Value）。</summary>
-    public Faction Faction => FactionSlot.Value;
 
     /// <summary>稀有度便捷读面（＝<see cref="RaritySlot"/>.Value）。</summary>
     public Rarity Rarity => RaritySlot.Value;

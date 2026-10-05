@@ -48,6 +48,9 @@ public enum PlayFailureReason
     /// <summary>反制拒绝：非己方回合（该卡所属玩家不是当前行动方；口径同上）。</summary>
     CounterNotOwnerTurn,
 
+    /// <summary>反制拒绝：一般性（验证未通过且未提供可辨识类别——改写缺类别的降级缺省；明确、不伪造具体类别）。</summary>
+    CounterRejected,
+
     /// <summary>对局已结束（终局门禁：打出链各入口拒绝——零副作用、状态不推进）。</summary>
     GameEnded,
 }

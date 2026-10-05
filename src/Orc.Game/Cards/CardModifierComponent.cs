@@ -61,7 +61,7 @@ public sealed class CardModifierComponent
     /// 内置注册：单位实时值检测组件（<see cref="UnitStateUpdateDetector"/>——需求下限「UnitStateData 三实时值」；
     /// 就绪＝UnitStateData 在场——未单位化时相关操作明确错误、不静默）
     /// ＋部署费检测组件（<see cref="DeployCostUpdateDetector"/>——W3-2 G5 加性：全类别费用域，
-    /// 就绪＝CommandPointCostData 在场——全类别构造期常驻、含未单位化的单位）。
+    /// 就绪＝FactionCostData 在场——全类别构造期常驻、含未单位化的单位〔S10 随改：基准读取点接改至合并组件〕）。
     /// </summary>
     internal CardModifierComponent(Card card, LogicEngine engine)
     {

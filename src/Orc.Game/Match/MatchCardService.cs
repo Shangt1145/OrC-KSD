@@ -185,6 +185,13 @@ public sealed class MatchCardService
         return _library.TryGetRegisteredId(card.Definition, out definitionId);
     }
 
+    /// <summary>
+    /// 卡池枚举读面（C2 加性读面）：本局卡牌库已注册定义的全体（id → 定义；只读转发——单源不另建）。
+    /// 用途＝效果侧构造「开发/发现」取样池与筛选候选集（服务只对给定序列取样；筛选与合法性由调用方负责）；
+    /// 注册/修改权能不经本面暴露（只读枚举）。
+    /// </summary>
+    public IReadOnlyDictionary<string, CardDefinition> RegisteredDefinitions => _library.Definitions;
+
     // ---------- 放置（四类去向） ----------
 
     /// <summary>

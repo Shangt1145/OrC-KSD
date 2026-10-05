@@ -7,7 +7,7 @@ namespace Orc.Game.Cards;
 
 /// <summary>
 /// 单位卡（三大类之一）：部署入战场、参与战斗（2B 打出链就绪；2C：参与指挥/战斗与词条）。
-/// 数据组件装配（E 区差异化）：＝指挥点花费（基类）＋对战数据（本类构造装配；行动费/攻/防初始值）；
+/// 数据组件装配（E 区差异化）：＝阵营〔国籍〕＋部署费合并组件（基类）＋对战数据（本类构造装配；行动费/攻/防初始值）；
 /// 单位数据 / 指挥组件于「单位化」时挂载（2B：单位化触发器默认事件——位置＝槽位、已毁＝false、类型＝从定义填充〔2C〕、三实时值＝对战组件值）。
 /// 触发器（2B）：
 /// ①预打出触发器（费用校验——指挥点验证；开始＝验证＋targeter 交互由打出管理器驱动）；
@@ -27,9 +27,17 @@ public class UnitCard : CardBase
 {
     private readonly LogicEngine _chainEngine;
 
-    /// <summary>创建单位卡（对战数据组件＋触发器与默认链事件在构造期装配——实例化后即可读、可驱动）。</summary>
+    /// <summary>创建单位卡（对战数据组件＋触发器与默认链事件在构造期装配——实例化后即可读、可驱动；
+    /// 费用校验触发器按名绑定费用检查判定器——解析器缺省＝内置默认〔独立构造即可用〕）。</summary>
+    /// <param name="engine">引擎（发射/触发）。</param>
+    /// <param name="definition">卡牌定义。</param>
+    /// <param name="validationJudicatorResolver">验证判定器解析器（按名解析——对局路径＝注册表解析；
+    /// 缺省＝null＝独立构造路径——内置默认解析）。</param>
     /// <exception cref="ArgumentNullException">engine 或 definition 为 null。</exception>
-    public UnitCard(LogicEngine engine, CardDefinition definition)
+    public UnitCard(
+        LogicEngine engine,
+        CardDefinition definition,
+        Func<string, JudicatorBinding>? validationJudicatorResolver = null)
         : base(engine, definition)
     {
         _chainEngine = engine;
@@ -38,8 +46,8 @@ public class UnitCard : CardBase
         AddData(new BattleStatsData(definition.OperateCost, definition.Attack, definition.Defense));
 
         // 触发器（预打出/打出＝费用校验触发器——合法性验证承载；部署/加入/单位化＝链触发器）。
-        PrePlayTrigger = new CostCheckTrigger("预打出触发器", this);
-        PlayTrigger = new CostCheckTrigger("打出触发器", this);
+        PrePlayTrigger = new CostCheckTrigger("预打出触发器", this, validationJudicatorResolver);
+        PlayTrigger = new CostCheckTrigger("打出触发器", this, validationJudicatorResolver);
         DeployTrigger = new Trigger<CardTriggerView>("部署触发器");
         JoinTrigger = new Trigger<CardTriggerView>("加入触发器");
         UnitizeTrigger = new Trigger<CardTriggerView>("单位化触发器");
@@ -256,6 +264,33 @@ public class UnitCard : CardBase
     /// </summary>
     /// <exception cref="InvalidOperationException">未单位化（缺单位数据组件——基准来源未就绪）。</exception>
     public int GetEffectiveDefenseCap() => Modifiers.GetEffectiveCapValue(CardStatFields.Defense);
+
+    // ---------- 在场回合数（G14补 S10；回合事件驱动计数） ----------
+
+    /// <summary>
+    /// 读取当前在场回合数（G14补 S10 读取面——最小读取集「读取当前在场回合数」唯一能力；
+    /// 「是否处于在场第 N 回合」＝读取值比较派生、不单独立面）。
+    /// 语义：入场即第 1 回合；己方回合正式开始（turn.start）递增（单方步进、静默）；
+    /// 死亡后停止递增（值保持、可读）；未入场（手牌/卡组）＝不适用（null、不抛错——沿用降级先例）。
+    /// </summary>
+    public int? TurnsInPlay => TryGetData<UnitStateData>(out var state) ? state.TurnsInPlay : null;
+
+    /// <summary>
+    /// 在场回合数递增（G14补 S10 内部执行面；回合事件驱动——由对局在「单位归属玩家的回合正式开始」时调用；
+    /// 单方步进：仅归属==回合开始方时递增——调用方负责归属过滤）：未单位化/已死亡＝false 无操作
+    /// （死亡停止；死亡单位已离场、通常不可达——防御双保险）；递增＝true。
+    /// 静默数据变更（不发射/不通知——不新增信号）。
+    /// </summary>
+    internal bool AdvanceTurnsInPlay()
+    {
+        if (!TryGetData<UnitStateData>(out var state) || state.IsDestroyed)
+        {
+            return false;
+        }
+
+        state.TurnsInPlay += 1;
+        return true;
+    }
 
     /// <summary>单位数据组件就绪校验（门户操作前提；未单位化＝明确异常、不静默）。</summary>
     private UnitStateData RequireUnitState()

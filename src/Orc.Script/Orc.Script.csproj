@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Script</AssemblyName>
+    <RootNamespace>Orc.Script</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Roslyn 脚本引擎（csx 编译）；安全限制由本工程自实现（等价于 SecureCSharpEval 的白/黑名单 + 关键字过滤 + 超时） -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 需要 Context/视图类型以构造擦除形态委托；内核不反向依赖本工程（依赖方向：Orc.Script → Orc） -->
+    <ProjectReference Include="..\Orc\Orc.csproj" />
+  </ItemGroup>
+
+</Project>

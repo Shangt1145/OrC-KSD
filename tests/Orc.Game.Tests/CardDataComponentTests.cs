@@ -6,7 +6,8 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2A 验收锚点④（数据组件全集）：数据组件就位；拆分实施（指挥点花费单列＋对战三值；四合一退役、无双真源）；
+/// 2A 验收锚点④（数据组件全集）：数据组件就位；拆分实施（指挥点花费＋对战三值；四合一退役、无双真源）；
+/// S10 随改：指挥点花费并入「阵营〔国籍〕＋部署费」合并组件（FactionCostData——旧独立花费组件退役）。
 /// 字段与基础读写可测（含实时值读写；初始值：位置 null／已毁 false／指挥 false·false／激活 false）。
 /// 2C-A1 随改：词条面已迁出数据组件体系（三口合并替代＝词条组件化；寻址＝卡上词条面 <see cref="CardBase.Keywords"/>）——
 /// 相关用例迁移至 KeywordComponentTests（见原用例处的逐条迁移说明）。
@@ -21,8 +22,9 @@ public class CardDataComponentTests
     {
         var card = CreateUnitCard();
 
-        var cost = card.GetData<CommandPointCostData>(); // 指挥点花费（部署费、单列；全类别）
-        Assert.Equal(1, cost.DeployCost);
+        var factionCost = card.GetData<FactionCostData>(); // 阵营〔国籍〕＋部署费（合并组件——S10；全类别）
+        Assert.Equal(1, factionCost.DeployCost);
+        Assert.Equal(Faction.Germany, factionCost.Faction);
         var stats = card.GetData<BattleStatsData>(); // 对战三值（初始值；单位卡专属）
         Assert.Equal(2, stats.OperateCost);
         Assert.Equal(3, stats.Attack);
@@ -36,14 +38,14 @@ public class CardDataComponentTests
         library.Register("c1", new CardDefinition("指令", 5, 0, 0, 0, CardCategory.Command, faction: Faction.Germany, rarity: Rarity.Standard));
         library.Register("x1", new CardDefinition("反制", 2, 0, 0, 0, CardCategory.Counter, faction: Faction.Germany, rarity: Rarity.Standard));
 
-        // 指令＝花费（无其他数据组件）
+        // 指令＝合并组件（无其他数据组件）
         var command = library.Instantiate("c1");
-        Assert.Equal(5, command.GetData<CommandPointCostData>().DeployCost);
+        Assert.Equal(5, command.GetData<FactionCostData>().DeployCost);
         Assert.Throws<KeyNotFoundException>(() => command.GetData<BattleStatsData>());
 
-        // 反制＝花费＋激活状态组件（2B 挂载落实：实例化路径装配；旧「挂载后置（测试内构造挂载）」→ 新「组件在位、初始未激活」）
+        // 反制＝合并组件＋激活状态组件（2B 挂载落实：实例化路径装配；旧「挂载后置（测试内构造挂载）」→ 新「组件在位、初始未激活」）
         var counter = library.Instantiate("x1");
-        Assert.Equal(2, counter.GetData<CommandPointCostData>().DeployCost);
+        Assert.Equal(2, counter.GetData<FactionCostData>().DeployCost);
         Assert.Throws<KeyNotFoundException>(() => counter.GetData<BattleStatsData>());
         Assert.False(counter.GetData<CounterActivationData>().IsActive);
     }
@@ -53,7 +55,8 @@ public class CardDataComponentTests
     {
         var state = new UnitStateData();
 
-        // 初始值：位置 null／已毁 false／类型列表空（0 个合法）／实时值 0／损伤量 0
+        // 初始值：位置 null／已毁 false／类型列表空（0 个合法）／实时值 0／损伤量 0／在场回合数 0
+        // （手构空组件默认 0——入场经 CreateInitial 置 1，见下用例；G14补 S10 随注）
         Assert.Null(state.Position);
         Assert.False(state.IsDestroyed);
         Assert.Empty(state.UnitTypes);
@@ -61,6 +64,7 @@ public class CardDataComponentTests
         Assert.Equal(0, state.Attack);
         Assert.Equal(0, state.Defense);
         Assert.Equal(0, state.DefenseLoss);
+        Assert.Equal(0, state.TurnsInPlay);
 
         // 基础读写：位置（Slot 引用）、类型列表（0 个/多个均合法）
         // 三值/损伤量写面已收窄（W2b）：装配期填充经 CreateInitial（见下用例）、运行期变更经门户操作面（StatPortalTests）。
@@ -86,11 +90,12 @@ public class CardDataComponentTests
         var stats = new BattleStatsData(2, 4, 6);
 
         var state = UnitStateData.CreateInitial(stats);
-        // 初始＝对战组件值（一次性复制契约；损伤量清零）
+        // 初始＝对战组件值（一次性复制契约；损伤量清零；入场即第 1 回合——G14补 S10）
         Assert.Equal(2, state.OperateCost);
         Assert.Equal(4, state.Attack);
         Assert.Equal(6, state.Defense);
         Assert.Equal(0, state.DefenseLoss);
+        Assert.Equal(1, state.TurnsInPlay);
 
         // 复制为一次性、只读基准独立：运行期变更（经门户——伤害/修复/修饰）不回写基准。
         // 「运行期变更不写基准」的行为证明见 StatPortalTests（伤害后 stats.Defense 保持原值）。
@@ -131,8 +136,8 @@ public class CardDataComponentTests
     {
         var card = CreateUnitCard();
 
-        // 单位卡实例化路径已装配两件（指挥点花费＋对战）
-        Assert.NotNull(card.GetData<CommandPointCostData>());
+        // 单位卡实例化路径已装配两件（阵营〔国籍〕＋部署费合并组件〔S10〕／对战）
+        Assert.NotNull(card.GetData<FactionCostData>());
         Assert.NotNull(card.GetData<BattleStatsData>());
 
         // 其余三件（单位/指挥/反制）：类定义就绪＋测试内构造挂载（实际挂载时机属后续批次）

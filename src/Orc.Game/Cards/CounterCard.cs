@@ -16,7 +16,7 @@ internal enum CounterUseRejection
 
 /// <summary>
 /// 反制卡（三大类之一）：激活/取消两态（数据组件 <see cref="CounterActivationData"/>；2B 起实例化路径装配——挂载落实）。
-/// 数据组件装配（E 区差异化）：＝指挥点花费（基类）＋激活状态组件。
+/// 数据组件装配（E 区差异化）：＝阵营〔国籍〕＋部署费合并组件（基类）＋激活状态组件。
 /// 触发器（2B 起链内容填入；唯一＝使用反制的触发器——<see cref="CounterUseTrigger"/>）：
 /// 单入口状态翻转（按当前激活状态分派）：未激活＝激活流程（验证〔指挥点〕→ 扣点〔读「有效部署费」〕→ 记录实扣额 →
 /// 置激活 ＋ 注册效果 handler）；已激活＝取消流程（退点〔无条件、按激活实扣额——「扣点与退点同额」跨调用守恒、
@@ -35,15 +35,23 @@ public class CounterCard : CardBase
     /// <summary>激活实扣额（W3-2 G5）：激活时写入、取消时按此退还、取消后清空——「扣点与退点同额」跨调用守恒（与期间修饰漂移解耦）。</summary>
     private int? _chargedCost;
 
-    /// <summary>创建反制卡（激活状态组件＋触发器与默认链事件在构造期装配）。</summary>
+    /// <summary>创建反制卡（激活状态组件＋触发器与默认链事件在构造期装配；
+    /// 使用反制触发器按名绑定反制使用检查判定器——解析器缺省＝内置默认〔独立构造即可用〕）。</summary>
+    /// <param name="engine">引擎（发射/触发）。</param>
+    /// <param name="definition">卡牌定义。</param>
+    /// <param name="validationJudicatorResolver">验证判定器解析器（按名解析——对局路径＝注册表解析；
+    /// 缺省＝null＝独立构造路径——内置默认解析）。</param>
     /// <exception cref="ArgumentNullException">engine 或 definition 为 null。</exception>
-    public CounterCard(LogicEngine engine, CardDefinition definition)
+    public CounterCard(
+        LogicEngine engine,
+        CardDefinition definition,
+        Func<string, JudicatorBinding>? validationJudicatorResolver = null)
         : base(engine, definition)
     {
         // 激活状态组件（E 区：「反制＝激活状态组件」；2B 挂载落实——初始未激活）。
         AddData(new CounterActivationData());
 
-        UseCounterTrigger = new CounterUseTrigger(this);
+        UseCounterTrigger = new CounterUseTrigger(this, validationJudicatorResolver);
         UseCounterTrigger.Register("使用反制", HandleUseCounterAsync);
     }
 

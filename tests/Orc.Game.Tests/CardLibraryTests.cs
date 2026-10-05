@@ -6,7 +6,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 卡牌库与名单实例化：注册/查询读面、重复注册拒绝、实例化装配（名称＋拆分数据组件〔指挥点花费＋对战〕）、
+/// 卡牌库与名单实例化：注册/查询读面、重复注册拒绝、实例化装配（名称＋数据组件〔阵营〔国籍〕＋部署费／对战——S10 重构后〕）、
 /// 边界清单④（Instantiate 三情形：空→空集 / 未注册→抛错 / 重复 id→独立实例并保序）。
 /// </summary>
 public class CardLibraryTests
@@ -103,15 +103,16 @@ public class CardLibraryTests
     }
 
     [Fact]
-    public void Instantiate_Assigns_Name_And_Split_Data_Components_From_Definition() // 2A 迁移：四合一 → 拆分两组件（指挥点花费＋对战）
+    public void Instantiate_Assigns_Name_And_Split_Data_Components_From_Definition() // 2A 迁移：四合一 → 拆分两组件；S10 重构：指挥点花费并入「阵营〔国籍〕＋部署费」合并组件
     {
         var library = CreateLibrary(out _);
         var set = new CardList(new[] { "c03" }).Instantiate(library);
 
         var card = set[0];
         Assert.Equal("卡03", card.Name); // 名称取自定义
-        var cost = card.GetData<CommandPointCostData>(); // 指挥点花费（单列）
-        Assert.Equal(3, cost.DeployCost);
+        var factionCost = card.GetData<FactionCostData>(); // 阵营〔国籍〕＋部署费（合并组件——S10）
+        Assert.Equal(3, factionCost.DeployCost);
+        Assert.Equal(Faction.Germany, factionCost.Faction);
         var stats = card.GetData<BattleStatsData>(); // 对战（行动费 / 攻 / 防——初始值）
         Assert.Equal(4, stats.OperateCost);
         Assert.Equal(5, stats.Attack);

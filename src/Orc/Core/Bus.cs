@@ -61,6 +61,7 @@ public sealed class Bus
 
         foreach (var hook in subscription.Hooks)
         {
+            _engine.Hooks.Register(hook); // S-C1/S-C2：hook 首次出现即登记进引擎词汇表（对局内固化）
             if (!_subscriptions.TryGetValue(hook, out var list))
             {
                 list = new List<Subscription>();
@@ -72,6 +73,8 @@ public sealed class Bus
 
         _groups.Add(subscription);
         trigger.MountedBus = this;
+
+        _engine.Orchestration.Register(trigger, "bus-mount"); // S-C3：内核自动采样（挂载面）
 
         WriteTrace("mount", $"已挂载触发器 '{subscription.DisplayName}'（更新：{string.Join("、", subscription.Hooks)}）。", subscription);
     }
@@ -201,6 +204,38 @@ public sealed class Bus
         return names;
     }
 
+    /// <summary>
+    /// 全量 hook 枚举（S-C2 加性只读面）：返回当前已挂载订阅涉及的 hook（按首次出现序＝挂载序快照），
+    /// 每项含 hook 名、其 <see cref="HookId"/> 与订阅者展示名（执行序）。
+    /// 快照语义＝调用时点一致副本；无订阅＝空列表。
+    /// </summary>
+    public IReadOnlyList<HookSubscriptions> EnumerateHooks()
+    {
+        var result = new List<HookSubscriptions>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subscription in _groups)
+        {
+            foreach (var hook in subscription.Hooks)
+            {
+                if (!seen.Add(hook))
+                {
+                    continue; // 已收录：跳过（保持首次出现序）
+                }
+
+                var snapshot = SnapshotFor(hook);
+                var names = new string[snapshot.Length];
+                for (var i = 0; i < snapshot.Length; i++)
+                {
+                    names[i] = snapshot[i].DisplayName;
+                }
+
+                result.Add(new HookSubscriptions(hook, HookId.FromName(hook), names));
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>写一条动作留痕（Mount/Unmount；source="bus"、Info 级；目标流＝当前执行者流（无则总流））。</summary>
     private void WriteTrace(string actionKeyword, string message, Subscription subscription)
     {
@@ -275,3 +310,11 @@ public sealed class Bus
         internal Action Unmark { get; }
     }
 }
+
+/// <summary>
+/// hook 订阅读面项（S-C2；<see cref="Bus.EnumerateHooks"/> 产物）：hook 名、其定义级标识与订阅者展示名。
+/// </summary>
+/// <param name="Hook">hook 名（更新字符串）。</param>
+/// <param name="Id">hook 的定义级稳定标识（<see cref="HookId.FromName"/>）。</param>
+/// <param name="Subscribers">订阅者展示名（执行序：挂载优先级升序→注册序升序）。</param>
+public sealed record HookSubscriptions(string Hook, HookId Id, IReadOnlyList<string> Subscribers);

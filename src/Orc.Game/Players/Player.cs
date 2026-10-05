@@ -2,12 +2,13 @@ using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Collections;
+using Orc.Game.Targeting;
 
 namespace Orc.Game.Players;
 
 /// <summary>
 /// 玩家（对局数据类；本批不继承引擎 Entity——无引用/生命周期需求，实体化留后续批次评估）：
-/// 资源（指挥点数 / 指挥点槽）＋ 卡组（名单）＋ 手牌（实例集）＋ HQ（总部实体）。
+/// 资源（指挥点数 / 指挥点槽）＋ 卡组（名单）＋ 手牌（实例集）＋ HQ（总部实体）＋ 卡组构筑配置（主国/盟国——S10 加性面）。
 /// 读面直接可读（供测试断言与展示）；写面经管理器（资源结算＝资源管理器；卡组消耗/手牌装载＝玩家管理器；
 /// HQ 数值变更＝HQ 数值路径〔伤害经指挥管理器调用 HQ 门户〕），无旁路修改入口。
 /// W3-3 G11 受控变更：HQ 由「纯数据」实体化为独立总部实体（<see cref="Hq"/>；Entity＋组件容器＋
@@ -158,5 +159,92 @@ public sealed class Player
         }
 
         CardService = service;
+    }
+
+    // ---------- 玩家构筑配置（S10「G12补」加性面：主国/盟国——卡组构筑配置的读取承载） ----------
+
+    /// <summary>
+    /// 玩家构筑配置（S10 加性面；internal）：对局装配期注入（创建输入 → 创建期校验 → 初始化注入）——
+    /// 「主国/盟国」卡组构筑配置的唯一数据来源（只读属性；值不可变——不存在双真源冲突）。
+    /// 缺省语义：未提供配置＝不注入＝null（读面返回 null、不抛错；消费端降级为「不匹配」）。
+    /// </summary>
+    internal PlayerDeckConfiguration? DeckConfiguration { get; private set; }
+
+    /// <summary>
+    /// 主国（S10 读取面；只读转发构筑配置——未配置＝null、不抛错）。值域＝五主国（德/苏/美/英/日）；
+    /// 「主国牌」筛选＝卡牌国籍==本值（读取消费在筛选侧组合——不新增机制级筛选 API）。
+    /// </summary>
+    public Faction? MainFaction => DeckConfiguration?.MainFaction;
+
+    /// <summary>盟国（S10 读取面；只读转发构筑配置——未配置＝null、不抛错）。值域＝余下 4 个主国＋5 个盟国（9 值）。</summary>
+    public Faction? AllyFaction => DeckConfiguration?.AllyFaction;
+
+    /// <summary>
+    /// 装配期注入玩家构筑配置（S10；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：玩家注入段（与环境/随机服务注入同序、先于卡组洗切与加载）。未提供配置＝不调用本方法（读面 null——缺省语义）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">configuration 为 null。</exception>
+    /// <exception cref="InvalidOperationException">构筑配置已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureDeckConfiguration(PlayerDeckConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (DeckConfiguration is not null)
+        {
+            throw new InvalidOperationException("玩家构筑配置已注入（重复注入被拒绝）。");
+        }
+
+        DeckConfiguration = configuration;
+    }
+
+    // ---------- 对局历史读取服务（S10「G14补」加性面） ----------
+
+    /// <summary>
+    /// 对局历史读取服务（S10 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （效果运行期经 <see cref="MatchHistoryService.ResolveFor"/> 取用——「按条目类型筛取＋时序取用」的
+    /// 最小历史读取面）；脱局场景（未注入）＝null（无服务面——解析自然产出 null、不抛错）。
+    /// </summary>
+    internal MatchHistoryService? HistoryService { get; private set; }
+
+    /// <summary>
+    /// 装配期注入对局历史读取服务（S10；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">service 为 null。</exception>
+    /// <exception cref="InvalidOperationException">历史服务已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureHistoryService(MatchHistoryService service)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+        if (HistoryService is not null)
+        {
+            throw new InvalidOperationException("玩家历史服务已注入（重复注入被拒绝）。");
+        }
+
+        HistoryService = service;
+    }
+
+    // ---------- 目标选择管理器（C2 加性面） ----------
+
+    /// <summary>
+    /// 目标选择管理器（C2 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （效果运行期经 <see cref="TargeterManager.ResolveFor"/> 取用——交互发起面〔如开发/发现链的卡牌选择器出题〕）；
+    /// 脱局场景（未注入）＝null（无服务面——解析自然产出 null、不抛错）。
+    /// </summary>
+    internal TargeterManager? TargeterManager { get; private set; }
+
+    /// <summary>
+    /// 装配期注入目标选择管理器（C2；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：与装配一致（先于卡加载；显式、可测试——无隐藏全局单例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">manager 为 null。</exception>
+    /// <exception cref="InvalidOperationException">目标选择管理器已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureTargeterManager(TargeterManager manager)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        if (TargeterManager is not null)
+        {
+            throw new InvalidOperationException("玩家目标选择管理器已注入（重复注入被拒绝）。");
+        }
+
+        TargeterManager = manager;
     }
 }

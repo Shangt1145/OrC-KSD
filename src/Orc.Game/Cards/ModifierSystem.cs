@@ -38,7 +38,7 @@ public static class CardStatFields
     /// <summary>防御力（单位实时值；对应 <see cref="UnitStateData.Defense"/>）。</summary>
     public const string Defense = "Defense";
 
-    /// <summary>部署费（W3-2 G5 加性；全类别卡牌值——含未单位化的单位；对应 <see cref="CommandPointCostData.DeployCost"/> 基准，「有效部署费」＝链输出）。</summary>
+    /// <summary>部署费（W3-2 G5 加性；全类别卡牌值——含未单位化的单位；对应 <see cref="FactionCostData.DeployCost"/> 基准〔S10 起：基准承载于「阵营〔国籍〕＋部署费」合并组件〕，「有效部署费」＝链输出）。</summary>
     public const string DeployCost = "DeployCost";
 
     /// <summary>

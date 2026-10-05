@@ -94,7 +94,7 @@ public class CardSkeletonTests
         // 旧（无载荷空跑、断言 Normal）→ 新（对局内加载卡＋完整载荷执行、断言 Normal；装配断言不变）。
         var match = GameTestData.CreateStandardMatch(seed: 42);
         await match.Initialize();
-        var player = match.Players[0]; // 回合 1 先手（点数 1；c01 指挥点花费 1）
+        var player = match.Players[0]; // 回合 1 先手（点数 1；c01 部署费 1）
         var unit = Assert.IsType<UnitCard>(match.CardLibrary.Instantiate("c01"));
         await unit.LoadAsync(player); // 2B：加载装配归属（打出链验证/扣费/离手依赖）
 

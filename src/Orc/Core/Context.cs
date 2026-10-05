@@ -50,6 +50,13 @@ public sealed class Context
     /// </summary>
     public void Interrupt() => _frame?.RequestInterrupt();
 
+    /// <summary>
+    /// 本次执行所属引擎（S-C2 加性面）：执行期可读、执行外为 null。
+    /// 用途：无闭包捕获能力的动态 handler（csx）经此取得引擎以发射更新/调用下游触发器；
+    /// 不占数据载体键名、不改变 ctx 数据语义。
+    /// </summary>
+    public LogicEngine? Engine => _frame?.Engine;
+
     /// <summary>关联执行会话（框架内部流程调用；状态查询与检查点共用该帧的状态）。</summary>
     internal void AttachFrame(ExecutionFrame frame) => _frame = frame;
 }

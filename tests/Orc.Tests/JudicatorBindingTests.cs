@@ -1,0 +1,77 @@
+using Orc.Core;
+using Xunit;
+
+namespace Orc.Tests;
+
+/// <summary>
+/// 判定器绑定（J2）机制级测试：对局路径（注册表条目锚——moding 全局生效、注销回退）／
+/// 独立实例锚（构造即可用）／解析动作即校验（未注册名 fail-fast）／工厂参数校验。
+/// </summary>
+public class JudicatorBindingTests
+{
+    private const string ProbeName = "test.binding.probe";
+
+    [Fact]
+    public void FromRegistration_Binds_To_Registry_Entry_Moding_Applies_And_Falls_Back()
+    {
+        var registry = new JudicatorRegistry();
+        var handle = registry.Register(ProbeName, new ProbeJudicator(_ => ValidationVerdict.Valid));
+        var trigger = new Trigger<CounterView>(name: "绑定");
+        trigger.BindValidation(JudicatorBinding.FromRegistration(handle));
+
+        Assert.True(trigger.Validate(Array.Empty<Ref<Entity>>())); // 默认逻辑
+
+        // moding 改写（统一面）→ 绑定调用生效（同一条目——全局生效）
+        var m = registry.RegisterModing(handle, _ => new object[] { ValidationVerdict.Invalid() });
+        Assert.NotNull(m);
+        Assert.False(trigger.Validate(Array.Empty<Ref<Entity>>()));
+
+        // 注销回退（全部注销＝回退默认逻辑）
+        Assert.True(registry.UnregisterModing(m!));
+        Assert.True(trigger.Validate(Array.Empty<Ref<Entity>>()));
+    }
+
+    [Fact]
+    public void FromRegistration_Unregistered_Name_Fails_Fast_At_Resolve()
+    {
+        var registry = new JudicatorRegistry();
+
+        // 绑定动作＝按名解析＋固定（解析动作即校验——未注册名＝装配期显性失败）。
+        Assert.Throws<KeyNotFoundException>(() =>
+        {
+            var trigger = new Trigger<CounterView>(name: "自定义验证点");
+            trigger.BindValidation(JudicatorBinding.FromRegistration(registry.Resolve("test.binding.missing")));
+        });
+    }
+
+    [Fact]
+    public void FromStandalone_Is_Self_Contained_Without_Registry()
+    {
+        // 独立构造路径：无注册表、构造即可用（内置默认承载语义——这里以测试判定器演示）。
+        var trigger = new Trigger<CounterView>(name: "独立");
+        trigger.BindValidation(JudicatorBinding.FromStandalone(
+            "test.binding.standalone", new ProbeJudicator(_ => ValidationVerdict.Invalid())));
+
+        Assert.False(trigger.Validate(Array.Empty<Ref<Entity>>()));
+    }
+
+    [Fact]
+    public void Factories_Validate_Arguments()
+    {
+        Assert.Throws<ArgumentNullException>(() => JudicatorBinding.FromRegistration(null!));
+        Assert.Throws<ArgumentNullException>(() => JudicatorBinding.FromStandalone("n", null!));
+        Assert.Throws<ArgumentException>(() =>
+            JudicatorBinding.FromStandalone("  ", new ProbeJudicator(_ => ValidationVerdict.Valid)));
+    }
+
+    /// <summary>验证判定器探针（测试夹具）：统一逻辑注入。</summary>
+    private sealed class ProbeJudicator : ValidationJudicator
+    {
+        private readonly Func<IReadOnlyList<Ref<Entity>>, ValidationVerdict> _logic;
+
+        public ProbeJudicator(Func<IReadOnlyList<Ref<Entity>>, ValidationVerdict> logic) => _logic = logic;
+
+        protected override ValidationVerdict ValidateLogic(IReadOnlyList<Ref<Entity>> refs, Ref<Entity>? subject)
+            => _logic(refs);
+    }
+}

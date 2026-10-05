@@ -3,6 +3,7 @@ using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Collections;
 using Orc.Game.Commanding;
+using Orc.Game.Judicators;
 using Orc.Game.Managers;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
@@ -13,13 +14,13 @@ namespace Orc.Game;
 /// <summary>
 /// 对局（KARDS 模仿；第一批对局骨架＋2A 结构层＋2B 打出链＋2C 指挥与词条＋后置项补全）：持有逻辑引擎、双玩家、回合序、战场、管理器群（回合 / 玩家 / 战场 / 资源 / 卡牌库 / 目标选择 / 打出 / 指挥）
 /// 与对局级触发器注册表（2A 机制：登记本体＋分层分类；2C 起内置流程触发器注册为底层）。
-/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）、可选部署逻辑注册表（A4 加性装配输入——卡牌加载时「部署逻辑生成」步骤的装配源）。
+/// 装配模式＝调用方提供数据、Match 负责装配：创建输入＝双方卡组名单（CardList×2）、卡牌定义集、可选种子（可复现；G8：确定性随机服务的显式化入口——对局内随机消费统一经随机服务）、可选先手指定（默认第一位玩家）、可选规则配置（指挥点上限）、可选目标选择桥接（第六员装配输入）、可选效果工厂注册表（X2 加性装配输入——卡牌加载时效果装载的装配源）、可选部署逻辑注册表（A4 加性装配输入——卡牌加载时「部署逻辑生成」步骤的装配源）、可选玩家构筑配置（S10 加性装配输入——主国/盟国；按玩家分别提供、提供即校验、初始化期注入）、可选判定器装配段（J1 加性装配输入、J2：外部段＝追加/定制通道；对局装配期一次性执行判定器注册〔注册表创建之后、卡加载之前〕、内置注册段同时固定执行〔默认验证判定器——无条件可用〕；缺省＝null＝无外部追加〔内置验证判定器恒在〕）。
 /// 两步式：创建（准备态）→ 显式 <see cref="Initialize"/>（初始化完成置"进行"态）→〔HQ≤0 时〕"结束"态（立即终局：状态置结束＋胜者记录）。
 /// 状态门禁：回合推进仅"进行"态允许；准备态访问管理器与转发属性抛错；重复 <see cref="Initialize"/> 抛错（明确拒绝、非幂等）；
 /// 终局后（"结束"态）：所有游戏动作入口拒绝（指挥/打出/移动/攻击/回合推进/初始化等——对外面拒绝、零副作用）、
 /// 只读查询面（状态/胜者/玩家与 HQ/战场/管理器/集合）保持可用、更新流不再增长（其后所有效果不再处理）。
 /// 失败模式：无效创建参数 → 创建期抛参数校验异常；初始化中异常直接传播（不承诺回滚；失败可重建对局）。
-/// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性＋A4 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 再触发服务〔A4：接收触发器创建＋总线挂载〕→ 指挥管理器〔2C：流程触发器创建＋底层注册；A4：注入再触发服务〕→ 玩家注入（环境/随机服务/A4 再触发服务））→
+/// 初始化流程（2A 固定链＋2C 加性＋W1-1 加性＋W4-1 加性＋A4 加性＋S10 加性＋J1 加性）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 判定器注册〔J1：注册表创建＋装配期注册段；J2：内置注册段（默认验证判定器）固定执行＋外部追加段——卡加载前就绪〕→ 再触发服务〔A4：接收触发器创建＋总线挂载〕→ 指挥管理器〔2C：流程触发器创建＋底层注册；A4：注入再触发服务〕→ 玩家注入（环境/随机服务/A4 再触发服务/S9 卡牌服务/S10 构筑配置与历史服务））→
 /// 双方卡组洗切（W4-1：经统一洗切动作面 <see cref="ShuffleDeckAsync"/>——传对局随机服务〔G8：确定性单流〕、各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、部署逻辑生成〔A4〕、词条装载〔2C〕；A 组后 B 组、组内洗牌后顺序）→
 /// ID 水位线快照〔W1-1：起手装载之前〕→ 起手装载（静默、不发更新；先手 4 / 后手 5）→
 /// 〔2C 接线：回合恢复钩子〕→ 先手回合开始序列（3 条更新入总流）→ 置"进行"。
@@ -45,12 +46,17 @@ public sealed class Match
     private PlayManager? _playManager;
     private CommandManager? _commandManager;
     private RetriggerSystem? _retriggerSystem; // A4：再触发服务（对局装配期创建——收束于管理器群）
+    private JudicatorRegistry? _judicators; // J1：判定器注册表（对局级机制——初始化内创建；卡加载前就绪）
     private readonly ITargeterBridge? _targeterBridge;
     private readonly CardEffectRegistry? _effectRegistry;
     private readonly DeploymentLogicRegistry? _deploymentLogicRegistry; // A4：部署逻辑登记/生成面的装配输入
+    private readonly PlayerDeckConfiguration? _deckConfigForPlayerA; // S10：玩家A 构筑配置（主国/盟国——创建期接收、初始化注入）
+    private readonly PlayerDeckConfiguration? _deckConfigForPlayerB; // S10：玩家B 构筑配置
+    private readonly Action<JudicatorRegistry>? _judicatorAssembly; // J1：判定器装配段（对局装配期一次性执行判定器注册——注册表创建之后、卡加载之前）
     private readonly MatchLifecycle _lifecycle = new();
     private GameEnvironment? _environment; // W3-1 G4：游戏环境（对局装配期创建；多对局相互独立）
     private MatchCardService? _cardService; // S9：对局卡牌服务（服务面——卡牌工厂＋放置面；对局装配期创建）
+    private MatchHistoryService? _historyService; // S10：对局历史读取服务（最小历史读取面；对局装配期创建）
 
     /// <summary>
     /// 创建对局（准备态；内部新建 LogicEngine 并公开）。装配校验：卡组名单非 null、非空、不含 null/空白 id；
@@ -65,9 +71,12 @@ public sealed class Match
     /// <param name="targeterBridge">可选目标选择桥接（第六员〔目标选择管理器〕的装配输入；缺省＝null＝允许无桥接装配——Targeting 被调用时以失败结局暴露、不抛）。</param>
     /// <param name="effectRegistry">可选效果工厂注册表（X2 加性装配输入；卡牌加载时效果装载的装配源；缺省＝null＝无效果源——卡加载时无「声明效果」装载，装载语境照常〔卡上手动装配的效果仍被装载〕）。</param>
     /// <param name="deploymentLogicRegistry">可选部署逻辑注册表（A4 加性装配输入；卡牌加载时「部署逻辑生成」步骤的装配源〔为单位卡生成并挂载部署逻辑组件〕；缺省＝null＝无装配源——不生成、加载照常）。</param>
+    /// <param name="deckConfigForPlayerA">可选玩家A 构筑配置（S10「G12补」加性装配输入——主国/盟国；提供即校验〔创建期 fail-fast：成对、值域〕、初始化期注入；缺省＝null＝未配置〔读面 null、不抛错〕）。</param>
+    /// <param name="deckConfigForPlayerB">可选玩家B 构筑配置（同 deckConfigForPlayerA——按玩家分别提供）。</param>
+    /// <param name="judicatorAssembly">可选判定器装配段（J1 加性装配输入；J2：外部段＝追加/定制通道——内置注册段〔默认验证判定器〕固定无条件执行）；对局装配期一次性调用〔注册表创建之后、卡加载之前〕——执行判定器注册、注册动作返回条目等价句柄供持用；缺省＝null＝无外部追加〔内置验证判定器恒在、可达面照常〕）。</param>
     /// <exception cref="ArgumentNullException">deckForPlayerA / deckForPlayerB / cardDefinitions 为 null。</exception>
-    /// <exception cref="ArgumentException">卡组名单为空或含 null/空白 id；定义集含 null 条目。</exception>
-    /// <exception cref="ArgumentOutOfRangeException">先手指定越界；指挥点上限非正整数。</exception>
+    /// <exception cref="ArgumentException">卡组名单为空或含 null/空白 id；定义集含 null 条目；构筑配置成对缺失（只提供其一）。</exception>
+    /// <exception cref="ArgumentOutOfRangeException">先手指定越界；指挥点上限非正整数；构筑配置值非法（未定义枚举值 / 主国非五主国 / 盟国==主国 / 盟国==Neutral）。</exception>
     public Match(
         CardList deckForPlayerA,
         CardList deckForPlayerB,
@@ -77,7 +86,10 @@ public sealed class Match
         MatchOptions? options = null,
         ITargeterBridge? targeterBridge = null,
         CardEffectRegistry? effectRegistry = null,
-        DeploymentLogicRegistry? deploymentLogicRegistry = null)
+        DeploymentLogicRegistry? deploymentLogicRegistry = null,
+        PlayerDeckConfiguration? deckConfigForPlayerA = null,
+        PlayerDeckConfiguration? deckConfigForPlayerB = null,
+        Action<JudicatorRegistry>? judicatorAssembly = null)
     {
         ArgumentNullException.ThrowIfNull(deckForPlayerA);
         ArgumentNullException.ThrowIfNull(deckForPlayerB);
@@ -114,6 +126,10 @@ public sealed class Match
             throw new ArgumentException("卡牌定义集含 null 条目。", nameof(cardDefinitions));
         }
 
+        // S10「G12补」：玩家构筑配置校验（提供即校验、全部 fail-fast；未提供＝跳过全部校验、不抛错）。
+        ValidateDeckConfiguration(deckConfigForPlayerA, nameof(deckConfigForPlayerA));
+        ValidateDeckConfiguration(deckConfigForPlayerB, nameof(deckConfigForPlayerB));
+
         _deckForPlayerA = deckForPlayerA;
         _deckForPlayerB = deckForPlayerB;
         _cardDefinitions = definitions;
@@ -124,6 +140,9 @@ public sealed class Match
         _targeterBridge = targeterBridge;
         _effectRegistry = effectRegistry;
         _deploymentLogicRegistry = deploymentLogicRegistry;
+        _deckConfigForPlayerA = deckConfigForPlayerA;
+        _deckConfigForPlayerB = deckConfigForPlayerB;
+        _judicatorAssembly = judicatorAssembly;
         Engine = new LogicEngine();
     }
 
@@ -204,6 +223,18 @@ public sealed class Match
     /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
     public RetriggerSystem RetriggerSystem => RequireReady(_retriggerSystem);
 
+    // ---------- 判定器注册表（对局级机制；J1） ----------
+
+    /// <summary>
+    /// 判定器注册表（对局级机制；J1 加性）：「对局加载时加载」——随对局装配链在 Initialize 内创建
+    /// （装配期注册段经创建参数一次性执行；卡加载前就绪）；对局内可达面（供注册方与引用方取用——
+    /// 注册动作返回条目等价句柄、按名解析所得为同一可寻址锚）；moding（逻辑替换）注入面（双形态）与
+    /// 统一解析点（全局生效：按名调用与持有句柄的调用统一按栈顶解析）。
+    /// 仅"进行"与"结束"态可读（准备态＝抛错——沿用管理器门禁模式）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
+    public JudicatorRegistry Judicators => RequireReady(_judicators);
+
     // ---------- 构筑外判定（W1-1 G12 加性面） ----------
 
     /// <summary>
@@ -247,6 +278,16 @@ public sealed class Match
         MatchState.Ended => throw new InvalidOperationException("对局已结束（终局），卡牌服务对外取用被拒绝。"),
         _ => throw new InvalidOperationException("对局尚未进入'进行'态：卡牌服务对外取用不可用（须先成功完成 Initialize）。"),
     };
+
+    // ---------- 对局历史读取服务（S10 G14补） ----------
+
+    /// <summary>
+    /// 对局历史读取服务（S10「G14补」加性面；最小历史读取面——按条目类型（信号）筛取＋时序取用；
+    /// 读源＝事件流总流、读取窗口＝对局自创建以来全程；拉取式按需读取、空结果不抛错）。
+    /// 仅"进行"与"结束"态可读（准备态＝抛错——沿用管理器门禁模式；终局后只读查询面保持可用）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
+    public MatchHistoryService HistoryService => RequireReady(_historyService);
 
     // ---------- 对局受控动作面（W4-1 G14 收尾） ----------
 
@@ -311,7 +352,7 @@ public sealed class Match
     public GameEnvironment Environment => RequireReady(_environment);
 
     /// <summary>
-    /// 初始化（两步式第二步；完成后置"进行"态）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 指挥管理器〔2C 加性：流程触发器创建＋底层注册〕）→
+    /// 初始化（两步式第二步；完成后置"进行"态）：管理器群（卡牌库批量注册 → 资源 → 玩家 → 战场〔构造期 HQ 占位〕→ 判定器注册〔J1 加性：注册表创建＋装配期注册段——卡加载前就绪〕→ 指挥管理器〔2C 加性：流程触发器创建＋底层注册〕）→
     /// 双方卡组洗切（W4-1：经 <see cref="ShuffleDeckAsync"/> 各发一条 deck.shuffled 信号）→ 加载（逐张 card.load；含对局级 ID 分配与元数据装配〔W1-1〕、词条装载〔2C〕）→ ID 水位线快照〔W1-1：起手装载之前〕→
     /// 起手装载（静默）→〔2C 接线：回合恢复钩子〕→ 先手回合开始序列（3 条更新）→ 置"进行"。初始化中异常直接传播（对局保持"准备"态）。
     /// </summary>
@@ -343,7 +384,8 @@ public sealed class Match
             () => _playerManager?.NextCardId()
                 ?? throw new InvalidOperationException("卡牌 ID 分配不可用：玩家管理器尚未创建（加载链时序错误）。"),
             cardId => new CardEffectLoadContext(_effectRegistry, cardId),
-            cardId => new DeploymentLogicLoadContext(_deploymentLogicRegistry, cardId));
+            cardId => new DeploymentLogicLoadContext(_deploymentLogicRegistry, cardId),
+            ResolveJudicatorBinding);
         foreach (var entry in _cardDefinitions)
         {
             _cardLibrary.Register(entry.Id, entry.Definition);
@@ -354,6 +396,18 @@ public sealed class Match
         _playerManager.CreatePlayers(_deckForPlayerA, _deckForPlayerB);
         // 2A 受控变更：战场构造期含 HQ 占位（各支援线槽 0＝对应玩家），创建顺序随之为玩家先、战场后。
         _battlefieldManager = new BattlefieldManager(_playerManager.Players[0], _playerManager.Players[1]);
+
+        // S10「G12补」加性：玩家构筑配置注入（主国/盟国读取面）——「调用方提供数据、对局负责装配」；
+        // 时序：玩家注入段（与环境/随机服务注入同序、先于卡组洗切与加载）；未提供＝不注入（读面 null——缺省语义）。
+        if (_deckConfigForPlayerA is not null)
+        {
+            _playerManager.Players[0].ConfigureDeckConfiguration(_deckConfigForPlayerA);
+        }
+
+        if (_deckConfigForPlayerB is not null)
+        {
+            _playerManager.Players[1].ConfigureDeckConfiguration(_deckConfigForPlayerB);
+        }
 
         // W3-1 G4 加性：游戏环境（环境现算查询面＋场级收集面＋全域重跑传播）——随对局装配创建
         // （战场创建后、卡加载前），并注入各玩家（「卡 → 玩家 → 对局/战场」读取路径的玩家环节；
@@ -388,11 +442,51 @@ public sealed class Match
             player.ConfigureCardService(_cardService);
         }
 
+        // S10「G14补」加性：对局历史读取服务（最小历史读取面——按条目类型〔信号〕筛取＋时序取用；
+        // 读源＝事件流总流、窗口＝对局自创建以来全程）——随对局装配创建并注入各玩家（「卡 → 玩家 → 服务」
+        // 读取路径的玩家环节；时序：先于卡加载，显式、可测试——无隐藏全局单例）。
+        _historyService = new MatchHistoryService(Engine);
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureHistoryService(_historyService);
+        }
+
         // 第六员（加性，随管理器群生成）：目标选择管理器——桥接可选注入（缺省 null＝允许无桥接装配，
         // Targeting 被调用时以失败结局暴露、不抛）；留痕经引擎既有渠道（总流）。
         // 终局门禁（后置项 B）：装配终局读取提供器——对局已结束＝发起（新入队）即时失败、零副作用。
         _targeterManager = new TargeterManager(_targeterBridge, new EventStreamTargetingTrace(Engine.RootStream));
         _targeterManager.GameEndedProvider = () => _lifecycle.IsEnded;
+
+        // C2 加性：目标选择管理器注入各玩家——「卡 → 玩家 → 服务」读取路径的玩家环节
+        // （效果运行期经 TargeterManager.ResolveFor 取用——交互发起面；时序：先于卡加载，显式、可测试——无隐藏全局单例）。
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureTargeterManager(_targeterManager);
+        }
+
+        // J1 加性（判定器机制）：「对局加载时加载」——对局级判定器注册表随对局装配链在初始化内创建
+        // （『初始化内创建＋注入』范式）；装配期注册段经创建参数一次性执行（注册动作返回条目等价句柄、供注册方持有）；
+        // 时点＝卡加载之前（远早于洗切与加载段——就绪由装配链位置保证：「装配期已注册条目在卡加载阶段即可被解析调用」）。
+        _judicators = new JudicatorRegistry();
+
+        // J2 加性（合法性验证替换）：内置注册段（固定、无条件执行）——注册默认验证判定器（费用/反制/复验）：
+        // 「默认名恒可解析、默认判定器无条件可用」（不依赖外部装配段传入）；复验判定器注入对局级只读设施引用
+        // （生命周期/当前行动方/战场/复验规则读取面转发——延迟读取；复验规则读取经 CommandManager 转发保持单源）。
+        _judicators.Register(JudicatorNames.CostCheck, new CostCheckJudicator());
+        _judicators.Register(JudicatorNames.CounterUse, new CounterUseJudicator());
+        _judicators.Register(JudicatorNames.MoveRecheck, new MoveRevalidationJudicator(
+            _lifecycle,
+            () => _turnManager?.CurrentPlayer,
+            _battlefieldManager.Battlefield,
+            owner => _commandManager?.HasLivingEnemyOnFrontLine(owner) ?? false));
+        _judicators.Register(JudicatorNames.AttackRecheck, new AttackRevalidationJudicator(
+            _lifecycle,
+            () => _turnManager?.CurrentPlayer,
+            (attacker, targetRef) => _commandManager?.IsAttackTargetLegal(attacker, targetRef) ?? false));
+
+        // 外部装配段（追加/定制通道——最小加性保持；重复注册默认名被拒绝〔J1「注册即配置、重复拒绝」口径〕；
+        // 装配期 moding 改写经注册表 moding 面——注册所得/解析所得句柄均可锚定）。
+        _judicatorAssembly?.Invoke(_judicators);
 
         // A4 加性：再触发服务（对局级——创建接收触发器〔包装底层触发器〕并挂载更新总线；请求＝机制内部导航、
         // 发布—接收—执行同一同步链）。创建时点＝指挥管理器之前（指挥管理器死亡链的「亡计结算」经其统一执行面；
@@ -410,7 +504,8 @@ public sealed class Match
             _playerManager.Players,
             () => _turnManager?.CurrentPlayer,
             _lifecycle,
-            _retriggerSystem);
+            _retriggerSystem,
+            ResolveJudicatorBinding);
         TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
@@ -497,6 +592,15 @@ public sealed class Match
             ? manager
             : throw new InvalidOperationException("对局尚未进入'进行'态：管理器群不可用（须先成功完成 Initialize）。");
 
+    /// <summary>
+    /// 判定器解析转发（J2；装配链内使用）：按名解析对局注册表条目并包为绑定锚
+    /// （「按名解析」动作的调用点——未注册名＝装配期 fail-fast）。
+    /// 注册表在装配链固定位置创建（先于卡加载段与指挥管理器创建位——解析调用时已就绪）。
+    /// </summary>
+    private JudicatorBinding ResolveJudicatorBinding(string name)
+        => JudicatorBinding.FromRegistration(
+            (_judicators ?? throw new InvalidOperationException("判定器注册表尚未创建（装配链时序错误）。")).Resolve(name));
+
     /// <summary>创建期名单格式校验：null/空白 id → 拒绝（格式错误 fail-fast；"未注册 id"不在此层校验）。</summary>
     private static void ValidateDeckIds(CardList deck, string paramName)
     {
@@ -506,6 +610,56 @@ public sealed class Match
             {
                 throw new ArgumentException("卡组名单含 null/空白 id（格式错误在创建期被拒绝）。", paramName);
             }
+        }
+    }
+
+    /// <summary>
+    /// 玩家构筑配置校验（S10「G12补」；对局创建期 fail-fast）：
+    /// 提供即校验——①成对齐备（缺失其一＝明确拒绝）；②未定义枚举值＝拒绝；③主国非五主国＝拒绝；
+    /// ④盟国==主国＝拒绝；⑤盟国==Neutral＝拒绝。
+    /// 未提供（null）＝跳过全部校验、不抛错（缺省合法——读面为 null、消费端降级为「不匹配」）。
+    /// </summary>
+    private static void ValidateDeckConfiguration(PlayerDeckConfiguration? configuration, string paramName)
+    {
+        if (configuration is null)
+        {
+            return; // 未提供：跳过全部校验（缺省语义）
+        }
+
+        if (configuration.MainFaction is not { } mainFaction || configuration.AllyFaction is not { } allyFaction)
+        {
+            throw new ArgumentException(
+                "玩家构筑配置须成对（主国＋盟国）——缺失其一被拒绝（请齐备提供或整体缺省）。", paramName);
+        }
+
+        if (!Enum.IsDefined(mainFaction))
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, mainFaction, "主国为未定义枚举值（创建期 fail-fast 拒绝）。");
+        }
+
+        if (!FactionRules.IsMajorFaction(mainFaction))
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, mainFaction, "主国非五大主国（德/苏/美/英/日——创建期 fail-fast 拒绝）。");
+        }
+
+        if (!Enum.IsDefined(allyFaction))
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, allyFaction, "盟国为未定义枚举值（创建期 fail-fast 拒绝）。");
+        }
+
+        if (allyFaction == Faction.Neutral)
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, allyFaction, "盟国不得为 Neutral（创建期 fail-fast 拒绝）。");
+        }
+
+        if (allyFaction == mainFaction)
+        {
+            throw new ArgumentOutOfRangeException(
+                paramName, allyFaction, "盟国不得与主国相同（创建期 fail-fast 拒绝）。");
         }
     }
 }

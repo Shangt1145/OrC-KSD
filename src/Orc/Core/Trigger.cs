@@ -20,13 +20,13 @@ public enum TriggerKind
 /// 子类不得引入新的跨调用可变状态面。
 /// moding（逻辑替换；加性扩展）：注册项可经 <see cref="RegisterModing"/> 以 delegate 直接替换其运行逻辑
 /// （执行时动态解析「最后一个」、栈语义、纯替换）；构造期装配项的注册句柄经 <see cref="InitialRegistrations"/> 供给（使全部注册项可寻址）。
-/// 合法性验证（加性扩展）：可选覆写 <see cref="Validate"/>（基类默认恒合法）；每次执行固定先调用（空转豁免）。
+/// 合法性验证（J2：判定器承载）：可选按名绑定「验证判定器」（<see cref="BindValidation"/>；基类默认未绑定＝恒合法）；每次执行固定先调用（空转豁免）。
 /// 不合法＝仅本次取消（不绑视图、不执行事件、留痕、不传染嵌套链）；验证通过后的结构性错误（含绑定失败）＝契约兜底（记录＋失败标记＋安全结束）。
 /// 触发入口三形态（同一 InvokeAsync 重载族）：①统一入口（本类提供）；②具名重载（作者在具体触发器/子类/调用侧书写，
 /// 经手写 Translate 汇入①）；③字典透传（调用方就绪字典直接调用①，零加工）。框架不隐式调用 Translate。
 /// </summary>
 /// <typeparam name="TView">该触发器唯一的视图类型（作者视图类）。</typeparam>
-public class Trigger<TView> where TView : class
+public class Trigger<TView> : ITriggerMetadata where TView : class
 {
     private const int MaxBandValue = 1_000_000;
     private const int PriorityUpperBound = 1000;
@@ -39,10 +39,13 @@ public class Trigger<TView> where TView : class
     private readonly object? _owner;
     private long _seq;
     private long _modingSeq;
+    private JudicatorBinding? _validationBinding;
+    private Func<IReadOnlyList<Ref<Entity>>, Ref<Entity>?>? _validationSubjectProvider;
 
     /// <summary>
     /// 以初始化形态构造触发器（名称〔可选〕、Kind〔默认主动〕、band 方案〔默认缺省〕、初始事件集合〔可选〕、
-    /// hooks 声明〔S3；可选〕、挂载优先级〔S3；默认 Normal〕、所有者〔S3；可选〕）。
+    /// hooks 声明〔S3；可选〕、挂载优先级〔S3；默认 Normal〕、所有者〔S3；可选〕、
+    /// 稳定键〔S-C1；可选，定义级身份来源，未声明回退派生〕）。
     /// 初始事件集合与注册 API 为等价通道（逐项走相同装配校验）。
     /// hooks 声明时机仅构造期（无运行期注册 API）：非空即被动语义；每项须非空、非纯空白、不重复（声明顺序保留）。
     /// </summary>
@@ -57,10 +60,20 @@ public class Trigger<TView> where TView : class
         IEnumerable<TriggerEvent<TView>>? events = null,
         IEnumerable<string>? hooks = null,
         int priority = UpdatePriorities.Normal,
-        object? owner = null)
+        object? owner = null,
+        string? stableKey = null)
     {
         Name = name;
         Kind = kind;
+
+        if (stableKey is not null && string.IsNullOrWhiteSpace(stableKey))
+        {
+            throw new ArgumentException("稳定键不能为空白字符串（未声明请传 null）。", nameof(stableKey));
+        }
+
+        HasDeclaredStableKey = stableKey is not null;
+        StableKey = stableKey ?? (string.IsNullOrWhiteSpace(name) ? typeof(TView).Name : name!);
+        Id = TriggerId.FromKey(StableKey);
 
         if (bandType is not null && !bandType.IsEnum)
         {
@@ -132,6 +145,18 @@ public class Trigger<TView> where TView : class
     /// <summary>触发器种类（运行期可读；S3 起与「挂载条件」关联——仅 Passive 且 hooks 非空可挂载）。</summary>
     public TriggerKind Kind { get; }
 
+    /// <summary>
+    /// 稳定键（S-C1；定义级身份来源）：作者声明值，未声明时回退派生（展示名，空白再退视图类型名）。
+    /// 展示名"同名不消歧"，故须由作者保证"种类"键唯一；回退派生属弱身份（见 <see cref="HasDeclaredStableKey"/>）。
+    /// </summary>
+    public string StableKey { get; }
+
+    /// <summary>是否由作者显式声明稳定键；false＝弱身份（回退派生，审查链中标注）。</summary>
+    public bool HasDeclaredStableKey { get; }
+
+    /// <summary>触发器种类的稳定标识（S-C1；＝<see cref="StableKey"/> 的 64 位稳定哈希；跨对局/跨机器一致）。</summary>
+    public TriggerId Id { get; }
+
     /// <summary>hook 声明（构造期；声明顺序保留；S3 挂载机制内部使用、公共面不暴露）。</summary>
     internal IReadOnlyList<string> Hooks => _hooks;
 
@@ -153,22 +178,24 @@ public class Trigger<TView> where TView : class
 
     /// <summary>注册一个不带 band 的事件（落默认区段；仅默认 band 方案可用）。返回注册句柄（S4 加性扩展；可用于 <see cref="Unregister"/> 撤销）。</summary>
     /// <exception cref="ArgumentNullException">handler 为 null。</exception>
-    /// <exception cref="ArgumentException">事件名为空；默认方案下 band 校验不适用项。</exception>
+    /// <exception cref="ArgumentException">事件名为空；默认方案下 band 校验不适用项；downstream 含 null/空白/重复项。</exception>
     /// <exception cref="ArgumentOutOfRangeException">优先级越界（须满足 0 ≤ 优先级 &lt; 1000）。</exception>
-    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, int priority = 0)
+    /// <param name="downstream">声明的下游触发器稳定键（S-C2 加性；可选；不改运行行为，仅供审查链静态图取边）。</param>
+    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, int priority = 0, IEnumerable<string>? downstream = null)
     {
-        var entry = AddEvent(name, handler, band: null, priority);
+        var entry = AddEvent(name, handler, band: null, priority, downstream);
         return new TriggerRegistration(this, entry.Seq, name);
     }
 
     /// <summary>注册一个带 band 的事件（band 成员须与触发器声明的方案一致；专门方案下必须显式携带）。返回注册句柄（S4 加性扩展；可用于 <see cref="Unregister"/> 撤销）。</summary>
     /// <exception cref="ArgumentNullException">handler 或 band 为 null。</exception>
-    /// <exception cref="ArgumentException">事件名为空；band 成员与已声明方案不一致（二选一保护）。</exception>
+    /// <exception cref="ArgumentException">事件名为空；band 成员与已声明方案不一致（二选一保护）；downstream 含 null/空白/重复项。</exception>
     /// <exception cref="ArgumentOutOfRangeException">band 值或优先级越界（band 须为自然数且 ≤ 1,000,000）。</exception>
-    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, Enum band, int priority = 0)
+    /// <param name="downstream">声明的下游触发器稳定键（S-C2 加性；可选；不改运行行为，仅供审查链静态图取边）。</param>
+    public TriggerRegistration Register(string name, Func<TView, Context, CancellationToken, Task> handler, Enum band, int priority = 0, IEnumerable<string>? downstream = null)
     {
         ArgumentNullException.ThrowIfNull(band);
-        var entry = AddEvent(name, handler, band, priority);
+        var entry = AddEvent(name, handler, band, priority, downstream);
         return new TriggerRegistration(this, entry.Seq, name);
     }
 
@@ -259,22 +286,73 @@ public class Trigger<TView> where TView : class
     }
 
     /// <summary>
-    /// 合法性验证（公开暴露面；可选覆写）：接收本次触发数据中的原始引用列表
-    /// （data 第一层引用类值；按引用相等去重；保持插入序；无引用＝空列表），返回本次触发是否合法（true＝合法）。
-    /// 基类默认恒合法（true）。
+    /// 合法性验证（公开验证入口；J2：经绑定验证判定器执行——未绑定＝恒合法）。
+    /// 接收本次触发数据中的原始引用列表（data 第一层引用类值；按引用相等去重；保持插入序；无引用＝空列表），
+    /// 返回本次触发是否合法（true＝合法；＝<see cref="EvaluateValidation"/> 的布尔消费面）。
     /// 调用时点：每次 <see cref="InvokeAsync"/> 内部固定先调用（空转检查之后、ctx/视图绑定之前）；
-    /// 外部亦可在触发前直接调用（同一方法、无缓存/无短路——每次完整调用；内外判定源唯一）。
-    /// 契约：只读、无副作用（不得改写游戏状态；覆写不得引入跨调用可变状态）；应保持轻量（每次触发均被调用）。
+    /// 外部亦可在触发前直接调用（同一入口、无缓存/无短路——每次完整调用；内外判定源唯一——同一绑定判定器、每次实时执行）。
+    /// 契约：只读、无副作用；应保持轻量（每次触发均被调用）。
     /// 返回 false＝本次触发被拒绝：仅本次取消（不绑视图、不执行事件；写 validation:rejected 留痕、流标记
     /// <see cref="ExecutionOutcome.ValidationRejected"/>、不传染嵌套链）。
-    /// 抛出异常（取消类除外）＝按契约兜底处理（捕获＋记录＋流标记 <see cref="ExecutionOutcome.ContractFailure"/>＋安全结束，不外传）。
+    /// 判定器抛出异常（取消类除外）＝按契约兜底处理（捕获＋记录＋流标记 <see cref="ExecutionOutcome.ContractFailure"/>＋安全结束，不外传）。
     /// </summary>
     /// <param name="refs">原始引用列表（data 第一层引用类值、按引用相等去重、保持插入序；无引用＝空列表）。</param>
-    public virtual bool Validate(IReadOnlyList<Ref<Entity>> refs) => true;
+    public bool Validate(IReadOnlyList<Ref<Entity>> refs) => EvaluateValidation(refs).IsValid;
+
+    /// <summary>
+    /// 验证判定求值（取数形态；公开面）：经绑定验证判定器执行，返回「合法性＋（不合法时）拒绝类别」。
+    /// 未绑定＝恒合法（<see cref="ValidationVerdict.Valid"/>——保持既有缺省语义）。
+    /// 与 <see cref="Validate"/> 同一绑定、同一调用路径（每次实时执行、无缓存短路）；供入口映射按取数语义消费
+    /// （类别缺失/不可辨识时由消费侧降级为一般性失败原因——不伪造具体类别）。
+    /// 被判定对象经绑定登记的提供器（<see cref="BindValidation"/> 的 subjectProvider）在调用时求取。
+    /// </summary>
+    /// <param name="refs">原始引用列表（data 第一层引用类值、按引用相等去重、保持插入序；无引用＝空列表）。</param>
+    /// <returns>验证判定结果（合法性＋拒绝类别）。</returns>
+    /// <exception cref="ArgumentNullException">refs 为 null。</exception>
+    public ValidationVerdict EvaluateValidation(IReadOnlyList<Ref<Entity>> refs)
+    {
+        ArgumentNullException.ThrowIfNull(refs);
+
+        if (_validationBinding is null)
+        {
+            return ValidationVerdict.Valid; // 未绑定＝恒合法（缺省语义）
+        }
+
+        var subject = _validationSubjectProvider?.Invoke(refs);
+        return _validationBinding.InvokeValidation(refs, subject);
+    }
+
+    /// <summary>
+    /// 绑定验证判定器（J2；装配期一次建立、生命周期内不可变——不提供解绑/重绑/运行期换绑通道；
+    /// 改变验证行为的唯一通道＝moding 改写（全局生效、注销回退））。
+    /// 绑定标的经「按名解析」获得（对局路径＝注册表条目等价句柄；独立构造路径＝内置默认判定器实例；
+    /// 解析动作即校验——未注册名由解析调用点在装配期 fail-fast）。
+    /// 未绑定＝恒合法（<see cref="Validate"/> 恒真、<see cref="EvaluateValidation"/> 恒合法）。
+    /// </summary>
+    /// <param name="binding">判定器绑定（<see cref="JudicatorBinding.FromRegistration"/>／<see cref="JudicatorBinding.FromStandalone"/>）。</param>
+    /// <param name="subjectProvider">被判定对象提供器（可选；从当次调用输入提取被判定对象引用——如固定卡引用或 refs 首位；
+    /// 缺省＝无被判定对象（null））。</param>
+    /// <exception cref="ArgumentNullException">binding 为 null。</exception>
+    /// <exception cref="InvalidOperationException">重复绑定被拒绝（绑定＝装配期一次性声明动作——fail-fast，不幂等宽容）。</exception>
+    public void BindValidation(
+        JudicatorBinding binding,
+        Func<IReadOnlyList<Ref<Entity>>, Ref<Entity>?>? subjectProvider = null)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+
+        if (_validationBinding is not null)
+        {
+            throw new InvalidOperationException(
+                $"触发器 '{DisplayName}' 已绑定验证判定器 '{_validationBinding.Name}'（重复绑定被拒绝——绑定＝装配期一次建立、生命周期内不可变）。");
+        }
+
+        _validationBinding = binding;
+        _validationSubjectProvider = subjectProvider;
+    }
 
     /// <summary>
     /// 统一入口（框架提供；规范收敛点）：以就绪数据创建本次执行 ctx（沿用「入料拷贝一次」语义；data 为 null 视作空载体）
-    /// → 合法性验证（每次固定先调用：空转检查之后、ctx/视图绑定之前；输入＝本次触发数据第一层引用收集）
+    /// → 合法性验证（每次固定先调用：空转检查之后、ctx/视图绑定之前；经绑定验证判定器执行；输入＝本次触发数据第一层引用收集）
     /// → 绑定新建视图会话 → 按排序键顺序执行事件链 → 返回事件流。本身不触发转接（不隐式调用 Translate）。
     /// 嵌套调用自动感知执行栈：子流自动挂载到触发者流（无触发者时挂载到传入引擎的总流）；
     /// 已中断状态下的链上新执行空转（不执行任何事件、不进行视图绑定、不调用验证、正常返回空流）。
@@ -299,7 +377,7 @@ public class Trigger<TView> where TView : class
             parent?.Stream ?? engine.RootStream,
             parent is null ? label : ExecutionFrame.BuildSource(parent.TriggerLabel, parent.CurrentEventName));
 
-        var frame = new ExecutionFrame(parent, stream, label);
+        var frame = new ExecutionFrame(parent, stream, label, engine);
         ExecutionFrame.Current = frame;
         try
         {
@@ -308,7 +386,8 @@ public class Trigger<TView> where TView : class
                 return stream; // 空转：不执行任何事件、不进行视图绑定、不调用验证
             }
 
-            // 验证（空转检查之后、ctx/视图绑定之前）：输入＝本次触发数据第一层引用收集（去重、插入序；无引用＝空列表）。
+            // 验证（空转检查之后、ctx/视图绑定之前；经绑定验证判定器执行——未绑定＝恒合法；每次触发固定先调用）：
+            // 输入＝本次触发数据第一层引用收集（去重、插入序；无引用＝空列表）。
             if (!Validate(CollectReferences(data)))
             {
                 // 不合法：仅本次取消——不绑视图、不执行事件；写留痕、标记、返回流（不传染嵌套链）。
@@ -447,7 +526,7 @@ public class Trigger<TView> where TView : class
         return index < 0 ? null : _events[index];
     }
 
-    private EventEntry AddEvent(string name, Func<TView, Context, CancellationToken, Task> handler, Enum? band, int priority)
+    private EventEntry AddEvent(string name, Func<TView, Context, CancellationToken, Task> handler, Enum? band, int priority, IEnumerable<string>? downstream = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
 
@@ -463,9 +542,60 @@ public class Trigger<TView> where TView : class
         }
 
         var bandValue = ResolveBandValue(band);
-        var entry = new EventEntry(name, handler, bandValue, priority, _seq++);
+        var entry = new EventEntry(name, handler, bandValue, priority, _seq++, ValidateDownstream(downstream));
         _events.Add(entry);
         return entry;
+    }
+
+    /// <summary>downstream 声明校验与拷贝（S-C2；每项非空、非纯空白、不重复；null＝空）。</summary>
+    private static string[] ValidateDownstream(IEnumerable<string>? downstream)
+    {
+        if (downstream is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var list = new List<string>();
+        foreach (var key in downstream)
+        {
+            if (key is null)
+            {
+                throw new ArgumentException("downstream 不能包含 null 元素。", nameof(downstream));
+            }
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("downstream 不能包含空或纯空白项。", nameof(downstream));
+            }
+
+            if (list.Contains(key))
+            {
+                throw new ArgumentException($"downstream 列表包含重复项 '{key}'。", nameof(downstream));
+            }
+
+            list.Add(key);
+        }
+
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// 事件只读枚举（S-C2 加性面）：返回本触发器全部注册项的信息快照（执行序——排序键序、同键注册序）。
+    /// 含运行期注册项与构造期装配项；不含 handler 委托本体（以句柄 <see cref="TriggerEventInfo.Seq"/> 标识）。
+    /// </summary>
+    public IReadOnlyList<TriggerEventInfo> Events
+    {
+        get
+        {
+            var snapshot = SnapshotSorted();
+            var result = new TriggerEventInfo[snapshot.Length];
+            for (var i = 0; i < snapshot.Length; i++)
+            {
+                result[i] = snapshot[i].ToInfo();
+            }
+
+            return result;
+        }
     }
 
     /// <summary>band 成员解析与二选一保护校验（默认方案／专门方案的判定矩阵）。</summary>
@@ -543,6 +673,23 @@ public class Trigger<TView> where TView : class
     /// <summary>source/调试/总线读面用显示名：名称（非空白）或视图类型名（未命名退化）。</summary>
     internal string DisplayName => string.IsNullOrWhiteSpace(Name) ? typeof(TView).Name : Name!;
 
+    // ---------- ITriggerMetadata（S-C3 显式实现：内部只读面经非泛型接口对外暴露） ----------
+
+    /// <inheritdoc />
+    string ITriggerMetadata.DisplayName => DisplayName;
+
+    /// <inheritdoc />
+    IReadOnlyList<string> ITriggerMetadata.HookNames => _hooks;
+
+    /// <inheritdoc />
+    object? ITriggerMetadata.Owner => _owner;
+
+    /// <inheritdoc />
+    int ITriggerMetadata.MountPriority => _mountPriority;
+
+    /// <inheritdoc />
+    bool ITriggerMetadata.IsMounted => MountedBus is not null;
+
     private sealed class EventEntry
     {
         private readonly List<ModingEntry> _modings = new();
@@ -552,18 +699,26 @@ public class Trigger<TView> where TView : class
             Func<TView, Context, CancellationToken, Task> handler,
             int bandValue,
             int priority,
-            long seq)
+            long seq,
+            string[] downstream)
         {
             Name = name;
             Handler = handler;
             BandValue = bandValue;
             Priority = priority;
             Seq = seq;
+            Downstream = downstream;
         }
 
         internal string Name { get; }
 
         internal Func<TView, Context, CancellationToken, Task> Handler { get; }
+
+        /// <summary>声明的下游触发器稳定键（S-C2；空数组＝未声明）。</summary>
+        internal string[] Downstream { get; }
+
+        /// <summary>投影为只读审阅信息（S-C2；含当前 moding 项数）。</summary>
+        internal TriggerEventInfo ToInfo() => new(Name, BandValue, Priority, Seq, Downstream, _modings.Count);
 
         internal int BandValue { get; }
 
@@ -665,6 +820,43 @@ public sealed class TriggerModingRegistration
 }
 
 /// <summary>
+/// 事件注册项的只读审阅信息（S-C2；审查链与枚举面用）：
+/// 事件名、band 值与 band 内优先级、注册序（句柄）、声明的下游触发器稳定键、当前 moding 项数。
+/// 不含 handler 委托本体（委托无稳定身份，身份＝(所属触发器 Id, <see cref="Seq"/>)）。
+/// </summary>
+public sealed class TriggerEventInfo
+{
+    internal TriggerEventInfo(
+        string name, int bandValue, int priority, long seq, IReadOnlyList<string> downstream, int modingCount)
+    {
+        Name = name;
+        BandValue = bandValue;
+        Priority = priority;
+        Seq = seq;
+        Downstream = downstream;
+        ModingCount = modingCount;
+    }
+
+    /// <summary>事件名（日志/定位用；不承担唯一键职责）。</summary>
+    public string Name { get; }
+
+    /// <summary>band 值（区段数值）。</summary>
+    public int BandValue { get; }
+
+    /// <summary>band 内优先级。</summary>
+    public int Priority { get; }
+
+    /// <summary>注册序（触发器内唯一，作事件身份；执行排序兜底键）。</summary>
+    public long Seq { get; }
+
+    /// <summary>声明的下游触发器稳定键（空＝未声明）。</summary>
+    public IReadOnlyList<string> Downstream { get; }
+
+    /// <summary>当前生效的 moding（逻辑替换）项数（0＝原逻辑）。</summary>
+    public int ModingCount { get; }
+}
+
+/// <summary>
 /// 执行帧（内部）：一次执行（顶层或嵌套）的运行期会话。
 /// 承担：①当前执行者感知（AsyncLocal 栈；执行会话入/出栈——子流挂载、Interrupt 传播、空转判定共用）；
 /// ②检查点状态（Stopped/Interrupted）与 ctx 状态查询面共用的唯一状态源；
@@ -683,11 +875,12 @@ internal sealed class ExecutionFrame
 
     private Context? _context;
 
-    internal ExecutionFrame(ExecutionFrame? parent, EventStream stream, string triggerLabel)
+    internal ExecutionFrame(ExecutionFrame? parent, EventStream stream, string triggerLabel, LogicEngine? engine)
     {
         Parent = parent;
         Stream = stream;
         TriggerLabel = triggerLabel;
+        Engine = engine;
     }
 
     /// <summary>父帧（触发者执行会话；无父时为 null——顶层）。</summary>
@@ -695,6 +888,9 @@ internal sealed class ExecutionFrame
 
     /// <summary>本次执行的流。</summary>
     internal EventStream Stream { get; }
+
+    /// <summary>本次执行所属引擎（S-C2；供 <see cref="Context.Engine"/> 读取；嵌套执行沿调用传入）。</summary>
+    internal LogicEngine? Engine { get; }
 
     /// <summary>触发器显示名（名称或类型名）。</summary>
     internal string TriggerLabel { get; }

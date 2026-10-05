@@ -25,14 +25,23 @@ public sealed class LogicEngine
     private long _segmentSequence;
     private readonly List<Action<Card, Effect>> _cardMountCompletedActions = new();
     private CardLoadoutProcessor? _cardLoadout;
+    private Orc.Cards.PrefabManager? _prefabs;
 
     public LogicEngine()
     {
         RootStream = new EventStream();
+        Hooks = new HookRegistry();
         Bus = new Bus(this);
+        Orchestration = new OrchestrationManager(this);
         AttackFlow = new AttackFlow(this);
         DamageFlow = new DamageFlow(this);
         OrderFlow = new OrderFlow(this);
+
+        // S-C1：内置更新字符串预登记（定义级词汇表基线；自由字符串仍可随时登记）。
+        Hooks.Register(Updates.CardPlaced);
+        Hooks.Register(Updates.CardDestroyed);
+        Hooks.Register(Updates.CardData);
+        Hooks.Register(Updates.EffectRemoved);
     }
 
     // ---------- ①事件流 ----------
@@ -44,6 +53,43 @@ public sealed class LogicEngine
 
     /// <summary>总线（S3；与所属引擎一对一绑定；公开只读、不可替换；多实例互不相通）。</summary>
     public Bus Bus { get; }
+
+    /// <summary>
+    /// hook 标识注册表（S-C1；引擎级、引擎内维护）：hook 名 ↔ <see cref="HookId"/> 双向互转与登记；
+    /// 多引擎实例各自独立；开放集合（自由字符串保留，无白名单）。
+    /// </summary>
+    public HookRegistry Hooks { get; }
+
+    /// <summary>
+    /// 编排管理器（S-C3；引擎级）：集中登记触发器 ↔ hook ↔ 事件关系，提供反向依赖与声明期可达链导出。
+    /// 由内核自动采样（总线挂载）与装配方显式登记共同填充；多引擎实例各自独立。
+    /// </summary>
+    public OrchestrationManager Orchestration { get; }
+
+    /// <summary>
+    /// 脚本求值器（S-C6；接口倒置，可空）：由 satellite 工程（如 Orc.Script，含 Roslyn）实现并装配于此；
+    /// 未装配（null）＝动态 csx 处理器不可用（内核零依赖、照常运转）。
+    /// </summary>
+    public IScriptEvaluator? ScriptEvaluator { get; set; }
+
+    /// <summary>
+    /// 预制体管理器（S-C7；引擎级、懒创建）：处理器与效果快照的注册、解析与本地明文目录加载。
+    /// </summary>
+    public Orc.Cards.PrefabManager Prefabs => _prefabs ??= new Orc.Cards.PrefabManager(this);
+
+    // ---------- ⑨审查链导出（S-C4） ----------
+
+    /// <summary>导出全域审查链 JSON（结构化真源；节点＝触发器种类，含实例清单与声明的下游边）。</summary>
+    public string ExportAuditChainJson(bool indented = false)
+        => Orc.Output.AuditChainJson.Serialize(Orchestration.BuildAuditChain(), indented);
+
+    /// <summary>导出全域审查链文本视图（人类可读；与 JSON 同源）。</summary>
+    public string ExportAuditChainText()
+        => Orc.Output.AuditChainText.Serialize(Orchestration.BuildAuditChain());
+
+    /// <summary>导出以指定触发器种类为起点的声明期可达链 JSON（未登记起点＝空链）。</summary>
+    public string ExportChainJson(TriggerId root, bool indented = false)
+        => Orc.Output.AuditChainJson.Serialize(Orchestration.QueryChain(root), indented);
 
     // ---------- ③流程 ----------
 

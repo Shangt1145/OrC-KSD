@@ -340,15 +340,17 @@ public sealed class PlayManager
         // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段。
         await using var _actionScope = _engine.BeginAction();
 
-        // 前置判定（与验证同源；用于失败原因的可辨识映射）。
-        var rejection = card.EvaluateUse(_turnManager.CurrentPlayer);
-        if (rejection is not null)
+        // 前置判定（与验证同源；J2：经「反制使用验证判定器」执行——与触发器验证同一绑定判定器，
+        // moding 改写两侧同步生效；用于失败原因的可辨识映射——按取数语义消费拒绝类别）。
+        var verdict = card.UseCounterTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>());
+        if (!verdict.IsValid)
         {
-            return PlayResult.Failure(rejection switch
+            return PlayResult.Failure(verdict.RejectionReason switch
             {
                 CounterUseRejection.NotOwnerTurn => PlayFailureReason.CounterNotOwnerTurn,
                 CounterUseRejection.NotEnoughPoints => PlayFailureReason.CounterPointShortage,
-                _ => PlayFailureReason.PlayChainFault,
+                // 降级（缺类别/不可辨识）：一般性失败原因（规范内缺省——明确、不伪造具体类别）
+                _ => PlayFailureReason.CounterRejected,
             });
         }
 

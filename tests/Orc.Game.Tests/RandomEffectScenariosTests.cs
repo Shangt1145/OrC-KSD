@@ -11,7 +11,8 @@ namespace Orc.Game.Tests;
 /// 第 2 批 G8（效果级随机服务）验收——效果级场景测试面（①②③④⑤）：
 /// ①随机消灭（真实效果：取样→统一死亡流程，不经交互）；②随机分配（真实效果：循环取样 6 次「选目标→+1 防御」，
 /// 允许重复、真实落值）；③随机转移（真实效果：随机选目标→伤害经既有结算路径；边界披露＝重定向完整语义随第 3 批）；
-/// ④随机词条（桩：真实经取样环节＋记录器「授予调用」——完整验证待 A 链）；⑤确定性（同种子同操作序列复现）。
+/// ④随机词条（升级版：真实词条授予＋读取面——桩记录器已替换；完整链〔行为生效/确定性/池边界〕
+/// 见 <see cref="RandomBattleKeywordChainTests"/>）；⑤确定性（同种子同操作序列复现）。
 /// 取用口径：真实效果类经效果注册表注册、经装载链在卡加载时点生效；运行时经接入面
 /// （<see cref="MatchRandomService.ResolveFor"/>——「卡 → 玩家 → 服务」）取用服务。
 /// </summary>
@@ -22,8 +23,15 @@ public class RandomEffectScenarioTests
     private const string TransferCardId = "u_rand_tran";
     private const string KeywordCardId = "u_rand_kw";
 
-    /// <summary>场景④词条标识集合（桩——授予面属 A 链交付、未实施）。</summary>
-    private static readonly string[] SceneKeywordIds = { "kw.alpha", "kw.beta", "kw.gamma" };
+    /// <summary>场景④升级版宿主（单位卡——「对单位授予」语义；授予/读取经词条管理组件）。</summary>
+    private static CardDefinitionEntry KeywordHostDefinition()
+        => new(KeywordCardId, new CardDefinition(
+            "随机词条测试单位", deployCost: 1, operateCost: 1, attack: 1, defense: 1,
+            unitTypes: new[] { UnitType.Infantry }, faction: Faction.Germany, rarity: Rarity.Standard));
+
+    /// <summary>场景④升级版池：3 元打标子集（元素取自打标面、不另立副本；保持与桩相同的池规模——⑤消费结构不变）。</summary>
+    private static IReadOnlyList<string> KeywordScenePool()
+        => BattleKeywordChainKit.Pool(KeywordIds.Blitz, KeywordIds.SmokeScreen, KeywordIds.Armor);
 
     /// <summary>场景卡定义（指令卡——效果宿主；不参与战斗）。</summary>
     private static CardDefinitionEntry SceneDefinition(string id, string name)
@@ -186,38 +194,37 @@ public class RandomEffectScenarioTests
         return new TransferRun(candidates, chosen, chosenIndex, before, after);
     }
 
-    private sealed record KeywordRun(IReadOnlyList<string> Keywords, string Chosen, int ChosenIndex);
-
-    private static async Task<KeywordRun> RunKeywordAsync(int seed)
+    /// <summary>④升级版运行：施放 → 取样（PickOne·池＝打标子集）→ 对单位宿主真实授予 → 从读取面读出被授予词条。</summary>
+    private static async Task<string> RunKeywordChainAsync(int seed)
     {
-        var recorded = new List<string>();
+        var pool = KeywordScenePool();
         var registry = new CardEffectRegistry();
-        registry.Register("effect.rand.kw", _ => new RandomKeywordGrantEffect(SceneKeywordIds, recorded.Add));
+        registry.Register("effect.rand.kw", _ => new RandomKeywordGrantEffect(pool));
         registry.Declare(KeywordCardId, new[] { "effect.rand.kw" });
 
         var match = CommandTestKit.CreateCommandMatch(
             seed: seed,
             effectRegistry: registry,
-            extraDefinitions: new[] { SceneDefinition(KeywordCardId, "随机词条测试卡") });
+            extraDefinitions: new[] { KeywordHostDefinition() });
         await match.Initialize();
         var playerA = match.Players[0];
 
-        var card = (CommandCard)match.CardLibrary.Instantiate(KeywordCardId);
-        await card.LoadAsync(playerA);
-        var effect = Assert.IsType<RandomKeywordGrantEffect>(Assert.Single(card.Effects));
-
+        var host = await CommandTestKit.PrepareOnSupportAsync(match, playerA, KeywordCardId, 1);
+        var effect = Assert.IsType<RandomKeywordGrantEffect>(Assert.Single(host.Effects));
         await effect.CastAsync(match.Engine);
 
-        var chosen = recorded.Single(); // 记录器收到恰一次「授予调用」
-        return new KeywordRun(SceneKeywordIds, chosen, Array.IndexOf(SceneKeywordIds, chosen));
+        var granted = BattleKeywordRules.GetBattleKeywords(host); // 真实授予读取面（替代桩记录器）
+        var chosen = Assert.Single(granted);
+        Assert.Contains(chosen, pool); // 授予登记成立：取样结果 ∈ 池
+        return chosen;
     }
 
     /// <summary>⑤复现序列：同一对局内先执行④（词条取样）再执行②（6 次循环取样）——结果序列化。</summary>
     private static async Task<string> RunReplaySequenceAsync(int seed)
     {
-        var recorded = new List<string>();
+        var pool = KeywordScenePool();
         var registry = new CardEffectRegistry();
-        registry.Register("effect.rand.kw", _ => new RandomKeywordGrantEffect(SceneKeywordIds, recorded.Add));
+        registry.Register("effect.rand.kw", _ => new RandomKeywordGrantEffect(pool));
         registry.Register("effect.rand.distribute", _ => new RandomDistributeEffect());
         registry.Declare(KeywordCardId, new[] { "effect.rand.kw" });
         registry.Declare(DistributeCardId, new[] { "effect.rand.distribute" });
@@ -227,7 +234,7 @@ public class RandomEffectScenarioTests
             effectRegistry: registry,
             extraDefinitions: new[]
             {
-                SceneDefinition(KeywordCardId, "随机词条测试卡"),
+                KeywordHostDefinition(),
                 SceneDefinition(DistributeCardId, "随机分配测试卡"),
             });
         await match.Initialize();
@@ -238,10 +245,10 @@ public class RandomEffectScenarioTests
         var front = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0);
         var candidates = new[] { support1, support2, front };
 
-        var keywordCard = (CommandCard)match.CardLibrary.Instantiate(KeywordCardId);
-        await keywordCard.LoadAsync(playerA);
-        var keywordEffect = Assert.IsType<RandomKeywordGrantEffect>(Assert.Single(keywordCard.Effects));
-        await keywordEffect.CastAsync(match.Engine); // ④（含桩取样环节）
+        // ④（升级版：真实授予读取）——宿主不上场：不影响 ② 候选（覆盖不减）。
+        var host = await CommandTestKit.InstantiateLoadedAsync(match, playerA, KeywordCardId);
+        var keywordEffect = Assert.IsType<RandomKeywordGrantEffect>(Assert.Single(host.Effects));
+        await keywordEffect.CastAsync(match.Engine);
 
         var distributeCard = (CommandCard)match.CardLibrary.Instantiate(DistributeCardId);
         await distributeCard.LoadAsync(playerA);
@@ -249,7 +256,8 @@ public class RandomEffectScenarioTests
         await distributeEffect.CastAsync(match.Engine); // ②（6 次取样 → 防御增量）
 
         var deltas = candidates.Select(unit => unit.Modifiers.GetEffectiveValue(CardStatFields.Defense) - 5).ToArray();
-        return $"kw={recorded.Single()};dist=[{string.Join(",", deltas)}]";
+        var granted = string.Join(",", BattleKeywordRules.GetBattleKeywords(host)); // ④升级版读取面（真实授予）
+        return $"kw=[{granted}];dist=[{string.Join(",", deltas)}]";
     }
 
     // ---------- ① 随机消灭（真实效果：取样 → 统一死亡流程；不经交互） ----------
@@ -318,24 +326,20 @@ public class RandomEffectScenarioTests
         // 边界披露：重定向完整语义随第 3 批；本处仅验证「随机选择→伤害应用」环节（详见效果类注释）
     }
 
-    // ---------- ④ 随机词条（桩：真实取样 ＋ 记录器「授予调用」） ----------
+    // ---------- ④ 随机词条（升级版：真实授予 ＋ 读取面） ----------
 
     [Fact]
-    public async Task Scenario4_Keyword_Grant_Stub_Receives_Chosen_Keyword_Via_Real_Draw()
+    public async Task Scenario4_Keyword_Grant_Lands_Real_Grant_With_Real_Draw_Path()
     {
-        var run = await RunKeywordAsync(seed: 42);
+        // 桩→升级：记录器断言（「授予调用」）→ 真实授予读取（对单位宿主授予后经读取面可读）；
+        // 完整链（行为生效/确定性/池边界）见 RandomBattleKeywordChainTests。
+        var first = await RunKeywordChainAsync(seed: 42);
+        Assert.Equal(KeywordIds.Blitz, first); // 固定种子 42 下的确定性输出（回归锚点）
 
-        Assert.Equal(3, run.Keywords.Count);
-        // 记录器收到恰一次「授予调用」；选中标识＝固定种子 42 下的确定性输出
-        Assert.Equal("kw.alpha", run.Chosen);
-        Assert.Equal(0, run.ChosenIndex);
-
-        // 取样路径真实（补充证据）：更换种子 → 选择变化（非固定映射、非恒取首项）
-        var alternate = await RunKeywordAsync(seed: 43);
-        Assert.Equal("kw.beta", alternate.Chosen);
-        Assert.NotEqual(run.ChosenIndex, alternate.ChosenIndex);
-
-        // 补验边界：词条授予面属 A 链交付、未实施——完整验证待 A 链完成后补测（如经真实授予面断言词条登记）
+        // 取样路径真实（独立证据保留）：更换种子 → 取样结果变化（非固定映射、非恒取首项）。
+        var alternate = await RunKeywordChainAsync(seed: 43);
+        Assert.Equal(KeywordIds.SmokeScreen, alternate); // 固定种子 43 下的确定性输出（回归锚点）
+        Assert.NotEqual(first, alternate);
     }
 
     // ---------- ⑤ 确定性（固定种子下相同操作序列 → 相同随机结果） ----------
@@ -347,9 +351,9 @@ public class RandomEffectScenarioTests
         var second = await RunReplaySequenceAsync(seed: 777);
         var other = await RunReplaySequenceAsync(seed: 778);
 
-        // 复现断言（含④桩取样环节 ＋ ②循环取样）：同种子、同操作序列 → 结果逐位一致
+        // 复现断言（含④升级版取样环节 ＋ ②循环取样）：同种子、同操作序列 → 结果逐位一致
         Assert.Equal(first, second);
-        Assert.Equal("kw=kw.alpha;dist=[1,1,4]", first); // 回归锚点（固定种子 777 的确定性输出）
+        Assert.Equal("kw=[闪击];dist=[1,1,4]", first); // 回归锚点（实测固化；旧锚 kw=kw.alpha;dist=[1,1,4]——变化说明见实现记录）
 
         // 换种子 → 结果变化（种子生效；可选辅助）
         Assert.NotEqual(first, other);
@@ -540,33 +544,90 @@ internal sealed class RandomTransferEffect : ActiveEffect<RandomCastView>
 }
 
 /// <summary>
-/// 验收④随机词条（桩）：真实经随机服务取样环节（从词条标识集合 PickOne）；
-/// 「授予调用」＝测试注入记录器（词条授予面属 A 链交付、未实施——本处仅验证「从集合取样 → 授予调用」路径；
-/// 完整验证待 A 链完成后补测）。
+/// 验收④随机词条（升级版：真实授予载体）——B1④桩的升级形态：
+/// 施放时经接入面取对局随机服务 → 从词条池取样（PickN〔不放回〕或循环 PickOne〔允许重复〕）→
+/// 对宿主真实授予（词条管理组件登记——「从集合取样 → 授予调用」的桩记录器由此替换）。
+/// 池＝调用方经对战词条打标面构建的子集（<see cref="BattleKeywordChainKit.Pool"/>——读取引用＋校验、不另立副本）；
+/// 参值词条（重甲）被随机授予时取默认参值 1（A2 工程约定）。
+/// 边界（空池/池不足）＝受控失败：不抛未受控中断（不抛断链）、拒绝/既定语义如实承载
+/// （<see cref="LastRejection"/> 明确记录、不静默吞噬）、不无限重试、不授予。
+/// 观测面（测试断言用）：<see cref="DrawLog"/>（取样序列）/<see cref="GrantResults"/>（授予结果，含重复幂等）/
+/// <see cref="LastRejection"/>（边界受控失败记录）。
 /// </summary>
 internal sealed class RandomKeywordGrantEffect : ActiveEffect<RandomCastView>
 {
-    private readonly IReadOnlyList<string> _keywords;
-    private readonly Action<string> _grantRecorder;
+    private readonly IReadOnlyList<string> _pool;
+    private readonly int _count;
+    private readonly bool _usePickN;
 
-    public RandomKeywordGrantEffect(IReadOnlyList<string> keywords, Action<string> grantRecorder)
+    public RandomKeywordGrantEffect(IReadOnlyList<string> pool, int count = 1, bool usePickN = false)
         : base("随机词条")
     {
-        _keywords = keywords;
-        _grantRecorder = grantRecorder;
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        _pool = pool;
+        _count = count;
+        _usePickN = usePickN;
         CastTrigger.Register("施放", OnCastAsync);
     }
 
-    private Task OnCastAsync(RandomCastView view, Context ctx, CancellationToken ct)
+    /// <summary>取样序列（逐次选取序——观测面）。</summary>
+    public List<string> DrawLog { get; } = new();
+
+    /// <summary>授予尝试结果（与 <see cref="DrawLog"/> 一一对应；重复选中＝幂等 false——按既有授予语义、不新定义）。</summary>
+    public List<bool> GrantResults { get; } = new();
+
+    /// <summary>边界受控失败记录（空池/池不足；null＝无边界失败——可断言/可诊断、不静默吞噬）。</summary>
+    public string? LastRejection { get; private set; }
+
+    private async Task OnCastAsync(RandomCastView view, Context ctx, CancellationToken ct)
     {
         var random = MatchRandomService.ResolveFor(Host);
         if (random is null)
         {
-            return Task.CompletedTask;
+            return; // 脱局降级：功能不可用、不抛错、不失败（沿用先例）
         }
 
-        var chosen = random.PickOne(_keywords); // 真实取样路径（经对局随机服务）
-        _grantRecorder(chosen); // 「授予调用」桩：记录器收到选中词条标识
-        return Task.CompletedTask;
+        if (Host is not CardBase host)
+        {
+            return;
+        }
+
+        if (_pool.Count == 0)
+        {
+            // 空池＝受控失败：「空候选集＝明确拒绝」原语语义的链层承载——不抛断链、不静默、不授予、不重试。
+            LastRejection = "空池拒绝：无候选可取样（原语语义＝空候选集明确拒绝）——链层受控承载（不抛断链、不授予、不重试）。";
+            return;
+        }
+
+        if (_usePickN && _count > _pool.Count)
+        {
+            // 池不足＝受控失败：「不放回取样不可满足＝明确拒绝」原语既定语义的链层承载。
+            LastRejection =
+                $"池不足拒绝：取样数 {_count} 超过池数 {_pool.Count}（原语既定语义＝不放回取样不可满足、明确拒绝）——链层受控承载（不抛断链、不授予、不重试）。";
+            return;
+        }
+
+        if (_usePickN)
+        {
+            foreach (var chosen in random.PickN(_pool, _count))
+            {
+                await GrantOneAsync(host, chosen);
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            var chosen = random.PickOne(_pool); // 循环取样（允许重复选中——重复按授予幂等语义处置）
+            await GrantOneAsync(host, chosen);
+        }
+    }
+
+    private async Task GrantOneAsync(CardBase host, string chosen)
+    {
+        DrawLog.Add(chosen);
+        GrantResults.Add(await host.Keywords.GrantAsync(chosen, chosen == KeywordIds.Armor ? 1 : null)); // 参值词条默认参值 1
     }
 }

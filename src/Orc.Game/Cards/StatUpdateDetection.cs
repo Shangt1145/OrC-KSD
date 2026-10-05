@@ -20,8 +20,8 @@ namespace Orc.Game.Cards;
 //   变更类操作拒绝；读取与内部清理不受此限）；机制在变更类操作前查询。
 // W3-2 G5 接线（加性）：
 // ⑤部署费检测组件（DeployCostUpdateDetector）——全类别一体适用（单位/指令/反制，含未单位化的单位；
-//   不区分类别、不依赖单位化状态）：基准＝花费组件定义静态值；「有效部署费」＝链输出；
-//   快照/比较/集中触发沿用同一管线口径（变化字段集合含部署费标识）。
+//   不区分类别、不依赖单位化状态）：基准＝合并组件的定义静态值（S10 起：FactionCostData.DeployCost——
+//   旧独立花费组件退役）；「有效部署费」＝链输出；快照/比较/集中触发沿用同一管线口径（变化字段集合含部署费标识）。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -244,11 +244,12 @@ public sealed class UnitStateUpdateDetector : IStatUpdateDetector, IStatEffectiv
 }
 
 /// <summary>
-/// 部署费检测组件（W3-2 G5 内置成员）：把「部署费」（<see cref="CommandPointCostData.DeployCost"/> 基准——定义静态值）
+/// 部署费检测组件（W3-2 G5 内置成员；S10 随改：基准读取点接改至合并组件 <see cref="FactionCostData"/>）：把「部署费」
+/// （<see cref="FactionCostData.DeployCost"/> 基准——定义静态值〔本体可经卡侧受控门户修改、修改经管线传播〕）
 /// 纳入更新检测；「有效部署费」＝链输出（修饰/设值/钳制等贡献叠加后的读取口径）。
 /// 全类别一体适用：单位 / 指令 / 反制（含未单位化的单位）——部署费为全类别装配（构造期常驻），
 /// 不区分类别、不依赖单位化状态。
-/// 就绪条件＝CommandPointCostData 在场（全类别构造期常驻，恒就绪；缺组件＝false——机制侧拒绝变更/读取，不静默）。
+/// 就绪条件＝FactionCostData 在场（全类别构造期常驻，恒就绪；缺组件＝false——机制侧拒绝变更/读取，不静默）。
 /// 基准（链起点）＝部署费定义静态值；快照（落定输出）＝链输出（纯链结果、无全局数值规范——
 /// 「不低于 0/1」等合法下限由使用处经钳制/设值表达，机制不内建费用域钳制）。
 /// 无上限语义（ReadCapBaseValue 默认拒绝）、无表现位同步（部署费无独立表现位——有效值经读取口查询）、
@@ -273,7 +274,7 @@ public sealed class DeployCostUpdateDetector : IStatUpdateDetector
     public IReadOnlyList<string> Fields => DeployCostFieldList;
 
     /// <inheritdoc />
-    public bool IsReady => _card.TryGetData<CommandPointCostData>(out _);
+    public bool IsReady => _card.TryGetData<FactionCostData>(out _);
 
     /// <inheritdoc />
     public int ReadBaseValue(string field)
@@ -284,7 +285,7 @@ public sealed class DeployCostUpdateDetector : IStatUpdateDetector
                 $"字段 '{field}' 不在部署费域（{CardStatFields.DeployCost}）。", nameof(field));
         }
 
-        return _card.GetData<CommandPointCostData>().DeployCost; // 未就绪＝明确异常（不静默）
+        return _card.GetData<FactionCostData>().DeployCost; // 未就绪＝明确异常（不静默）
     }
 
     /// <inheritdoc />

@@ -7,10 +7,11 @@ namespace Orc.Game.Cards;
 /// 卡牌基类骨架（三大类卡牌体系；2A 结构层）：单位 / 指令 / 反制的公共基座。
 /// 继承引擎薄容器 <see cref="Orc.Cards.Card"/>——数据组件经既有组件体系挂载（AddData/GetData）、效果经 AddEffect 体系，
 /// 与既有 CardDefinition / CardLibrary / 集合类衔接形态不变。
-/// ①实例化路径数据组件装配（按类别差异化，需求原文 E 区）：全类别＝【指挥点花费】；
-///   单位＝另加【对战】（<see cref="UnitCard"/> 构造装配）；指令＝花费（无其他）；反制＝花费（激活状态组件类就绪、挂载属后续批次）。
-///   四合一 CardStatsData 已退役、无双真源。
-/// ②对局开始卡牌加载模板（<see cref="LoadAsync"/>）：固定链＝【重建/装配（可重写扩展点、默认空实现）→ 对局级 ID 分配（W1-1 加性）→ 元数据装配（W1-1 加性：TagData）→ 词条装载（2C 加性）→ 效果装载（X2 加性）→ 广播 card.load】；
+/// ①实例化路径数据组件装配（按类别差异化，需求原文 E 区）：全类别＝【阵营〔国籍〕＋部署费】
+///   合并组件（<see cref="FactionCostData"/>——S10 重构：原独立指挥点花费组件已退役、不保留兼容读面）；
+///   单位＝另加【对战】（<see cref="UnitCard"/> 构造装配）；指令＝合并组件（无其他）；反制＝合并组件（激活状态组件类就绪、挂载属后续批次）。
+///   四合一 CardStatsData 与旧独立花费组件均已退役、无双真源。
+/// ②对局开始卡牌加载模板（<see cref="LoadAsync"/>）：固定链＝【重建/装配（可重写扩展点、默认空实现）→ 对局级 ID 分配（W1-1 加性）→ 元数据装配（W1-1 加性：TagData〔稀有度＋开放 tag；S10 起国籍移出〕）→ 词条装载（2C 加性）→ 效果装载（X2 加性）→ 广播 card.load】；
 ///   持久化重建本批仅显式预留空位（无任何重建逻辑；总装阶段实现）。
 /// ③触发器声明位：预打出 / 打出 / 使用反制——对象在位于具体子类（构造期创建、装配点就绪）；链内容属打出链批次（2B）。
 /// ④修饰器组件（W2a G3 加性）：所有卡类构造期常驻持有 <see cref="Modifiers"/>（轻量伴生容器——非数据组件、不进
@@ -21,7 +22,7 @@ public abstract class CardBase : Orc.Cards.Card
 {
     private readonly LogicEngine _engine;
 
-    /// <summary>创建卡牌实例（引擎绑定＋名称取自定义＋全类别基础数据组件装配〔指挥点花费〕）。</summary>
+    /// <summary>创建卡牌实例（引擎绑定＋名称取自定义＋全类别基础数据组件装配〔阵营〔国籍〕＋部署费合并组件〕）。</summary>
     /// <exception cref="ArgumentNullException">engine 或 definition 为 null（name 校验沿用 Entity）。</exception>
     protected CardBase(LogicEngine engine, CardDefinition definition)
         : base(engine, DefinitionName(definition))
@@ -29,8 +30,10 @@ public abstract class CardBase : Orc.Cards.Card
         _engine = engine;
         Definition = definition;
 
-        // 实例化路径数据组件装配（旧 → 新：原四合一 CardStatsData → 指挥点花费〔全类别〕＋对战〔单位专属，见 UnitCard〕）。
-        AddData(new CommandPointCostData(definition.DeployCost));
+        // 实例化路径数据组件装配（旧 → 新：原四合一 CardStatsData → 2A 拆分〔指挥点花费＋对战〕→
+        // S10 再重构：指挥点花费并入「阵营〔国籍〕＋部署费」合并组件〔FactionCostData——全类别构造期常驻〕；
+        // 单位另加对战组件〔见 UnitCard〕）。
+        AddData(new FactionCostData(definition.Faction, definition.DeployCost));
 
         // W2a G3 修饰机制：卡侧修饰器组件构造期常驻（所有卡类；轻量伴生、非数据组件——不进装配/加载/快照语义）。
         Modifiers = new CardModifierComponent(this, engine);
@@ -112,12 +115,43 @@ public abstract class CardBase : Orc.Cards.Card
     /// </summary>
     internal Func<int>? MatchCardIdProvider { get; set; }
 
+    // ---------- 受控变更门户（S10「G12补」；「阵营〔国籍〕＋部署费」合并组件的受控写面） ----------
+
+    /// <summary>
+    /// 门户：设置国籍（S10 受控变更面——合并组件 <see cref="FactionCostData"/> 的国籍写面；
+    /// 运行时修改国籍的唯一合规入口）：
+    /// 值域＝已定义枚举值（11 值）；非法值＝明确拒绝（fail-fast、值不变——不产生半改）；
+    /// 修改为静默数据变更（不发射/不通知——延续「元数据静默变更」先例；读取与筛选随动即观测面，
+    /// 单源直读——既有筛选/读取消费立即读到新值）。
+    /// 未装配合并组件（独立构造未加载卡等）＝明确异常（装配性错误——不静默）。
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">faction 为未定义枚举值（非法修改被拒绝）。</exception>
+    /// <exception cref="KeyNotFoundException">合并组件缺失（未装配实例取件＝明确错误）。</exception>
+    public void SetFaction(Faction faction) => GetData<FactionCostData>().SetFactionCore(faction);
+
+    /// <summary>
+    /// 门户：设置部署费基准值（S10 受控变更面——修改合并组件部署费「本体」（基准值）的唯一合规入口）：
+    /// 值域＝非负整数（0 合法）；非法值＝明确拒绝（fail-fast、值不变——不产生半改）；
+    /// 合法修改＝落值 → 经既有数据改变管线传播（链重跑＋集中触发——有变更才发
+    /// <see cref="GameUpdates.CardStatChanged"/>、无变更零发射；复用既有信号、不新增）；
+    /// 消费点行为不变（打出校验/扣费/复验等仍读「有效值」——基准→链→有效值）。
+    /// 未装配合并组件＝明确异常（装配性错误——不静默）。
+    /// </summary>
+    /// <param name="deployCost">部署费基准值（≥0）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">deployCost 为负（非法修改被拒绝）。</exception>
+    /// <exception cref="KeyNotFoundException">合并组件缺失（未装配实例取件＝明确错误）。</exception>
+    public async Task SetDeployCostBaseAsync(int deployCost, CancellationToken ct = default)
+    {
+        GetData<FactionCostData>().SetDeployCostCore(deployCost); // 受控落值（值域校验先行——非法值不落）
+        await Modifiers.RequestRerunAsync(ct); // 基准变更 → 链重跑＋集中触发（有变更才发）
+    }
+
     /// <summary>
     /// 对局开始卡牌加载（模板方法；由加载路径逐张调用）：
     /// ① 装配归属（Owner＝所属卡组玩家；2B 加性：打出链验证/扣费/离手依据）；
     /// ② 重建/装配步骤（可重写扩展点 <see cref="RebuildFromPersistence"/>；默认空实现——持久化重建后置、本批无重建逻辑）；
     /// ③ 对局级卡牌 ID 分配（W1-1 加性：经提供器分配自增 ID；幂等——已分配保持原值；先于 card.load 广播）；
-    /// ④ 元数据装配（W1-1 加性：从定义读国籍/稀有度/开放 tag → 装配 TagData；先于 card.load 广播——消费者查询不到未就绪状态）；
+    /// ④ 元数据装配（W1-1 加性：从定义读稀有度/开放 tag → 装配 TagData〔S10：国籍移出——国籍于构造期经 FactionCostData 装配〕；先于 card.load 广播——消费者查询不到未就绪状态）；
     /// ⑤ 部署逻辑生成（A4 加性：数据装配组收尾——仅单位卡、经装配源查询〔无登记＝不生成〕，
     ///    为单位卡生成并挂载部署逻辑组件；先于 card.load 广播——「加载时生成部署组件」；生成失败＝记录、不阻断加载）；
     /// ⑥ 词条装载（2C-A1 加性：从定义读词条声明〔标识＋可选参值〕→ 逐条经词条管理组件的授予链挂载
@@ -156,13 +190,14 @@ public abstract class CardBase : Orc.Cards.Card
     }
 
     /// <summary>
-    /// 元数据装配（W1-1；加载时＝与 card.load 同步完成）：从定义读国籍/稀有度（必填槽位）与开放 tag →
-    /// 装配 <see cref="TagData"/>（全类别覆盖；无开放 tag 卡＝空集合装配——槽位恒在）。登记先于 card.load 广播——
+    /// 元数据装配（W1-1；加载时＝与 card.load 同步完成）：从定义读稀有度与开放 tag → 装配 <see cref="TagData"/>
+    /// （全类别覆盖；无开放 tag 卡＝空集合装配——槽位恒在）。S10 随改：国籍不再经本装配（移出至
+    /// <see cref="FactionCostData"/>——构造期已装配，本步骤仅剩稀有度＋开放 tag）。登记先于 card.load 广播——
     /// 消费者查询不到未就绪状态（与词条装配流先例一致）。重复加载＝重复装配被拒绝（AddData 契约：每类型恰一份）。
     /// </summary>
     private void LoadTagData()
     {
-        var data = new TagData(Definition.Faction, Definition.Rarity);
+        var data = new TagData(Definition.Rarity);
         foreach (var tag in Definition.Tags)
         {
             data.AddTag(tag);

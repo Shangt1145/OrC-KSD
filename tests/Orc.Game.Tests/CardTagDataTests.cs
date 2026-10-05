@@ -13,6 +13,8 @@ namespace Orc.Game.Tests;
 /// 对局级 ID 水位线构筑外判定（初始化内 / 构筑外生成模拟 / 未加载拒绝 / 重复加载同 ID）。
 /// 四验收场景：①组合筛选（国籍×稀有度×子类别）②开放子类别查询（海军/T-34；同集合多值 AND）
 /// ③构筑外判定（初始化内 vs 构筑外生成牌模拟）④开放 tag 运行时增删生效（同实例即时读回＋筛选随动）。
+/// S10 随改（受控适配）：国籍自 TagData 移出——国籍相关断言改读合并组件 <see cref="FactionCostData"/>
+/// （「阵营〔国籍〕＋部署费」；读面与受控写面的完整验证见 FactionCostComponentTests）；稀有度/开放 tag 断言不变。
 /// </summary>
 public class CardTagDataTests
 {
@@ -125,11 +127,11 @@ public class CardTagDataTests
     [Fact]
     public void TagData_Slots_Expose_Typed_Values_As_Required_And_ReadOnly()
     {
-        var data = new TagData(Faction.Japan, Rarity.Elite);
+        var data = new TagData(Rarity.Elite);
 
-        // 必填槽位恒有值：国籍 / 稀有度经强类型槽位与便捷读面可读（只读——无写面）
-        Assert.Equal(Faction.Japan, data.FactionSlot.Value);
-        Assert.Equal(Faction.Japan, data.Faction);
+        // 必填槽位恒有值：稀有度经强类型槽位与便捷读面可读（只读——无写面）
+        // S10 随改：国籍槽位自 TagData 移出——国籍读取面迁至「阵营〔国籍〕＋部署费」合并组件
+        // （FactionCostData；跨组件的国籍/花费读数与受控写面完整验证见 FactionCostComponentTests）。
         Assert.Equal(Rarity.Elite, data.RaritySlot.Value);
         Assert.Equal(Rarity.Elite, data.Rarity);
 
@@ -140,7 +142,7 @@ public class CardTagDataTests
     [Fact]
     public void TagData_Open_Tags_Add_Remove_Contains_Are_Idempotent_And_Ordered()
     {
-        var data = new TagData(Faction.Soviet, Rarity.Standard);
+        var data = new TagData(Rarity.Standard);
         Assert.Empty(data.Tags);
 
         Assert.True(data.AddTag("海军"));  // 登记
@@ -161,7 +163,7 @@ public class CardTagDataTests
     [Fact]
     public void TagData_Rejects_Blank_Tags()
     {
-        var data = new TagData(Faction.USA, Rarity.Limited);
+        var data = new TagData(Rarity.Limited);
         Assert.Throws<ArgumentException>(() => data.AddTag(""));
         Assert.Throws<ArgumentException>(() => data.AddTag("  "));
         Assert.Throws<ArgumentNullException>(() => data.AddTag(null!));
@@ -175,7 +177,9 @@ public class CardTagDataTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<Faction>((Faction)99));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<Rarity>((Rarity)(-1)));
 
-        // 国籍枚举全量域（11 值，含 Neutral/Anzac）与稀有度四值均可入槽
+        // 泛型槽位机制：国籍枚举全量域（11 值，含 Neutral/Anzac）与稀有度四值均可入槽
+        // （S10 随改注：国籍槽位不再由 TagData 承载〔读面迁至合并组件 FactionCostData——受控写面〕；
+        // 本段保留为泛型槽位机制的值域覆盖——「任意枚举值域可入槽、未定义值拒绝」不随承载迁移而消失）。
         foreach (var faction in Enum.GetValues<Faction>())
         {
             Assert.Equal(faction, new TagSlot<Faction>(faction).Value);
@@ -256,23 +260,27 @@ public class CardTagDataTests
     {
         var (match, player, _) = await CreateLoadedFixtureAsync();
 
-        // 单位 / 指令 / 反制三类均装配（国籍/稀有度/开放 tag 一律可读——全类别覆盖）
+        // 单位 / 指令 / 反制三类均装配（稀有度/开放 tag 经 TagData 可读；国籍经合并组件 FactionCostData 可读——
+        // S10 重构：国籍自 TagData 移出、与部署费合并入同组件；全类别覆盖）
         var unit = await InstantiateLoadedAsync(match, player, JpEliteAirId);
         var command = await InstantiateLoadedAsync(match, player, CmdAirId);
         var counter = await InstantiateLoadedAsync(match, player, CntNavyId);
 
+        var unitFactionCost = unit.GetData<FactionCostData>();
+        Assert.Equal(Faction.Japan, unitFactionCost.Faction);
         var unitData = unit.GetData<TagData>();
-        Assert.Equal(Faction.Japan, unitData.Faction);
         Assert.Equal(Rarity.Elite, unitData.Rarity);
         Assert.Equal(new[] { "空军", "海军" }, unitData.Tags);
 
+        var commandFactionCost = command.GetData<FactionCostData>();
+        Assert.Equal(Faction.Japan, commandFactionCost.Faction);
         var commandData = command.GetData<TagData>();
-        Assert.Equal(Faction.Japan, commandData.Faction);
         Assert.Equal(Rarity.Limited, commandData.Rarity);
         Assert.True(commandData.ContainsTag("空军"));
 
+        var counterFactionCost = counter.GetData<FactionCostData>();
+        Assert.Equal(Faction.Britain, counterFactionCost.Faction);
         var counterData = counter.GetData<TagData>();
-        Assert.Equal(Faction.Britain, counterData.Faction);
         Assert.Equal(Rarity.Special, counterData.Rarity);
         Assert.True(counterData.ContainsTag("海军"));
     }
@@ -283,14 +291,16 @@ public class CardTagDataTests
         var match = CreateMetadataMatch();
         var reads = new List<bool>();
 
-        // 订阅在 Initialize 前挂接：在每条 card.load 的处理窗口内读取 TagData——须已就绪（登记先于广播）
+        // 订阅在 Initialize 前挂接：在每条 card.load 的处理窗口内读取元数据——须已就绪（登记先于广播）
+        // （TagData＝加载时装配；FactionCostData＝构造期装配——两者均在 card.load 窗口内已就绪，S10 随改）
         using var subscription = match.Engine.Subscribe((type, payload, _) =>
         {
             if (type == GameUpdates.CardLoad)
             {
                 var card = (CardBase)payload![GameUpdates.PayloadCard]!;
                 reads.Add(card.TryGetData<TagData>(out var data)
-                    && data.Faction == Faction.Japan
+                    && card.TryGetData<FactionCostData>(out var factionCost)
+                    && factionCost.Faction == Faction.Japan
                     && data.Rarity == Rarity.Standard
                     && data.ContainsTag("空军"));
             }
@@ -330,10 +340,12 @@ public class CardTagDataTests
         var (_, _, samples) = await CreateLoadedFixtureAsync();
 
         // 「日本精英空军」：国籍×稀有度×子类别 三条件 AND
+        // （S10 随改：国籍经合并组件 FactionCostData 读取；稀有度/tag 经 TagData——组合筛选范式跨组件组合）
         var result = samples.Where(card =>
         {
+            var factionCost = card.GetData<FactionCostData>();
             var data = card.GetData<TagData>();
-            return data.Faction == Faction.Japan
+            return factionCost.Faction == Faction.Japan
                 && data.Rarity == Rarity.Elite
                 && data.ContainsTag("空军");
         }).ToList();
@@ -344,23 +356,26 @@ public class CardTagDataTests
         // 条件收放对照：日本×精英（去子类别）＝两枚；日本×精英×海军＝一枚（同集合多值维度见场景②）
         var japaneseElite = samples.Where(card =>
         {
+            var factionCost = card.GetData<FactionCostData>();
             var data = card.GetData<TagData>();
-            return data.Faction == Faction.Japan && data.Rarity == Rarity.Elite;
+            return factionCost.Faction == Faction.Japan && data.Rarity == Rarity.Elite;
         }).ToList();
         Assert.Equal(2, japaneseElite.Count);
 
         var japaneseEliteNavy = samples.Where(card =>
         {
+            var factionCost = card.GetData<FactionCostData>();
             var data = card.GetData<TagData>();
-            return data.Faction == Faction.Japan && data.Rarity == Rarity.Elite && data.ContainsTag("海军");
+            return factionCost.Faction == Faction.Japan && data.Rarity == Rarity.Elite && data.ContainsTag("海军");
         }).ToList();
         Assert.Single(japaneseEliteNavy);
 
         // 负例：法国×特殊＝空集（条件组合不误放行）
         Assert.DoesNotContain(samples, card =>
         {
+            var factionCost = card.GetData<FactionCostData>();
             var data = card.GetData<TagData>();
-            return data.Faction == Faction.France && data.Rarity == Rarity.Special;
+            return factionCost.Faction == Faction.France && data.Rarity == Rarity.Special;
         });
     }
 

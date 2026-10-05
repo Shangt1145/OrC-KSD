@@ -84,8 +84,19 @@ public sealed class UnitStateData
     public int DefenseLoss { get; internal set; }
 
     /// <summary>
+    /// 在场回合数（G14补 S10；回合事件驱动计数）：单位在场上所历的己方回合数——
+    /// 入场即第 1 回合（部署/加入/转换入场＝1，见 <see cref="CreateInitial"/>）；递增＝单位归属玩家的回合正式开始
+    /// （turn.start）时 +1（单方步进——对方回合不递增）；死亡后停止递增（值保持最后值、可读）；
+    /// S9 转换重建的新实例＝计数重置（静态重建——自 1 起）；静默数据变更（不新增信号/不发更新）。
+    /// 运行期递增经内部执行面（<see cref="UnitCard.AdvanceTurnsInPlay"/>）——直写为非合规路径；
+    /// 未入场（手牌/卡组）＝无本组件、不适用（读取＝不适用/无值、不抛错）。
+    /// </summary>
+    public int TurnsInPlay { get; internal set; }
+
+    /// <summary>
     /// 按「初始值复制契约」创建（挂载时用；装配期填充＝列明例外——保留直写）：三实时值初值一次性复制自对战组件
-    /// （只读基准）、损伤量清零；位置 null、未摧毁、类型列表空。后续效果/词条修改实时值不影响基准。
+    /// （只读基准）、损伤量清零；位置 null、未摧毁、类型列表空；在场回合数＝1（入场即第 1 回合——
+    /// 部署/加入/转换入场统一自 1 起；S10）。后续效果/词条修改实时值不影响基准。
     /// </summary>
     /// <exception cref="ArgumentNullException">stats 为 null。</exception>
     public static UnitStateData CreateInitial(BattleStatsData stats)
@@ -97,6 +108,7 @@ public sealed class UnitStateData
             Attack = stats.Attack,
             Defense = stats.Defense,
             DefenseLoss = 0,
+            TurnsInPlay = 1, // 入场即第 1 回合（G14补 S10——「不存在入场后为 0/未定义状态」）
         };
     }
 }

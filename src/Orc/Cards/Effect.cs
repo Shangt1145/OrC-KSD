@@ -17,6 +17,7 @@ namespace Orc.Cards;
 public abstract class Effect
 {
     private readonly List<Action> _rollbacks = new();
+    private readonly List<EffectInjection> _injections = new();
     private readonly List<Action> _unmountCleanups = new();
     private Card? _host;
     private bool _loading;
@@ -48,6 +49,12 @@ public abstract class Effect
 
     /// <summary>宿主卡牌引用（可为 null；内部防御用）。</summary>
     internal Card? HostOrNull => _host;
+
+    /// <summary>
+    /// 主触发器元数据（S-C3 加性只读面；审查链用）：被动效果＝生命周期触发器、主动效果＝施放触发器；
+    /// 基类无主触发器＝null（纯动作承载）。
+    /// </summary>
+    internal virtual ITriggerMetadata? MainTrigger => null;
 
     /// <summary>是否已登记宿主（未被清理）。</summary>
     internal bool HasHost => _host is not null;
@@ -86,9 +93,21 @@ public abstract class Effect
         }
 
         var registration = target.Register(name, handler, band, priority);
-        _rollbacks.Add(() => target.Unregister(registration));
+        var record = new EffectInjection(target, name, band, priority, registration);
+        _injections.Add(record);
+        _rollbacks.Add(() =>
+        {
+            target.Unregister(registration);
+            _injections.Remove(record); // S-C2：注入读面随撤销同步收敛
+        });
         return registration;
     }
+
+    /// <summary>
+    /// 本效果已登记的注入项（S-C2 加性只读面；审查链用）：装载语境中经 <see cref="Inject{TView}"/> 登记，
+    /// 卸载/回滚时框架撤销并同步移除；顺序＝登记序快照。空＝无注入。
+    /// </summary>
+    public IReadOnlyList<EffectInjection> Injections => _injections;
 
     /// <summary>
     /// 登记卸载清理动作（加性公共面；宿主机制扩展面——如游戏层「效果修饰器按来源撤销」托管）：
@@ -185,6 +204,7 @@ public abstract class Effect
         }
 
         _rollbacks.Clear();
+        _injections.Clear(); // S-C2：读面与撤销收敛（防御：回滚动作自身异常时不留残项）
     }
 
     /// <summary>
@@ -252,6 +272,8 @@ public abstract class PassiveEffect : Effect
     /// <see cref="Trigger{TView}.InitialRegistrations"/> 供给，如 moding（逻辑替换）注册）。
     /// </summary>
     protected Trigger<CardEventView> LifecycleTrigger => _lifecycleTrigger;
+
+    internal override ITriggerMetadata? MainTrigger => _lifecycleTrigger;
 
     internal override void MountMainTrigger(Bus bus) => bus.Mount(_lifecycleTrigger);
 
@@ -329,9 +351,50 @@ public abstract class ActiveEffect<TView> : Effect, ICastAction
     /// 构造期 castEvents 项的注册句柄经 <see cref="Trigger{TView}.InitialRegistrations"/> 供给（子类可 moding（逻辑替换）/撤销寻址）。</summary>
     protected Trigger<TView> CastTrigger => _castTrigger;
 
+    internal override ITriggerMetadata? MainTrigger => _castTrigger;
+
     /// <summary>施放入口：调用主触发器（施放 ＝ 主触发器被调用；其施放事件链按注册序执行）。</summary>
     /// <exception cref="ArgumentNullException">engine 为 null。</exception>
     public Task<EventStream> CastAsync(
         LogicEngine engine, IDictionary<string, object?>? data = null, CancellationToken ct = default)
         => _castTrigger.InvokeAsync(engine, data, ct);
+}
+
+/// <summary>
+/// 可序列化效果标记（S-C12）：以预制体（动态）实现的效果实现本接口＝其快照可导出；
+/// 既有 C# 效果不实现本接口——审查链中标记 <c>serializable=false</c>（仅作节点、不导出快照）。
+/// </summary>
+public interface ISerializableEffect
+{
+}
+
+/// <summary>
+/// 效果注入项（S-C2；审查链用只读面）：记录一次 <c>Inject</c> 落地的目标触发器、事件名、band、优先级与注册句柄。
+/// 修复既有缺口（原实现只留撤销闭包，无法反查"效果注入了什么"）。
+/// </summary>
+public sealed class EffectInjection
+{
+    internal EffectInjection(object target, string name, Enum band, int priority, TriggerRegistration registration)
+    {
+        Target = target;
+        Name = name;
+        Band = band;
+        Priority = priority;
+        Registration = registration;
+    }
+
+    /// <summary>目标触发器实例（<c>Trigger&lt;TView&gt;</c> 的 object 视角；泛型参数不可静态表达）。</summary>
+    public object Target { get; }
+
+    /// <summary>注入时登记的事件名。</summary>
+    public string Name { get; }
+
+    /// <summary>注入的 band 成员。</summary>
+    public Enum Band { get; }
+
+    /// <summary>注入的 band 内优先级。</summary>
+    public int Priority { get; }
+
+    /// <summary>注册句柄（可经目标触发器 <c>Unregister</c> 撤销）。</summary>
+    public TriggerRegistration Registration { get; }
 }

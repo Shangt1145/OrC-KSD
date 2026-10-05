@@ -1,4 +1,6 @@
 using Orc.Core;
+using Orc.Game.Cards;
+using Orc.Game.Players;
 
 namespace Orc.Game.Targeting;
 
@@ -413,6 +415,25 @@ public sealed class TargeterManager
             allowedReferences,
             options,
             cardListings);
+    }
+
+    // ---------- 接入面解析（卡 → 玩家 → 目标选择管理器；C2 加性——与 MatchCardService/MatchRandomService.ResolveFor 同构） ----------
+
+    /// <summary>
+    /// 卡 → 目标选择管理器解析（读取路径「卡 → 玩家 → 服务」的收敛点；C2 加性面）：
+    /// 卡经归属玩家取管理器；未加载（无归属）/独立构造（未注入）/非卡实体＝null（不可达——调用侧按「功能不可用、不抛错、不失败」处置）。
+    /// 用途＝效果运行期取用交互发起面（如开发/发现链的卡牌选择器出题）；交互契约与既有面一致。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">card 为 null。</exception>
+    public static TargeterManager? ResolveFor(Orc.Cards.Card card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return card switch
+        {
+            Hq hq => hq.Owner.TargeterManager,
+            CardBase cardBase => cardBase.Owner?.TargeterManager,
+            _ => null,
+        };
     }
 
     /// <summary>队列请求（请求对象＋终局任务）。</summary>

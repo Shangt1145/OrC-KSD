@@ -1,6 +1,7 @@
 using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
+using Orc.Game.Judicators;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
 using Orc.Game.Triggers;
@@ -76,6 +77,7 @@ public sealed class CommandManager
     private readonly Func<Player?> _currentPlayerProvider;
     private readonly MatchLifecycle? _lifecycle;
     private readonly RetriggerSystem? _retrigger; // A4：再触发服务（亡计结算执行面/防护的统一入口；可空＝独立构造降级）
+    private readonly Func<string, JudicatorBinding>? _validationJudicatorResolver; // J2：验证判定器解析器（复验绑定解析——对局＝注册表；缺省＝内置默认）
     private readonly Trigger<CardTriggerView> _defenseDepletionTrigger; // W2b：防御归零检查（被动；挂载于更新总线）
     private readonly Trigger<CardTriggerView> _hqZeroTrigger; // W3-3：HQ 归零检查（被动；挂载于更新总线）
 
@@ -93,8 +95,11 @@ public sealed class CommandManager
     /// <param name="currentPlayerProvider">当前行动方提供器（延迟读取；缺省＝null＝回合未就绪——发起校验将拒绝）。</param>
     /// <param name="lifecycle">对局生命周期（终局门禁＋胜者记录——后置项 B；缺省＝null＝独立构造场景无门禁）。</param>
     /// <param name="retrigger">再触发服务（A4；亡计结算执行面/防护的统一入口——缺省＝null＝独立构造降级：死亡链直调亡计执行面〔无重入防护〕）。</param>
+    /// <param name="validationJudicatorResolver">验证判定器解析器（J2；按名解析——对局路径＝注册表解析〔复验判定器经固定内置注册段注册〕；
+    /// 缺省＝null＝独立构造路径——内置默认解析〔构造即可用：注入本管理器对局级只读设施引用〕）。</param>
     /// <exception cref="ArgumentNullException">engine / battlefield / targeterManager / players 为 null。</exception>
     /// <exception cref="ArgumentException">players 不是两名玩家。</exception>
+    /// <exception cref="KeyNotFoundException">解析未注册名（解析动作即校验——装配期 fail-fast）。</exception>
     public CommandManager(
         LogicEngine engine,
         Battlefield battlefield,
@@ -102,7 +107,8 @@ public sealed class CommandManager
         IReadOnlyList<Player> players,
         Func<Player?>? currentPlayerProvider = null,
         MatchLifecycle? lifecycle = null,
-        RetriggerSystem? retrigger = null)
+        RetriggerSystem? retrigger = null,
+        Func<string, JudicatorBinding>? validationJudicatorResolver = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -120,17 +126,25 @@ public sealed class CommandManager
         _currentPlayerProvider = currentPlayerProvider ?? (() => null);
         _lifecycle = lifecycle;
         _retrigger = retrigger;
+        _validationJudicatorResolver = validationJudicatorResolver;
 
         // ① 指挥触发器（内置；默认链＝指挥流程编排）
         CommandTrigger = new Trigger<CommandTriggerView>("指挥触发器");
         CommandTrigger.Register("指挥流程", HandleCommandFlowAsync);
 
-        // ② 单位移动触发器（执行前复验＝验证机制承载；默认链＝移动执行）
-        UnitMoveTrigger = new DelegateCheckTrigger<UnitMoveTriggerView>("单位移动触发器", RevalidateMove);
+        // ② 单位移动触发器（执行前复验＝验证判定器承载——按名绑定移动复验判定器〔J2〕；默认链＝移动执行）
+        //    解析动作即校验：对局路径＝注册表解析（装配期已就绪——注册段先于本创建位）；独立构造＝内置默认（构造即可用）。
+        UnitMoveTrigger = new Trigger<UnitMoveTriggerView>("单位移动触发器");
+        UnitMoveTrigger.BindValidation(
+            ResolveRecheckBinding(JudicatorNames.MoveRecheck),
+            refs => refs.Count > 0 ? refs[0] : null);
         UnitMoveTrigger.Register("移动执行", HandleUnitMoveAsync);
 
-        // ③ 单位攻击触发器（执行前复验＝验证机制承载；默认链＝攻击执行）
-        UnitAttackTrigger = new DelegateCheckTrigger<UnitAttackTriggerView>("单位攻击触发器", RevalidateAttack);
+        // ③ 单位攻击触发器（执行前复验＝验证判定器承载——按名绑定攻击复验判定器〔J2〕；默认链＝攻击执行）
+        UnitAttackTrigger = new Trigger<UnitAttackTriggerView>("单位攻击触发器");
+        UnitAttackTrigger.BindValidation(
+            ResolveRecheckBinding(JudicatorNames.AttackRecheck),
+            refs => refs.Count > 0 ? refs[0] : null);
         UnitAttackTrigger.Register("攻击执行", HandleUnitAttackAsync);
 
         // ④ 造成攻击伤害触发器（与对局同生的内置共享流程触发器；伏击加载时在此注册改写逻辑）
@@ -153,6 +167,22 @@ public sealed class CommandManager
                 || updateType == GameUpdates.CardDied)
             {
                 MaintainGuardState();
+            }
+
+            return Task.CompletedTask;
+        });
+
+        // G14补（S10）在场回合数：回合事件驱动计数——单位归属玩家的回合正式开始信号（turn.start）时递增
+        // （单方步进：仅「回合开始方==单位归属玩家」时递增；静默数据变更——不新增信号/不发更新）。
+        // 锚点：turn.start＝正式开始（递增点）——turn.start.after 读到递增后的新值（与既有锚点约定衔接）。
+        _engine.Subscribe((updateType, payload, _) =>
+        {
+            if (updateType == GameUpdates.TurnStart
+                && payload is not null
+                && payload.TryGetValue(GameUpdates.PayloadPlayer, out var value)
+                && value is Player turnPlayer)
+            {
+                AdvanceTurnsInPlay(turnPlayer);
             }
 
             return Task.CompletedTask;
@@ -746,6 +776,31 @@ public sealed class CommandManager
         }
     }
 
+    // ---------- ④b 在场回合数递增（G14补 S10；turn.start 更新驱动——单方步进） ----------
+
+    /// <summary>
+    /// 在场回合数递增（G14补 S10；turn.start 更新驱动，回合事件驱动计数）：
+    /// 对「归属==回合开始方」的三线在场单位逐一递增（单方步进——对方回合不递增；
+    /// 死亡单位不在场、自然跳过——方法内另设防御）；静默数据变更（不发射/不通知）。
+    /// </summary>
+    private void AdvanceTurnsInPlay(Player player)
+    {
+        AdvanceLine(_battlefield.PlayerASupportLine, player);
+        AdvanceLine(_battlefield.FrontLine, player);
+        AdvanceLine(_battlefield.PlayerBSupportLine, player);
+    }
+
+    private static void AdvanceLine(BattleLine line, Player player)
+    {
+        for (var i = 0; i < line.Count; i++)
+        {
+            if (line[i].Occupant is UnitCard unit && !IsDead(unit) && ReferenceEquals(unit.Owner, player))
+            {
+                unit.AdvanceTurnsInPlay(); // 单位侧内部防御（未单位化/已死亡＝无操作）
+            }
+        }
+    }
+
     // ---------- ⑤ 指挥流程（指挥触发器默认链） ----------
 
     private async Task HandleCommandFlowAsync(CommandTriggerView view, Context ctx, CancellationToken ct)
@@ -1167,144 +1222,34 @@ public sealed class CommandManager
         return Task.CompletedTask;
     }
 
-    // ---------- ⑨ 执行前复验（分派后、执行前兜底；验证机制承载——ValidationRejected、零副作用＋留痕） ----------
+    // ---------- ⑨ 执行前复验（分派后、执行前兜底；J2：验证判定器承载——ValidationRejected、零副作用＋留痕） ----------
+    // 复验逻辑迁至逐点专属判定器（MoveRevalidationJudicator / AttackRevalidationJudicator——验证点装配期按名绑定）；
+    // 本区保留复验所依赖的规则读取面（HasLivingEnemyOnFrontLine / IsAttackTargetLegal——与可用性侧单源、供判定器装配期注入转发）。
 
-    private bool RevalidateMove(IReadOnlyList<Ref<Entity>> refs)
+    /// <summary>
+    /// 复验判定器绑定解析（J2）：对局路径＝注册表解析（固定内置注册段已注册——装配期已就绪）；
+    /// 独立构造路径＝内置默认（构造即可用——注入本管理器的对局级只读设施引用；复验规则读取经本管理器的读取面转发——单源）。
+    /// 解析动作即校验（未注册名＝装配期 fail-fast）。
+    /// </summary>
+    private JudicatorBinding ResolveRecheckBinding(string name)
+        => _validationJudicatorResolver is not null
+            ? _validationJudicatorResolver(name)
+            : JudicatorBinding.FromStandalone(name, CreateRecheckJudicator(name));
+
+    /// <summary>创建内置默认复验判定器（独立构造路径；装配期注入本管理器对局级只读设施引用——仅只读使用）。</summary>
+    private ValidationJudicator CreateRecheckJudicator(string name) => name switch
     {
-        // X1：refs＝触发数据第一层引用收集（插入序）——操作角色引用（Unit/OldPosition/NewPosition）位于前位，
-        // 效果引发情形尾部可携带「触发者卡牌」引用（TriggerCard；不参与复验——去重后计数允许多余项）。
-        if (refs.Count < 3)
-        {
-            return false;
-        }
+        JudicatorNames.MoveRecheck => new MoveRevalidationJudicator(
+            _lifecycle, _currentPlayerProvider, _battlefield, owner => HasLivingEnemyOnFrontLine(owner)),
+        JudicatorNames.AttackRecheck => new AttackRevalidationJudicator(
+            _lifecycle, _currentPlayerProvider, (attacker, targetRef) => IsAttackTargetLegal(attacker, targetRef)),
+        _ => throw new KeyNotFoundException(
+            $"判定器 '{name}' 未注册（独立构造路径无注册表——内置默认仅含复验两项；未注册引用＝配置错误）。"),
+    };
 
-        if (_lifecycle?.IsEnded == true)
-        {
-            return false; // 终局后移动流程拒绝（含触发器级对外入口；零副作用、状态不推进）
-        }
-
-        if (!refs[0].IsAlive || refs[0].Value is not UnitCard unit)
-        {
-            return false;
-        }
-
-        if (!refs[1].IsAlive || refs[1].Value is not Slot oldSlot)
-        {
-            return false;
-        }
-
-        if (!refs[2].IsAlive || refs[2].Value is not Slot newSlot)
-        {
-            return false;
-        }
-
-        var state = unit.GetData<UnitStateData>();
-        var command = unit.GetData<CommandData>();
-        var owner = unit.Owner;
-        var current = _currentPlayerProvider();
-
-        if (current is null || owner is null || !ReferenceEquals(owner, current))
-        {
-            return false;
-        }
-
-        if (state.IsDestroyed || !command.CanMove)
-        {
-            return false;
-        }
-
-        // A2：被压制（不能移动或攻击——复验与可用性同源）
-        if (KeywordRules.HasKeyword(unit, KeywordIds.Suppressed))
-        {
-            return false;
-        }
-
-        // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
-        if (owner.Points < unit.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
-        {
-            return false;
-        }
-
-        if (!ReferenceEquals(state.Position, oldSlot))
-        {
-            return false;
-        }
-
-        if (!_battlefield.GetSupportLine(owner).Contains(oldSlot))
-        {
-            return false; // 仅推进：源位置须为支援线
-        }
-
-        if (!_battlefield.FrontLine.Contains(newSlot) || !newSlot.IsEmpty)
-        {
-            return false; // 目标须为前线空槽
-        }
-
-        if (HasLivingEnemyOnFrontLine(owner))
-        {
-            return false; // 推进前置复验（后置项 C；防御性双保险）：前线存在存活敌方单位＝拒绝
-        }
-
-        return true;
-    }
-
-    private bool RevalidateAttack(IReadOnlyList<Ref<Entity>> refs)
-    {
-        // X1：refs＝触发数据第一层引用收集（插入序）——操作角色引用（Attacker/Target）位于前位，
-        // 效果引发情形尾部可携带「触发者卡牌」引用（TriggerCard；不参与复验——去重后计数允许多余项）。
-        if (refs.Count < 2)
-        {
-            return false;
-        }
-
-        if (_lifecycle?.IsEnded == true)
-        {
-            return false; // 终局后攻击流程拒绝（含触发器级对外入口；零副作用、状态不推进）
-        }
-
-        if (!refs[0].IsAlive || refs[0].Value is not UnitCard attacker)
-        {
-            return false;
-        }
-
-        var targetRef = refs[1];
-        if (!targetRef.IsAlive)
-        {
-            return false;
-        }
-
-        var state = attacker.GetData<UnitStateData>();
-        var command = attacker.GetData<CommandData>();
-        var owner = attacker.Owner;
-        var current = _currentPlayerProvider();
-
-        if (current is null || owner is null || !ReferenceEquals(owner, current))
-        {
-            return false;
-        }
-
-        if (state.IsDestroyed || !command.CanAttack)
-        {
-            return false;
-        }
-
-        // A2：被压制（不能移动或攻击——复验与可用性同源）
-        if (KeywordRules.HasKeyword(attacker, KeywordIds.Suppressed))
-        {
-            return false;
-        }
-
-        // W2b：行动费复验读「有效值」（与可用性/扣费同源——读取面统一）
-        if (owner.Points < attacker.Modifiers.GetEffectiveValue(CardStatFields.OperateCost))
-        {
-            return false;
-        }
-
-        return IsAttackTargetLegal(attacker, targetRef);
-    }
-
-    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 引用仍为敌方 HQ——W3-3 实体承载）。</summary>
-    private bool IsAttackTargetLegal(UnitCard attacker, Ref<Entity> targetRef)
+    /// <summary>攻击目标有效性复验（覆盖「目标引用有效性」：单位仍存活在场 / HQ 引用仍为敌方 HQ——W3-3 实体承载）。
+    /// J2：复验逻辑迁至 AttackRevalidationJudicator（经装配期注入转发本读取面——与可用性侧单源）；可见性提为 internal 供其使用。</summary>
+    internal bool IsAttackTargetLegal(UnitCard attacker, Ref<Entity> targetRef)
     {
         if (!targetRef.IsAlive)
         {
@@ -1355,8 +1300,9 @@ public sealed class CommandManager
 
     /// <summary>
     /// 推进前置判定（后置项 C）：前线是否存在存活敌方单位（空前线或己方已占＝false；敌方清空后实时恢复）。
+    /// J2：复验逻辑迁至 MoveRevalidationJudicator（经装配期注入转发本读取面——与可用性侧单源）；可见性提为 internal 供其使用。
     /// </summary>
-    private bool HasLivingEnemyOnFrontLine(Player owner)
+    internal bool HasLivingEnemyOnFrontLine(Player owner)
     {
         var enemy = EnemyOf(owner);
         if (enemy is null)
@@ -1451,25 +1397,3 @@ public sealed class CommandManager
     }
 }
 
-/// <summary>
-/// 复验触发器（2C；框架内部）：验证委托化的触发器子类——<see cref="Trigger{TView}.Validate"/> 转发至注入的复验函数
-/// （「执行前复验（分派后、执行前兜底）以验证机制表意」的承载：拒绝＝ValidationRejected、仅本次取消、零副作用＋留痕）。
-/// 复验函数经 refs（触发数据第一层引用：单位/槽位引用面）恢复本次触发的目标上下文。
-/// </summary>
-internal sealed class DelegateCheckTrigger<TView> : Trigger<TView>
-    where TView : class
-{
-    private readonly Func<IReadOnlyList<Ref<Entity>>, bool> _validate;
-
-    /// <summary>创建复验触发器。</summary>
-    /// <exception cref="ArgumentNullException">validate 为 null。</exception>
-    internal DelegateCheckTrigger(string name, Func<IReadOnlyList<Ref<Entity>>, bool> validate)
-        : base(name)
-    {
-        ArgumentNullException.ThrowIfNull(validate);
-        _validate = validate;
-    }
-
-    /// <inheritdoc />
-    public override bool Validate(IReadOnlyList<Ref<Entity>> refs) => _validate(refs);
-}

@@ -6,7 +6,7 @@ namespace Orc.Game.Cards;
 
 /// <summary>
 /// 指令卡（三大类之一）：打出即生效的主动效果载体（2B 打出链就绪）。
-/// 数据组件装配（E 区差异化）：＝指挥点花费（基类）；「指令无其他组件」——不装配对战/单位/指挥组件。
+/// 数据组件装配（E 区差异化）：＝阵营〔国籍〕＋部署费合并组件（基类）；「指令无其他组件」——不装配对战/单位/指挥组件。
 /// 触发器（2B）：
 /// ①预打出触发器（费用校验）：默认无交互、零更新；装配方可经 <see cref="AddPrePlayHandler"/> 加 handler 捕获引用
 ///   （以 targeter 产出为主要场景、不强制唯一；捕获经 <see cref="CardTriggerView.CaptureBox"/> 提交；
@@ -24,15 +24,23 @@ public class CommandCard : CardBase
 
     private readonly LogicEngine _chainEngine;
 
-    /// <summary>创建指令卡（触发器与默认链事件在构造期装配）。</summary>
+    /// <summary>创建指令卡（触发器与默认链事件在构造期装配；
+    /// 费用校验触发器按名绑定费用检查判定器——解析器缺省＝内置默认〔独立构造即可用〕）。</summary>
+    /// <param name="engine">引擎（发射/触发）。</param>
+    /// <param name="definition">卡牌定义。</param>
+    /// <param name="validationJudicatorResolver">验证判定器解析器（按名解析——对局路径＝注册表解析；
+    /// 缺省＝null＝独立构造路径——内置默认解析）。</param>
     /// <exception cref="ArgumentNullException">engine 或 definition 为 null。</exception>
-    public CommandCard(LogicEngine engine, CardDefinition definition)
+    public CommandCard(
+        LogicEngine engine,
+        CardDefinition definition,
+        Func<string, JudicatorBinding>? validationJudicatorResolver = null)
         : base(engine, definition)
     {
         _chainEngine = engine;
 
-        PrePlayTrigger = new CostCheckTrigger("预打出触发器", this);
-        PlayTrigger = new CostCheckTrigger("打出触发器", this);
+        PrePlayTrigger = new CostCheckTrigger("预打出触发器", this, validationJudicatorResolver);
+        PlayTrigger = new CostCheckTrigger("打出触发器", this, validationJudicatorResolver);
 
         // 默认链事件：宣告（优先 0）→（主动 handler 集按注册序）→ 收尾（优先 100）。
         PlayTrigger.Register("打出宣告", HandlePlayAnnounceAsync);

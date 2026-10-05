@@ -34,6 +34,7 @@ public sealed class CardEffectRegistry
 {
     private readonly Dictionary<string, Func<CardBase, Effect>> _factories = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IReadOnlyList<string>> _declarations = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _prefabDeclarations = new(StringComparer.Ordinal);
 
     /// <summary>注册效果工厂（id 为解析键；工厂接收卡实例、返回效果实例——每卡实例各自构造）。</summary>
     /// <exception cref="ArgumentException">effectId 为 null/空白。</exception>
@@ -90,6 +91,46 @@ public sealed class CardEffectRegistry
     internal IReadOnlyList<string> GetDeclarations(string cardId)
         => _declarations.TryGetValue(cardId, out var list) ? list : Array.Empty<string>();
 
+    /// <summary>
+    /// 声明某卡的**效果预制体**清单（S-C9 加性面；声明序＝装载顺序——与代码效果声明各走各的解析）。
+    /// 清单含 null/空白标识或重复项＝声明期明确拒绝（fail-fast）；同一卡重复声明＝拒绝；
+    /// 预制体是否已注册不在声明期校验（加载时解析）。
+    /// </summary>
+    /// <exception cref="ArgumentException">cardId 为 null/空白；清单含 null/空白标识或重复项。</exception>
+    /// <exception cref="ArgumentNullException">prefabIds 为 null。</exception>
+    /// <exception cref="InvalidOperationException">同一卡重复声明（被拒绝——注册即配置）。</exception>
+    public void DeclarePrefab(string cardId, IEnumerable<string> prefabIds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
+        ArgumentNullException.ThrowIfNull(prefabIds);
+
+        var list = new List<string>();
+        foreach (var prefabId in prefabIds)
+        {
+            if (string.IsNullOrWhiteSpace(prefabId))
+            {
+                throw new ArgumentException("效果预制体声明清单含 null/空白标识（配置错误在声明期被拒绝）。", nameof(prefabIds));
+            }
+
+            if (list.Contains(prefabId))
+            {
+                throw new ArgumentException(
+                    $"效果预制体声明清单含重复项 '{prefabId}'（重复声明被拒绝——fail-fast）。", nameof(prefabIds));
+            }
+
+            list.Add(prefabId);
+        }
+
+        if (!_prefabDeclarations.TryAdd(cardId, list))
+        {
+            throw new InvalidOperationException($"卡牌 '{cardId}' 的效果预制体声明已存在（重复声明被拒绝——注册即配置）。");
+        }
+    }
+
+    /// <summary>读取某卡的效果预制体声明（未声明＝空列表；S-C9 加载链查询面）。</summary>
+    internal IReadOnlyList<string> GetPrefabDeclarations(string cardId)
+        => _prefabDeclarations.TryGetValue(cardId, out var list) ? list : Array.Empty<string>();
+
     /// <summary>解析效果工厂（未注册＝null；装载链 fail-fast 依据）。</summary>
     internal Func<CardBase, Effect>? Resolve(string effectId)
         => _factories.TryGetValue(effectId, out var factory) ? factory : null;
@@ -116,6 +157,9 @@ public sealed class CardEffectLoadContext
 
     /// <summary>本卡的效果声明清单（声明序；无效果源或未声明＝空列表）。</summary>
     public IReadOnlyList<string> Declarations => _registry?.GetDeclarations(_cardId) ?? Array.Empty<string>();
+
+    /// <summary>本卡的效果预制体声明清单（S-C9 加性面；声明序＝代码效果之后的装载顺序；无效果源或未声明＝空列表）。</summary>
+    public IReadOnlyList<string> PrefabDeclarations => _registry?.GetPrefabDeclarations(_cardId) ?? Array.Empty<string>();
 
     /// <summary>解析效果工厂（未注册/无效果源＝null）。</summary>
     internal Func<CardBase, Effect>? ResolveFactory(string effectId) => _registry?.Resolve(effectId);
@@ -197,6 +241,28 @@ internal static class CardEffectLoader
             {
                 card.AddEffect(effect);
             }
+        }
+
+        // ③b 效果预制体装载（S-C8/C9 加性）：按声明序实例化动态效果并入容器（在代码效果之后）。
+        //     实例化失败（视图类型不可解析/处理器缺失/脚本求值失败/预制体未注册）＝隔离记录、跳过该条、不阻断。
+        foreach (var prefabId in context.PrefabDeclarations)
+        {
+            var instantiation = engine.Prefabs.TryGetPrefab(prefabId, out var snapshot)
+                ? DynamicEffectFactory.Instantiate(engine, snapshot, prefabId)
+                : DynamicEffectInstantiation.Fail("prefab-missing", $"未注册效果预制体 '{prefabId}'。");
+
+            if (!instantiation.Success)
+            {
+                engine.RootStream.WriteLog(
+                    "效果预制体装载",
+                    $"卡牌 '{card.Name}' 的效果预制体 '{prefabId}' 实例化失败（隔离：该效果未生效）——"
+                    + $"[{instantiation.ErrorCategory}] {instantiation.Error}",
+                    LogLevel.Error,
+                    new[] { "effect", "prefab", "error", prefabId });
+                continue;
+            }
+
+            card.AddEffect(instantiation.Effect!); // Add 即装载（被动：挂载动态触发器；主动：列表进出）
         }
 
         // ④ 装载兜底（幂等——Add 即装载后多为跳过；对装载失败回滚者＝重试装载；失败＝回滚为未生效、记录、不阻断）。
