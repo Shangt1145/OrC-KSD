@@ -150,11 +150,11 @@ public sealed class PlayerManager
         ArgumentNullException.ThrowIfNull(player);
 
         var card = player.Deck.DrawInstance(); // 空集合 / 未加载抛错（集合契约）；「移除」由抽取步骤自然完成
-        if (player.Hand.Count >= Player.HandLimit)
+        if (HandLimitBurn.IsAtLimit(player))
         {
-            // HandLimit 烧牌（直烧：不经手牌——手牌全程保持 9、无瞬时第 10 张；不经弃置动作——共享销毁原语与信号）
-            await GameUpdates.EmitCardDrawn(_engine, player, card, ct);
-            await DestroyAndEmitDiscardedAsync(player, card, ct);
+            // HandLimit 烧牌（直烧：不经手牌——手牌全程保持 9、无瞬时第 10 张；「算被抽到」路径＝
+            // drawn → 销毁 → discarded——经共享烧牌单元〔K0·B12 统一〕）
+            await HandLimitBurn.BurnAsync(_engine, player, card, emitDrawn: true, ct);
         }
         else
         {
@@ -190,7 +190,7 @@ public sealed class PlayerManager
         }
 
         player.Hand.Remove(card); // 前提已校验：必命中（移除）——移除后处置链无失败点（成功即完整弃置）
-        await DestroyAndEmitDiscardedAsync(player, card, ct);
+        await HandLimitBurn.DestroyAndEmitDiscardedAsync(_engine, player, card, ct);
     }
 
     /// <summary>
@@ -246,13 +246,6 @@ public sealed class PlayerManager
         var card = player.Deck.DrawInstance(); // 空集合 / 未加载抛错（集合契约）
         player.Hand.Add(card);
         return card;
-    }
-
-    /// <summary>销毁＋发射 card.discarded（G7 弃置动作与烧牌共享的处置链：销毁〔含资源清理〕先、信号后）。</summary>
-    private async Task DestroyAndEmitDiscardedAsync(Player player, CardBase card, CancellationToken ct)
-    {
-        await _engine.DestroyCard(card);
-        await GameUpdates.EmitCardDiscarded(_engine, card, player, ct);
     }
 
     /// <summary>

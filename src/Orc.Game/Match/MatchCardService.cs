@@ -207,12 +207,11 @@ public sealed class MatchCardService
         ArgumentNullException.ThrowIfNull(player);
         ValidatePlacementTarget(card, player);
 
-        if (player.Hand.Count >= Player.HandLimit)
+        if (HandLimitBurn.IsAtLimit(player))
         {
             // 满手＝烧牌（G7 已交付口径；生成路径信号＝销毁（含 card.destroyed）→ card.discarded 恰一次；
-            // hand.add / drawn 零次——「未经手牌」；不经弃置动作）
-            await _engine.DestroyCard(card);
-            await GameUpdates.EmitCardDiscarded(_engine, card, player, ct);
+            // hand.add / drawn 零次——「未经手牌」；不经弃置动作——经共享烧牌单元〔K0·B12 统一〕）
+            await HandLimitBurn.BurnAsync(_engine, player, card, emitDrawn: false, ct);
             return CardPlaceResult.Burned(card);
         }
 
