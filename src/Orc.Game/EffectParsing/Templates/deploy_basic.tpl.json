@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "deploy_basic",
+  "actorFrom": "eventCard",
+  "slots": [
+    { "name": "on_deploy", "target": "mainTrigger.events[e1]" }
+  ],
+  "root": {
+    "mainTrigger": {
+      "id": "t_deploy",
+      "stableKey": "tpl.deploy_basic.main",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["unit.deployed"],
+      "events": [
+        { "id": "e1", "entry": "HandleAsync" }
+      ]
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

@@ -1,4 +1,5 @@
 using Orc.Core;
+using Orc.Game.Managers;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
 using Orc.Game.Triggers;
@@ -98,18 +99,26 @@ public class CommandCard : CardBase
         await GameUpdates.EmitCardPlayed(_chainEngine, card, player, ct);
     }
 
-    /// <summary>打出收尾（默认链末步）：扣费（恰一次）→ 离手（扣费之后；失败/取消时留手——由链前验证保证）。</summary>
-    private Task HandlePlayFinalizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    /// <summary>打出收尾（默认链末步）：扣费（恰一次；E1-25 后续：经点数通用入口发 point.changed）→ 离手（扣费之后；失败/取消时留手——由链前验证保证）。</summary>
+    private async Task HandlePlayFinalizeAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
         if (view.Card is not CommandCard card || view.Player is not Player player)
         {
             ctx.Interrupt(); // 载荷缺失（结构性错误）：收尾不发生
-            return Task.CompletedTask;
+            return;
         }
 
         // W3-2 G5：扣费读「有效部署费」（修饰贡献叠加后的链输出——无修饰时＝基准；与校验/复验同口径）
-        player.Points -= card.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
+        var cost = card.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
+        if (ResourceManager.ResolveFor(card) is { } manager)
+        {
+            await manager.ChangePointsAsync(player, -cost, PointChangeKind.Add, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            player.Points -= cost; // 脱局兜底（未装配资源管理器）：保持既有直写语义
+        }
+
         player.Hand.Remove(card);
-        return Task.CompletedTask;
     }
 }

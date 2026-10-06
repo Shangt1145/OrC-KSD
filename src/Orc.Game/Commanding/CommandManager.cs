@@ -988,8 +988,13 @@ public sealed class CommandManager
         }
 
         // 外层收尾（执行成功后）：扣费 → 两 bool 更新（恰一次、只在外层）
-        FinalizeMove(unit);
+        await FinalizeMoveAsync(unit, ct);
         box.Result = CommandResult.Success();
+
+        if (!unit.GetData<UnitStateData>().IsDestroyed)
+        {
+            await GameUpdates.EmitUnitActed(_engine, unit, ct); // E1-33：行动后（移动；已阵亡不豁免语义＝不为亡者发射）
+        }
     }
 
     private async Task DispatchAttackAsync(
@@ -1018,16 +1023,21 @@ public sealed class CommandManager
         }
 
         // 外层收尾（执行成功后；攻击者死亡不豁免）：扣费 → 两 bool 更新（恰一次、只在外层）
-        FinalizeAttack(unit);
+        await FinalizeAttackAsync(unit, ct);
         box.Result = CommandResult.Success();
+
+        if (!unit.GetData<UnitStateData>().IsDestroyed)
+        {
+            await GameUpdates.EmitUnitActed(_engine, unit, ct); // E1-33：行动后（攻击；已阵亡＝不为亡者发射）
+        }
     }
 
-    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
-    private static void FinalizeMove(UnitCard unit)
+    /// <summary>移动收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元；E1-25 后续：经点数通用入口发 point.changed）→ 两 bool 更新（非坦克＝二选一：另一动作同被清）。</summary>
+    private static async Task FinalizeMoveAsync(UnitCard unit, CancellationToken ct)
     {
         var command = unit.GetData<CommandData>();
 
-        OperateCosts.Deduct(unit);
+        await OperateCosts.DeductAsync(unit, ct);
         command.CanMove = false;
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -1035,12 +1045,12 @@ public sealed class CommandManager
         }
     }
 
-    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
-    private static void FinalizeAttack(UnitCard unit)
+    /// <summary>攻击收尾（外层）：扣费（行动方扣除、恰一次；W2b：读行动费有效值；K4：经 OperateCosts 共享单元；E1-25 后续：经点数通用入口发 point.changed）→ CanAttack 更新（奋战读取记账）→ 非坦克二选一清 CanMove。</summary>
+    private static async Task FinalizeAttackAsync(UnitCard unit, CancellationToken ct)
     {
         var command = unit.GetData<CommandData>();
 
-        OperateCosts.Deduct(unit);
+        await OperateCosts.DeductAsync(unit, ct);
         command.CanAttack = KeywordRules.ResolveCanAttackAfterAttack(unit);
         if (!HasUnitType(unit, UnitType.Tank))
         {
@@ -1204,6 +1214,59 @@ public sealed class CommandManager
     /// ⑧UnitStateData.Position 置空（实例保留可查询）→ ⑨card.died 发射（恰一次；死亡状态就绪后）。
     /// 不发 unit.position.changed（该更新专属移动语义）。HQ 不入死亡/销毁链——本流程不适用（边界）。
     /// </summary>
+    internal async Task KillUnitAsync(UnitCard unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        await ProcessDeathAsync(unit, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 无头移动（效果运行期受控入口；经 <c>Orc.Game.Effects.EffectRuntime.MoveAsync</c> 暴露——internal 以免零散扩张 public 面）：
+    /// 依目标区域取**首个空槽**，走与指挥同一执行链（<see cref="DispatchMoveAsync"/>：复验触发器 → 外层收尾）。
+    /// 不可移动（无位置 / 无空槽 / 区域未知）＝false（不抛错）。
+    /// </summary>
+    internal async Task<bool> MoveUnitAsync(UnitCard unit, string zone, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(unit);
+        ArgumentException.ThrowIfNullOrWhiteSpace(zone);
+
+        if (unit.GetData<UnitStateData>().Position is null)
+        {
+            return false;
+        }
+
+        var line = zone switch
+        {
+            "frontline" => _battlefield.FrontLine,
+            "support" => unit.Owner is { } owner ? _battlefield.GetSupportLine(owner) : null,
+            _ => null,
+        };
+        if (line is null)
+        {
+            return false;
+        }
+
+        Slot? target = null;
+        foreach (var slot in line)
+        {
+            if (slot.IsEmpty)
+            {
+                target = slot;
+                break;
+            }
+        }
+
+        if (target is null)
+        {
+            return false;
+        }
+
+        var ctx = new Context();
+        var box = new CommandFlowBox();
+        await DispatchMoveAsync(unit, target.Ref, box, ctx, ct, triggerCard: null).ConfigureAwait(false);
+        return box.Result is { IsSuccess: true };
+    }
+
     private async Task ProcessDeathAsync(UnitCard unit, CancellationToken ct)
     {
         var state = unit.GetData<UnitStateData>();

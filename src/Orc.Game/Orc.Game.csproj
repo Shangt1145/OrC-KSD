@@ -11,6 +11,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Orc\Orc.csproj" />
+    <!-- DSL 可运行（E1-34）：游戏层默认装配 csx 求值器（内核保持零依赖，实现由 satellite 提供）。 -->
+    <ProjectReference Include="..\Orc.Script\Orc.Script.csproj" />
+  </ItemGroup>
+
+  <!-- 效果解析器的资产：模板效果（*.tpl.json）、op 语句模板（*.csx.tpl）、外置词表（Lexicon/*.json）随程序集输出。 -->
+  <ItemGroup>
+    <None Update="EffectParsing/Templates/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="EffectParsing/Lexicon/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

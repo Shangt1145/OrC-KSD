@@ -256,7 +256,7 @@ public class JudicatorRevalidationDedupTests
         Assert.Equal(CommandBlockReason.PointShortage, costlyAvailability.Attack.BlockReason);
 
         // 复验 2 例（真实指挥流程——交互期费用漂移 → 执行前复验拒绝、零副作用）。
-        match.ResourceManager.AddPoints(playerA, 2); // 点数 3
+        await match.ResourceManager.AddPointsAsync(playerA, 2); // 点数 3
         var mover = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
         CommandTestKit.Activate(mover);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
@@ -331,7 +331,7 @@ public class JudicatorRevalidationDedupTests
         Assert.Equal(CommandBlockReason.Suppressed, availability.Attack.BlockReason);
 
         // 复验 2 例（真实指挥流程——交互期压制 → 执行前复验拒绝、零副作用）。
-        match.ResourceManager.AddPoints(playerA, 1); // 点数 2
+        await match.ResourceManager.AddPointsAsync(playerA, 1); // 点数 2
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var mover = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
         CommandTestKit.Activate(mover);
@@ -499,7 +499,7 @@ public class JudicatorRevalidationDedupTests
         CommandTestKit.Activate(probed);
         CommandTestKit.Activate(rejected);
         CommandTestKit.Activate(succeeded);
-        match.ResourceManager.AddPoints(playerA, 5);
+        await match.ResourceManager.AddPointsAsync(playerA, 5);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var probedSlot = match.Battlefield.GetSupportLine(playerA)[1];
         var rejectedSlot = match.Battlefield.GetSupportLine(playerA)[2];
@@ -594,7 +594,7 @@ public class JudicatorRevalidationDedupTests
         CommandTestKit.Activate(probed);
         CommandTestKit.Activate(rejected);
         CommandTestKit.Activate(succeeded);
-        match.ResourceManager.AddPoints(playerA, 5);
+        await match.ResourceManager.AddPointsAsync(playerA, 5);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var probedSlot = match.Battlefield.GetSupportLine(playerA)[1];
 
@@ -677,7 +677,7 @@ public class JudicatorRevalidationDedupTests
         CommandTestKit.Activate(probed);
         CommandTestKit.Activate(rejected);
         CommandTestKit.Activate(succeeded);
-        match.ResourceManager.AddPoints(playerA, 5);
+        await match.ResourceManager.AddPointsAsync(playerA, 5);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var probedSlot = match.Battlefield.GetSupportLine(playerA)[1];
 

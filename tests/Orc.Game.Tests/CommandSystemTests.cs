@@ -57,9 +57,12 @@ public class CommandSystemTests
 
         var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, newSlot.Ref);
 
-        // unit.position.changed 恰一次（移动专属）；载荷 {Unit, OldPosition, NewPosition}——均槽位引用。
+        // unit.position.changed 恰一次（移动专属）＋ 收尾扣行动费的 point.changed（E1-25 后续）；
+        // 载荷 {Unit, OldPosition, NewPosition}——均槽位引用。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.UnitPositionChanged }, recorder.Types);
+        Assert.Equal(
+            new[] { GameUpdates.UnitPositionChanged, GameUpdates.PointChanged, GameUpdates.UnitActed }, // E1-33：行动后
+            recorder.Types);
         var payload = recorder.Updates[0].Payload!;
         Assert.Same(unit, payload[GameUpdates.PayloadUnit]);
         Assert.Same(oldSlot, payload[GameUpdates.PayloadOldPosition]);

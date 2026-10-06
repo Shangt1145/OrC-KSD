@@ -73,4 +73,35 @@ public static class JudicatorNames
     /// <summary>推进前置判定（签名＝（所有者）→ bool）：前线是否存在存活敌方单位（空前线或己方已占＝false）；
     /// 移动可用性与移动复验共用同一条目——改写后两调用点同步生效。</summary>
     public const string MoveFrontlineEnemy = "move.frontline-enemy";
+
+    // ---------- E1（效果运行期）：无头选靶判定器（一条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>效果无头选靶判定（签名＝（视角卡，<c>EffectSelector</c>）→ <c>IReadOnlyList&lt;Card&gt;</c>）：
+    /// 供 csx handler 经 <c>EffectRuntime.SelectAsync</c> 求值（side/zone/keyword/count；unitType 过滤与真随机待补）。
+    /// moding 改写＝选择规则整体更换（全局生效）。</summary>
+    public const string EffectTargetResolve = "effect.target.resolve";
+
+    // ---------- E1-25（指挥点槽事件改进）：资源判定器（三条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>回合开始的槽递增（签名＝（玩家）→ int）：默认返回 <c>1</c>——<c>SettleAsync</c> 的递增来源；
+    /// moding 改写＝改写「回合开始的递增」（全局生效、注销回退 1）。</summary>
+    public const string PointSlotIncrement = "resource.slot.increment";
+
+    /// <summary>额外获得槽数的**数字包裹**（签名＝（玩家，请求值）→ int）：默认返回入参**原值**（恒等）；
+    /// moding 改写＝改写「额外获得 n 个指挥点槽」的实际数字（全局生效、注销回退原值）。</summary>
+    public const string PointSlotGain = "resource.slot.gain";
+
+    /// <summary>失去槽数的**数字包裹**（签名＝（玩家，请求值）→ int）：默认返回入参**原值**（恒等）；
+    /// moding 改写＝改写「失去 n 个指挥点槽」的实际数字（全局生效、注销回退原值）。</summary>
+    public const string PointSlotLose = "resource.slot.lose";
+
+    // ---------- E1-25 后续（指挥点事件改造）：点数数字包裹（两条；内置注册段固定注册——无条件可用） ----------
+
+    /// <summary>额外获得点数的**数字包裹**（签名＝（玩家，请求值）→ int）：默认返回入参**原值**（恒等）；
+    /// moding 改写＝改写「获得 n 个指挥点」的实际数字（全局生效、注销回退原值）。</summary>
+    public const string PointGain = "resource.point.gain";
+
+    /// <summary>失去点数的**数字包裹**（签名＝（玩家，请求值）→ int）：默认返回入参**原值**（恒等）；
+    /// moding 改写＝改写「失去 n 个指挥点」的实际数字（全局生效、注销回退原值）。</summary>
+    public const string PointLose = "resource.point.lose";
 }

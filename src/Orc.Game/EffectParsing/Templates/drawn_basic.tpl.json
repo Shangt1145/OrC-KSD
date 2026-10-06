@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "drawn_basic",
+  "actorFrom": "effectHost",
+  "slots": [
+    { "name": "on_event", "target": "mainTrigger.events[e1]" }
+  ],
+  "root": {
+    "mainTrigger": {
+      "id": "t_drawn",
+      "stableKey": "tpl.drawn_basic.main",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["card.drawn"],
+      "events": [
+        { "id": "e1", "entry": "HandleAsync" }
+      ]
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

@@ -10,7 +10,8 @@ namespace Orc.Game;
 /// 游戏更新常量集：统一承载回合五连（<c>turn.*</c>）、通用三项（<c>card.played</c> / <c>card.drawn</c> / <c>card.stat.changed</c>）、
 /// 第二批 hooks 六项（<c>card.load</c> / <c>card.hand.add</c> / <c>card.died</c> / <c>unit.joined</c> / <c>unit.deployed</c> / <c>unit.position.changed</c>）
 /// 与 W4-1（G14 收尾）洗切一项（<c>deck.shuffled</c>）、G7 弃置一项（<c>card.discarded</c>）、
-/// S9 类型变更一项（<c>unit.types.changed</c>）、Kb 爆牌一项（<c>card.burned</c>）——合计 18 条。
+/// S9 类型变更一项（<c>unit.types.changed</c>）、Kb 爆牌一项（<c>card.burned</c>）、
+/// E1-25 资源六项（<c>slot.gained</c> / <c>slot.lost</c> / <c>slot.changed</c> ＋ <c>point.gained</c> / <c>point.lost</c> / <c>point.changed</c>）——合计 24 条。
 /// 全部为新定义、与 Orc 既有常量集无重叠；字面值为对外订阅契约，一经定稿即冻结（引擎总线同一性＝ordinal 序数、大小写敏感）。
 /// 发射统一经引擎总线 <see cref="LogicEngine.Emit"/>（本类提供可选静态发射助手，内部即走该通路）。
 /// 实际发射（2B 后）：turn 五连、card.drawn 与 card.drawn→card.hand.add 连发（抽牌链路；粒度不同、并存）、card.load（初始化逐张加载）
@@ -111,6 +112,14 @@ public static class GameUpdates
     /// <summary>单位位置变化（"unit.position.changed"；载荷＝{ Unit, OldPosition, NewPosition }——均为槽位引用）。2C 起调用点＝移动执行段（槽位变更后、收尾段之前）；守护维护由本更新驱动。</summary>
     public const string UnitPositionChanged = "unit.position.changed";
 
+    // ---------- E1-33（监听类补信号） ----------
+
+    /// <summary>受到伤害（"card.damaged"；载荷＝{ Card, Amount }）。调用点＝伤害结算后（单位侧 <c>UnitCard.ApplyDefenseDamageAsync</c>、HQ 侧 <c>Hq.ApplyDamageAsync</c>）——实际扣减＞0、恰一次、先落定后发射。</summary>
+    public const string CardDamaged = "card.damaged";
+
+    /// <summary>单位行动后（"unit.acted"；载荷＝{ Unit }）。调用点＝攻击/移动外层收尾成功后（<c>CommandManager.DispatchAttackAsync</c> / <c>DispatchMoveAsync</c>）——各自恰一次。</summary>
+    public const string UnitActed = "unit.acted";
+
     // ---------- W4-1（G14 收尾）洗切一项：卡组信号 ----------
 
     /// <summary>
@@ -133,6 +142,49 @@ public static class GameUpdates
     /// （信号为机制面；验收在测试内监听）。
     /// </summary>
     public const string UnitTypesChanged = "unit.types.changed";
+
+    // ---------- E1-25（指挥点槽事件改进）：资源信号三项 ----------
+
+    /// <summary>
+    /// 额外获得（"slot.gained"；载荷＝{ Player, Amount }——Amount＝**实际变化量** Δ）。
+    /// 语义＝**语义前置**信号：槽实际增加才发（已在上限＝零发射）；其后接 <see cref="SlotChanged"/>（唯一「槽值真的变了」信号）。
+    /// **回合开始的递增不走本信号**（<c>ResourceManager.SettleAsync</c> 直发 slot.changed）。
+    /// </summary>
+    public const string SlotGained = "slot.gained";
+
+    /// <summary>
+    /// 失去（"slot.lost"；载荷＝{ Player, Amount }——Amount＝**实际变化量** Δ）。
+    /// 语义＝**语义前置**信号：槽实际减少才发（已为 0＝零发射）；其后接 <see cref="SlotChanged"/>。
+    /// </summary>
+    public const string SlotLost = "slot.lost";
+
+    /// <summary>
+    /// 指挥点槽改变（"slot.changed"；载荷＝{ Player, OldSlots, NewSlots }）。
+    /// 语义＝**唯一**「槽值真的变了」的信号（槽值未变化＝零发射）；回合开始递增与额外获得/失去皆**汇聚**于此。
+    /// </summary>
+    public const string SlotChanged = "slot.changed";
+
+    // ---------- E1-25 后续（指挥点事件改造）：点数信号三项 ----------
+
+    /// <summary>
+    /// 额外获得点数（"point.gained"；载荷＝{ Player, Amount }——Amount＝**实际变化量** Δ）。
+    /// 语义＝**语义前置**信号：**卡效果**「获得 n 个指挥点」走此路（点数实际增加才发）；其后接 <see cref="PointChanged"/>。
+    /// **游戏内通用来源**（打牌/指挥/反制扣费、回合开始设为）**不走**本信号（直发 point.changed）。
+    /// </summary>
+    public const string PointGained = "point.gained";
+
+    /// <summary>
+    /// 失去点数（"point.lost"；载荷＝{ Player, Amount }——Amount＝**实际变化量** Δ）。
+    /// 语义＝**语义前置**信号：**卡效果**「失去 n 个指挥点」走此路；其后接 <see cref="PointChanged"/>。
+    /// </summary>
+    public const string PointLost = "point.lost";
+
+    /// <summary>
+    /// 指挥点改变（"point.changed"；载荷＝{ Player, OldPoints, NewPoints }）。
+    /// 语义＝**唯一**「点数值真的变了」的信号（值未变化＝零发射）；通用入口 <c>ChangePointsAsync</c>（设为/增减）
+    /// 与额外获得/失去皆**汇聚**于此。
+    /// </summary>
+    public const string PointChanged = "point.changed";
 
     // ---------- 载荷键（对外订阅契约；实现内部引用常量而非裸字符串） ----------
 
@@ -165,6 +217,21 @@ public static class GameUpdates
 
     /// <summary>载荷键：新增类型（值＝<see cref="Cards.UnitType"/>；unit.types.changed 携带——本次增补的类型〔增量〕）。</summary>
     public const string PayloadAddedType = "AddedType";
+
+    /// <summary>载荷键：数量（值＝int；slot.gained / slot.lost 携带——**实际变化量** Δ）。</summary>
+    public const string PayloadAmount = "Amount";
+
+    /// <summary>载荷键：原槽值（值＝int；slot.changed 携带）。</summary>
+    public const string PayloadOldSlots = "OldSlots";
+
+    /// <summary>载荷键：新槽值（值＝int；slot.changed 携带）。</summary>
+    public const string PayloadNewSlots = "NewSlots";
+
+    /// <summary>载荷键：原点数（值＝int；point.changed 携带）。</summary>
+    public const string PayloadOldPoints = "OldPoints";
+
+    /// <summary>载荷键：新点数（值＝int；point.changed 携带）。</summary>
+    public const string PayloadNewPoints = "NewPoints";
 
     // ---------- 发射助手（可选便捷层；统一走总线 Emit 通路） ----------
 
@@ -363,6 +430,34 @@ public static class GameUpdates
             ct);
     }
 
+    /// <summary>发射 card.damaged（载荷＝{ 卡牌实例, 伤害量 }；伤害结算后调用——单位/HQ 各自路径、恰一次）。</summary>
+    /// <exception cref="ArgumentNullException">engine / card 为 null。</exception>
+    public static Task EmitCardDamaged(LogicEngine engine, Card card, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        return engine.Emit(
+            CardDamaged,
+            new Dictionary<string, object?>
+            {
+                [PayloadCard] = card,
+                [PayloadAmount] = amount,
+            },
+            ct);
+    }
+
+    /// <summary>发射 unit.acted（载荷＝{ 单位 }；攻击/移动外层收尾成功后调用——各自恰一次）。</summary>
+    /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
+    public static Task EmitUnitActed(LogicEngine engine, Card unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        return engine.Emit(
+            UnitActed,
+            new Dictionary<string, object?> { [PayloadUnit] = unit },
+            ct);
+    }
+
     /// <summary>发射 unit.joined（载荷＝{ 单位, 位置 }；2B 加入路径调用点——单位化完成后）。</summary>
     public static Task EmitUnitJoined(LogicEngine engine, Card unit, Slot position, CancellationToken ct = default)
     {
@@ -410,6 +505,118 @@ public static class GameUpdates
                 [PayloadUnit] = unit,
                 [PayloadOldPosition] = oldPosition,
                 [PayloadNewPosition] = newPosition,
+            },
+            ct);
+    }
+
+    // ---------- 发射助手（E1-25 指挥点槽事件；统一走总线 Emit 通路） ----------
+
+    /// <summary>发射 slot.gained（载荷＝{ Player, Amount }——Amount＝实际变化量 Δ；槽实际增加才发、其后接 slot.changed）。</summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitSlotGained(
+        LogicEngine engine, Player player, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            SlotGained,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadAmount] = amount,
+            },
+            ct);
+    }
+
+    /// <summary>发射 slot.lost（载荷＝{ Player, Amount }——Amount＝实际变化量 Δ；槽实际减少才发、其后接 slot.changed）。</summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitSlotLost(
+        LogicEngine engine, Player player, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            SlotLost,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadAmount] = amount,
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// 发射 slot.changed（载荷＝{ Player, OldSlots, NewSlots }——唯一「槽值真的变了」的信号）。
+    /// 语义＝槽值实际变化才发（无变化零发射——调用方不得在无变化时调用）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitSlotChanged(
+        LogicEngine engine, Player player, int oldSlots, int newSlots, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            SlotChanged,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadOldSlots] = oldSlots,
+                [PayloadNewSlots] = newSlots,
+            },
+            ct);
+    }
+
+    /// <summary>发射 point.gained（载荷＝{ Player, Amount }——Amount＝实际变化量 Δ；点数实际增加才发、其后接 point.changed）。</summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitPointGained(
+        LogicEngine engine, Player player, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            PointGained,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadAmount] = amount,
+            },
+            ct);
+    }
+
+    /// <summary>发射 point.lost（载荷＝{ Player, Amount }——Amount＝实际变化量 Δ；点数实际减少才发、其后接 point.changed）。</summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitPointLost(
+        LogicEngine engine, Player player, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            PointLost,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadAmount] = amount,
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// 发射 point.changed（载荷＝{ Player, OldPoints, NewPoints }——唯一「点数值真的变了」的信号）。
+    /// 语义＝点数值实际变化才发（无变化零发射——调用方不得在无变化时调用）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">engine / player 为 null。</exception>
+    public static Task EmitPointChanged(
+        LogicEngine engine, Player player, int oldPoints, int newPoints, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            PointChanged,
+            new Dictionary<string, object?>
+            {
+                [PayloadPlayer] = player,
+                [PayloadOldPoints] = oldPoints,
+                [PayloadNewPoints] = newPoints,
             },
             ct);
     }

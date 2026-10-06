@@ -402,8 +402,23 @@ public class Trigger<TView> : ITriggerMetadata where TView : class
                 return stream;
             }
 
+            // 效果运行时（E1 加性）：若本触发器的所有者是**带宿主的效果实例**（动态/预制体效果），
+            // 把宿主卡注入视图数据——供动态（csx）handler 取得"施动卡"（CardEventView 的 [Optional][Read] Host）。
+            // 入料拷贝一次：复制字典后再注入，不污染事件流载荷。
+            var effectiveData = data;
+            if (_owner is Orc.Cards.Effect ownerEffect
+                && ownerEffect.HasHost
+                && ownerEffect.HostOrNull is { } hostCard)
+            {
+                var enriched = data is null
+                    ? new Dictionary<string, object?>()
+                    : new Dictionary<string, object?>(data);
+                enriched["Host"] = hostCard;
+                effectiveData = enriched;
+            }
+
             // 验证通过 ⇒ 执行：绑定新建视图会话 → 执行事件链；结构性错误由下方契约兜底捕获。
-            var ctx = new Context(data);
+            var ctx = new Context(effectiveData);
             ctx.AttachFrame(frame);
             frame.AttachContext(ctx);
 

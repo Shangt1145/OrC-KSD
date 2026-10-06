@@ -16,6 +16,15 @@ public class CardEventView
     [Optional]
     [Read]
     public virtual object? Effect { get; set; }
+
+    /// <summary>
+    /// 效果宿主卡（E1 加性可选面）：本触发器所属**效果实例的宿主卡**——由触发器执行链在
+    /// 所有者是带宿主的效果时注入（载荷不含宿主信号，如 <c>card.died</c>，亦可用于取"施动卡"）；
+    /// 未注入＝null（非效果承载的触发器）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual object? Host { get; set; }
 }
 
 /// <summary>S4 更新与流程载荷键名约定（card.placed / effect.removed / card.destroyed；攻击/伤害结算流程视图属性同名）。</summary>

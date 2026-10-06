@@ -35,7 +35,7 @@ public class StatPortalTests
         Assert.Equal(3, unit.Modifiers.GetEffectiveValue(CardStatFields.Defense));
         Assert.Equal(3, unit.GetData<UnitStateData>().Defense); // 表现位（落定同步）
         Assert.Equal(5, unit.GetData<BattleStatsData>().Defense); // 只读基准不变（运行期变更不写基准）
-        var update = Assert.Single(recorder.Updates);
+        var update = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardStatChanged);
         Assert.Equal(GameUpdates.CardStatChanged, update.Type);
         Assert.Same(unit, update.Payload![GameUpdates.PayloadCard]);
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(update.Payload));
@@ -44,7 +44,8 @@ public class StatPortalTests
         recorder.Clear();
         await unit.ApplyDefenseDamageAsync(3);
         Assert.Equal(0, unit.Modifiers.GetEffectiveValue(CardStatFields.Defense));
-        Assert.Single(recorder.Updates);
+        Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardStatChanged);
+        Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardDamaged); // E1-33：受伤害信号
 
         recorder.Clear();
         await unit.ApplyDefenseDamageAsync(2);
@@ -298,10 +299,12 @@ public class StatPortalTests
         // 经既有「基础互伤」流程真实触发：互伤双方各自变化正确（target：7−2=5；attacker：5−2=3）、
         // 变化字段集合正确（[Defense]×2、目标在前）、无死亡、受击后修饰保持（伤害只动损伤量、不触碰修饰器）。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Equal(2, recorder.Updates.Count);
-        Assert.All(recorder.Updates, u => Assert.Equal(GameUpdates.CardStatChanged, u.Type));
-        var targetUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], target));
-        var attackerUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], attacker));
+        Assert.Equal(2, recorder.Updates.Count(u => u.Type == GameUpdates.CardStatChanged));
+        Assert.Contains(GameUpdates.PointChanged, recorder.Types); // 收尾扣行动费（E1-25 后续：指挥走点数通用路径）
+        var targetUpdate = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], target));
+        var attackerUpdate = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], attacker));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(targetUpdate.Payload));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(attackerUpdate.Payload));
         Assert.Equal(5, target.Modifiers.GetEffectiveValue(CardStatFields.Defense));
@@ -331,7 +334,10 @@ public class StatPortalTests
         var result = await CommandTestKit.RunCommandAsync(match, bridge, attacker, target.Ref);
 
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Empty(recorder.Updates); // 无变化零发射（含 card.stat.changed / card.died / 位置类）
+        // 伤害链零发射（无 card.stat.changed / card.died / 位置类）；仅收尾扣行动费一条（E1-25 后续）。
+        Assert.Equal(
+            new[] { GameUpdates.PointChanged, GameUpdates.UnitActed }, // E1-33：攻击收尾＝行动后（伤害 0＝无 card.damaged）
+            recorder.Types);
         Assert.Equal(2, target.Modifiers.GetEffectiveValue(CardStatFields.Defense));
         Assert.False(target.GetData<UnitStateData>().IsDestroyed);
     }
@@ -353,9 +359,11 @@ public class StatPortalTests
         await unitA.ApplyDefenseDamageAsync(1);
         await unitB.ApplyDefenseDamageAsync(2);
 
-        Assert.Equal(2, recorder.Updates.Count);
-        var updateA = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], unitA));
-        var updateB = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], unitB));
+        Assert.Equal(2, recorder.Updates.Count(u => u.Type == GameUpdates.CardStatChanged)); // E1-33：另有同数 card.damaged
+        var updateA = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], unitA));
+        var updateB = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], unitB));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(updateA.Payload));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(updateB.Payload));
         Assert.Equal(4, unitA.Modifiers.GetEffectiveValue(CardStatFields.Defense));

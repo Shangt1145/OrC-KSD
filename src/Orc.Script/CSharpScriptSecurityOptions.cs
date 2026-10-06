@@ -18,9 +18,15 @@ public sealed class CSharpScriptSecurityOptions
         "System.Text",
         "System.Threading.Tasks",
         "Orc",
+        "Orc.Game",
     };
 
-    /// <summary>默认允许的命名空间导入。</summary>
+    /// <summary>
+    /// 默认允许的命名空间导入。
+    /// 说明：**不**预置 `Orc.Game.*`——`using` 不存在的命名空间会导致编译失败，
+    /// 而脚本宿主未必加载游戏层程序集（如纯内核/脚本测试环境）；需要游戏层 API 的宿主
+    /// 经 <see cref="AllowedImports"/> 自行追加（或模板使用全限定类型名）。
+    /// </summary>
     public static readonly IReadOnlyList<string> DefaultAllowedImports = new[]
     {
         "System",

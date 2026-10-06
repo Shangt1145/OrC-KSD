@@ -85,7 +85,11 @@ public class PlayChainDeploymentTests
         Assert.Equal(new[] { "A", "C" }, order);
         Assert.Same(unit, line[1].Occupant);
         Assert.Equal(
-            new[] { GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed }, // W3-A3：含放置驱动信号
+            new[]
+            {
+                GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed, // W3-A3：含放置驱动信号
+                GameUpdates.PointChanged, // 收尾扣部署费（E1-25 后续）
+            },
             recorder.Types);
         Assert.Contains(
             match.Engine.RootStream.Entries,

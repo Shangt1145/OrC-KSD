@@ -1,0 +1,19 @@
+{
+  "造成": { "key": "damage" },
+  "攻击": { "key": "attack" },
+  "消灭": { "key": "destroy" },
+  "摧毁": { "key": "destroy" },
+  "抽": { "key": "draw" },
+  "获得": { "key": "gain" },
+  "失去": { "key": "lose" },
+  "移动": { "key": "move" },
+  "移动至": { "key": "move" },
+  "移至": { "key": "move" },
+  "移到": { "key": "move" },
+  "压制": { "key": "pin" },
+  "抑制": { "key": "silence" },
+  "加入手中": { "key": "addToHand" },
+  "加入手牌": { "key": "addToHand" },
+  "放入手中": { "key": "addToHand" },
+  "洗入": { "key": "shuffleIn" }
+}

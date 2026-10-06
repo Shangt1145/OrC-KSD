@@ -3,6 +3,7 @@ using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Collections;
 using Orc.Game.Commanding;
+using Orc.Game.Effects;
 using Orc.Game.Judicators;
 using Orc.Game.Managers;
 using Orc.Game.Players;
@@ -54,6 +55,7 @@ public sealed class Match
     private GameEnvironment? _environment; // W3-1 G4：游戏环境（对局装配期创建；多对局相互独立）
     private MatchCardService? _cardService; // S9：对局卡牌服务（服务面——卡牌工厂＋放置面；对局装配期创建）
     private MatchHistoryService? _historyService; // S10：对局历史读取服务（最小历史读取面；对局装配期创建）
+    private EffectRuntime? _effectRuntime; // E1：效果运行时门面（csx 唯一游戏层受控入口；对局装配期创建）
 
     /// <summary>
     /// 创建对局（准备态；内部新建 LogicEngine 并公开）。装配校验：卡组名单非 null、非空、不含 null/空白 id；
@@ -421,9 +423,16 @@ public sealed class Match
             _cardLibrary.Register(entry.Id, entry.Definition);
         }
 
-        _resourceManager = new ResourceManager(_options.MaxPointSlots);
+        // E1-25：资源管理器注入引擎（发槽信号）＋判定器延迟读取面（判定器注册表在本行之后创建——延迟求值）。
+        _resourceManager = new ResourceManager(Engine, () => _judicators, _options.MaxPointSlots);
         _playerManager = new PlayerManager(Engine, _cardLibrary);
         _playerManager.CreatePlayers(_deckForPlayerA, _deckForPlayerB);
+        // E1-25 后续：资源管理器注入各玩家（「卡 → 玩家 → 服务」路径——卡级扣费/退点经 ResourceManager.ResolveFor 取用）。
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureResourceManager(_resourceManager);
+        }
+
         // 2A 受控变更：战场构造期含 HQ 占位（各支援线槽 0＝对应玩家），创建顺序随之为玩家先、战场后。
         _battlefieldManager = new BattlefieldManager(_playerManager.Players[0], _playerManager.Players[1]);
 
@@ -568,6 +577,51 @@ public sealed class Match
             _lifecycle,
             unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
             (attacker, targetRef) => _commandManager?.IsAttackTargetLegal(attacker, targetRef) ?? false));
+
+        // E1-34（DSL 可运行）：默认装配脚本求值器——csx 处理器（效果解析器产物）需要它才能编译执行；
+        // 内核零依赖口径不变（接口倒置），实现由 satellite（Orc.Script）提供；宿主已装配＝不覆盖。
+        Engine.ScriptEvaluator ??= new Orc.Script.CSharpScriptEvaluator();
+
+        // E1 加性（效果运行期）：无头选靶判定器（csx handler 的选择面——无头、不排队、不等 UI 桥）。
+        _judicators.Register(
+            JudicatorNames.EffectTargetResolve,
+            new EffectTargetResolveJudicator(
+                _battlefieldManager.Battlefield,
+                card => MatchRandomService.ResolveFor(card)));
+
+        // E1-25 加性（指挥点槽事件改进）：资源判定器（内置固定注册段）——
+        // 回合开始的槽递增（默认 1）＋ 额外获得/失去数字包裹（默认恒等）；
+        // ResourceManager 经延迟读取 lambda 消费（资源管理器创建时点早于本段，延迟求值保证就绪）。
+        _judicators.Register(JudicatorNames.PointSlotIncrement, new PointSlotIncrementJudicator());
+        _judicators.Register(JudicatorNames.PointSlotGain, new PointSlotGainAmountJudicator());
+        _judicators.Register(JudicatorNames.PointSlotLose, new PointSlotLoseAmountJudicator());
+        // E1-25 后续（指挥点事件改造）：点数数字包裹判定器两条（默认恒等）。
+        _judicators.Register(JudicatorNames.PointGain, new PointGainAmountJudicator());
+        _judicators.Register(JudicatorNames.PointLose, new PointLoseAmountJudicator());
+
+        // E1 加性：效果运行时门面（csx 的**唯一**游戏层受控入口——消灭[死亡链]/伤害/属性修饰/词条/抽牌/无头选靶/槽加·减）；
+        // 协作者以延迟读取 lambda 注入（指挥管理器创建较晚）；并注入各玩家（「卡 → 玩家 → 服务」读取路径的玩家环节）。
+        _effectRuntime = new EffectRuntime(
+            () => _commandManager,
+            () => _playerManager,
+            () => _judicators,
+            () => _resourceManager);
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureEffectRuntime(_effectRuntime);
+        }
+
+        // E1-27 加性（任务 4 前置）：对局级具名触发器注册表——把四个流程触发器按名登记，供效果预制体 `injects`
+        // 在宿主卡未命中时回退解析（解析发生在装载期，创建时点晚于本注册表但早于卡加载，故以延迟提供器承载）。
+        var matchTriggers = new MatchNamedTriggers();
+        matchTriggers.Register("指挥触发器", typeof(CommandTriggerView), () => _commandManager?.CommandTrigger);
+        matchTriggers.Register("单位移动触发器", typeof(UnitMoveTriggerView), () => _commandManager?.UnitMoveTrigger);
+        matchTriggers.Register("单位攻击触发器", typeof(UnitAttackTriggerView), () => _commandManager?.UnitAttackTrigger);
+        matchTriggers.Register("造成攻击伤害触发器", typeof(AttackDamageTriggerView), () => _commandManager?.AttackDamageTrigger);
+        foreach (var player in _playerManager.Players)
+        {
+            player.ConfigureMatchTriggers(matchTriggers);
+        }
 
         // 外部装配段（追加/定制通道——最小加性保持；重复注册默认名被拒绝〔J1「注册即配置、重复拒绝」口径〕；
         // 装配期 moding 改写经注册表 moding 面——注册所得/解析所得句柄均可锚定）。

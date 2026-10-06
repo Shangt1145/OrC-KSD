@@ -93,7 +93,7 @@ public sealed record GameHookPendingTrigger(
 /// </summary>
 public static class GameHooks
 {
-    // ---------- 对外信号（18 条；转发引用 GameUpdates） ----------
+    // ---------- 对外信号（24 条；转发引用 GameUpdates） ----------
 
     /// <summary>回合开始前（<c>turn.start.before</c>）。</summary>
     public const string TurnStartBefore = GameUpdates.TurnStartBefore;
@@ -149,7 +149,31 @@ public static class GameHooks
     /// <summary>单位类型变更（<c>unit.types.changed</c>）。</summary>
     public const string UnitTypesChanged = GameUpdates.UnitTypesChanged;
 
-    /// <summary>对外信号全量（18 条；稳定序＝定义序）。</summary>
+    /// <summary>额外获得指挥点槽（<c>slot.gained</c>）。</summary>
+    public const string SlotGained = GameUpdates.SlotGained;
+
+    /// <summary>失去指挥点槽（<c>slot.lost</c>）。</summary>
+    public const string SlotLost = GameUpdates.SlotLost;
+
+    /// <summary>指挥点槽改变（<c>slot.changed</c>）。</summary>
+    public const string SlotChanged = GameUpdates.SlotChanged;
+
+    /// <summary>额外获得点数（<c>point.gained</c>）。</summary>
+    public const string PointGained = GameUpdates.PointGained;
+
+    /// <summary>失去点数（<c>point.lost</c>）。</summary>
+    public const string PointLost = GameUpdates.PointLost;
+
+    /// <summary>指挥点改变（<c>point.changed</c>）。</summary>
+    public const string PointChanged = GameUpdates.PointChanged;
+
+    /// <summary>受到伤害（<c>card.damaged</c>；E1-33）。</summary>
+    public const string CardDamaged = GameUpdates.CardDamaged;
+
+    /// <summary>单位行动后（<c>unit.acted</c>；E1-33）。</summary>
+    public const string UnitActed = GameUpdates.UnitActed;
+
+    /// <summary>对外信号全量（26 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> Signals { get; } = new[]
     {
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
@@ -157,9 +181,12 @@ public static class GameHooks
         CardLoad, CardHandAdd, CardDiscarded, CardBurned,
         CardDied, UnitJoined, UnitDeployed, UnitPositionChanged,
         DeckShuffled, UnitTypesChanged,
+        SlotGained, SlotLost, SlotChanged,
+        PointGained, PointLost, PointChanged,
+        CardDamaged, UnitActed,
     };
 
-    // ---------- 载荷键（10 条；转发引用 GameUpdates） ----------
+    // ---------- 载荷键（15 条；转发引用 GameUpdates） ----------
 
     /// <summary>载荷键：玩家。</summary>
     public const string PayloadPlayer = GameUpdates.PayloadPlayer;
@@ -191,14 +218,30 @@ public static class GameHooks
     /// <summary>载荷键：新增类型。</summary>
     public const string PayloadAddedType = GameUpdates.PayloadAddedType;
 
-    /// <summary>载荷键全量（10 条；稳定序＝定义序）。</summary>
+    /// <summary>载荷键：数量（实际变化量 Δ）。</summary>
+    public const string PayloadAmount = GameUpdates.PayloadAmount;
+
+    /// <summary>载荷键：原槽值。</summary>
+    public const string PayloadOldSlots = GameUpdates.PayloadOldSlots;
+
+    /// <summary>载荷键：新槽值。</summary>
+    public const string PayloadNewSlots = GameUpdates.PayloadNewSlots;
+
+    /// <summary>载荷键：原点数。</summary>
+    public const string PayloadOldPoints = GameUpdates.PayloadOldPoints;
+
+    /// <summary>载荷键：新点数。</summary>
+    public const string PayloadNewPoints = GameUpdates.PayloadNewPoints;
+
+    /// <summary>载荷键全量（15 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> PayloadKeys { get; } = new[]
     {
         PayloadPlayer, PayloadTurnNumber, PayloadCard, PayloadUnit, PayloadPosition,
         PayloadOldPosition, PayloadNewPosition, PayloadChangedFields, PayloadDeck, PayloadAddedType,
+        PayloadAmount, PayloadOldSlots, PayloadNewSlots, PayloadOldPoints, PayloadNewPoints,
     };
 
-    // ---------- 判定器名（15 条；转发引用 JudicatorNames） ----------
+    // ---------- 判定器名（21 条；转发引用 JudicatorNames） ----------
 
     /// <summary>判定器名：费用检查（<c>validation.cost.check</c>）。</summary>
     public const string JudicatorCostCheck = JudicatorNames.CostCheck;
@@ -245,7 +288,25 @@ public static class GameHooks
     /// <summary>判定器名：推进前置判定（<c>move.frontline-enemy</c>；K3——前线存活敌方）。</summary>
     public const string JudicatorMoveFrontlineEnemy = JudicatorNames.MoveFrontlineEnemy;
 
-    /// <summary>判定器名全量（15 条；稳定序＝定义序）。</summary>
+    /// <summary>判定器名：效果无头选靶判定（<c>effect.target.resolve</c>；E1——csx handler 选择面）。</summary>
+    public const string JudicatorEffectTargetResolve = JudicatorNames.EffectTargetResolve;
+
+    /// <summary>判定器名：回合开始的槽递增（<c>resource.slot.increment</c>；E1-25）。</summary>
+    public const string JudicatorPointSlotIncrement = JudicatorNames.PointSlotIncrement;
+
+    /// <summary>判定器名：额外获得槽数的数字包裹（<c>resource.slot.gain</c>；E1-25）。</summary>
+    public const string JudicatorPointSlotGain = JudicatorNames.PointSlotGain;
+
+    /// <summary>判定器名：失去槽数的数字包裹（<c>resource.slot.lose</c>；E1-25）。</summary>
+    public const string JudicatorPointSlotLose = JudicatorNames.PointSlotLose;
+
+    /// <summary>判定器名：额外获得点数的数字包裹（<c>resource.point.gain</c>；E1-25 后续）。</summary>
+    public const string JudicatorPointGain = JudicatorNames.PointGain;
+
+    /// <summary>判定器名：失去点数的数字包裹（<c>resource.point.lose</c>；E1-25 后续）。</summary>
+    public const string JudicatorPointLose = JudicatorNames.PointLose;
+
+    /// <summary>判定器名全量（21 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> JudicatorNameList { get; } = new[]
     {
         JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
@@ -253,15 +314,21 @@ public static class GameHooks
         JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
         JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
         JudicatorMoveLegEligibility, JudicatorAttackLegEligibility, JudicatorMoveFrontlineEnemy,
+        JudicatorEffectTargetResolve,
+        JudicatorPointSlotIncrement, JudicatorPointSlotGain, JudicatorPointSlotLose,
+        JudicatorPointGain, JudicatorPointLose,
     };
 
-    /// <summary>判定器名装配面：13 条内置（4 条验证类＋6 条交战类＋3 条动作资格类）由 <c>Match.Initialize</c> 固定注册段注册；2 条示范类经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
+    /// <summary>判定器名装配面：19 条内置（4 条验证类＋6 条交战类＋3 条动作资格类＋1 条效果选靶类＋5 条资源类）由 <c>Match.Initialize</c> 固定注册段注册；2 条示范类经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
     public static IReadOnlyList<string> BuiltInJudicatorNames { get; } = new[]
     {
         JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
         JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
         JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
         JudicatorMoveLegEligibility, JudicatorAttackLegEligibility, JudicatorMoveFrontlineEnemy,
+        JudicatorEffectTargetResolve,
+        JudicatorPointSlotIncrement, JudicatorPointSlotGain, JudicatorPointSlotLose,
+        JudicatorPointGain, JudicatorPointLose,
     };
 
     /// <summary>判定器名装配面：示范类（经 <c>judicatorAssembly</c> 外部装配段注入）。</summary>

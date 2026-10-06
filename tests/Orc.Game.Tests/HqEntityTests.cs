@@ -119,7 +119,7 @@ public class HqEntityTests
         Assert.Equal(17, playerB.Hq.Health);
         Assert.Equal(MatchState.InProgress, match.State); // 不归零 → 不终局
 
-        var statUpdate = Assert.Single(recorder.Updates);
+        var statUpdate = Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardStatChanged);
         Assert.Equal(GameUpdates.CardStatChanged, statUpdate.Type);
         Assert.Same(playerB.Hq, statUpdate.Payload![GameUpdates.PayloadCard]);
         Assert.Equal(new[] { CardStatFields.HqHealth }, ModifierTestKit.ChangedFieldsOf(statUpdate.Payload));

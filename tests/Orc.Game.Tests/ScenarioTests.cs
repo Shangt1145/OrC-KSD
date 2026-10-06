@@ -4,7 +4,7 @@ namespace Orc.Game.Tests;
 
 /// <summary>
 /// 验收锚点⑤：骨架场景"双人对局·两回合循环"端到端——
-/// 初始化（2A：40 张 card.load ＋ 3 条回合开始；W4-1：＋2 条 deck.shuffled 洗切信号）→ 回合 1 开始 → EndTurn → 回合 2（7 条更新：含 drawn → hand.add 连发）→ 更新序列与资源数值断言；
+/// 初始化（2A：40 张 card.load ＋ 5 条回合开始段；W4-1：＋2 条 deck.shuffled 洗切信号；E1-25：结算 slot.changed ＋ 点数设为 point.changed）→ 回合 1 开始 → EndTurn → 回合 2（9 条更新：含 drawn → hand.add 连发）→ 更新序列与资源数值断言；
 /// 附：回合 3（先手第二次回合）照抽（唯一例外为先手第 1 回合）、同种子＋同参数逐位一致复现。
 /// </summary>
 public class ScenarioTests
@@ -19,13 +19,19 @@ public class ScenarioTests
         await match.Initialize();
         var expectedLoads = GameTestData.StandardDeckSize * 2;
         var shuffleSignals = 2; // W4-1：初始化双方卡组洗切各一条（玩家索引升序）
-        Assert.Equal(shuffleSignals + expectedLoads + 3, recorder.Types.Count);
+        Assert.Equal(shuffleSignals + expectedLoads + 5, recorder.Types.Count);
         Assert.Equal(
             new[] { GameUpdates.DeckShuffled, GameUpdates.DeckShuffled },
             recorder.Types.Take(shuffleSignals));
         Assert.Equal(expectedLoads, recorder.Types.Count(t => t == GameUpdates.CardLoad));
         Assert.Equal(
-            new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
+            new[]
+            {
+                GameUpdates.TurnStartBefore, GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
+                GameUpdates.TurnStartAfter,
+            },
             recorder.Types.Skip(shuffleSignals + expectedLoads));
 
         var first = match.Players[0];
@@ -46,6 +52,8 @@ public class ScenarioTests
                 GameUpdates.TurnEnd,
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
                 GameUpdates.CardDrawn,
                 GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,
@@ -71,6 +79,8 @@ public class ScenarioTests
                 GameUpdates.TurnEnd,
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
                 GameUpdates.CardDrawn,
                 GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,

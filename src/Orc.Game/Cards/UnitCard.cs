@@ -1,5 +1,6 @@
 using Orc.Core;
 using Orc.Game.Board;
+using Orc.Game.Managers;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
 using Orc.Game.Triggers;
@@ -124,8 +125,18 @@ public class UnitCard : CardBase
             return; // 部署链未完成（防御：单位化失败等）：不进入收尾（不扣费、不离手）
         }
 
-        // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C-A1：闪击＝扣费后；经静态助手收口——组件遍历在其内）
-        player.Points -= unit.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
+        // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径；
+        //    E1-25 后续：经点数通用入口发 point.changed）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C-A1：闪击＝扣费后；经静态助手收口——组件遍历在其内）
+        var deployCost = unit.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
+        if (ResourceManager.ResolveFor(unit) is { } manager)
+        {
+            await manager.ChangePointsAsync(player, -deployCost, PointChangeKind.Add, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            player.Points -= deployCost; // 脱局兜底（未装配资源管理器）：保持既有直写语义
+        }
+
         player.Hand.Remove(unit);
         await KeywordRules.OnDeployChainFinalizedAsync(unit, ct);
     }
@@ -227,6 +238,7 @@ public class UnitCard : CardBase
                 $"单位 '{Name}' 已死亡/已毁，不能进行伤害操作（死亡后数值面冻结——明确拒绝）。");
         }
 
+        var defenseBefore = Modifiers.GetEffectiveValue(CardStatFields.Defense); // E1-33：受伤害信号按「改变才传播」
         state.DefenseLoss += amount; // 受控写入（门户面；运行期直写收窄）
 
         // A2：动员——「受到伤害」（净伤害＞0、防御实际扣减）后失去（伤害被完全吸收/归零〔amount=0〕＝不算；
@@ -237,6 +249,11 @@ public class UnitCard : CardBase
         }
 
         await Modifiers.RequestRerunAsync(ct); // 变更经门户 → 跑链 → 变化时集中触发
+
+        if (amount > 0 && Modifiers.GetEffectiveValue(CardStatFields.Defense) != defenseBefore)
+        {
+            await GameUpdates.EmitCardDamaged(_chainEngine, this, amount, ct); // E1-33：**防御实际变化**才发（改变才传播）
+        }
     }
 
     /// <summary>

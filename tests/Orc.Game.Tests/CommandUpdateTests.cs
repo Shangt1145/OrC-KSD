@@ -33,9 +33,19 @@ public class CommandUpdateTests
         // 攻击互伤但无死亡（W2b 随改——原「结算数值静默」语义废止）：数值变更经门户→跑链→集中触发——
         // 互伤双方各恰一条 card.stat.changed（目标在前、攻击者在后；载荷＝目标卡＋变化字段 [Defense]）；无其它更新。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.CardStatChanged, GameUpdates.CardStatChanged }, recorder.Types);
-        var targetUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], target));
-        var attackerUpdate = recorder.Updates.Single(u => ReferenceEquals(u.Payload![GameUpdates.PayloadCard], attacker));
+        Assert.Equal(
+            new[]
+            {
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged,
+                GameUpdates.PointChanged, // 收尾扣行动费（E1-25 后续：指挥走点数通用路径）
+                GameUpdates.UnitActed,    // E1-33：行动后（攻击收尾）
+            },
+            recorder.Types);
+        var targetUpdate = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], target));
+        var attackerUpdate = recorder.Updates.Single(
+            u => u.Type == GameUpdates.CardStatChanged && ReferenceEquals(u.Payload![GameUpdates.PayloadCard], attacker));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(targetUpdate.Payload));
         Assert.Equal(new[] { CardStatFields.Defense }, ModifierTestKit.ChangedFieldsOf(attackerUpdate.Payload));
         // 互伤数值（以互扣前有效值为基准）：5-2=3 与 5-2=3
@@ -104,7 +114,10 @@ public class CommandUpdateTests
         Assert.Equal(
             new[]
             {
-                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardStatChanged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged, // E1-33：受伤害（先数值、后伤害信号）
+                GameUpdates.PointChanged, // 收尾扣行动费（E1-25 后续）
+                GameUpdates.UnitActed,    // E1-33：攻击者行动后（存活）
             },
             recorder.Types);
         Assert.DoesNotContain(GameUpdates.UnitPositionChanged, recorder.Types);
@@ -126,9 +139,11 @@ public class CommandUpdateTests
 
         var result = await CommandTestKit.RunCommandAsync(match, bridge, unit, match.Battlefield.FrontLine[3].Ref);
 
-        // 移动纯净性：仅 unit.position.changed 一条（不发 card.died / card.played / turn 类）。
+        // 移动纯净性：unit.position.changed ＋ 收尾扣行动费的 point.changed（E1-25 后续）；不发 card.died / card.played / turn 类。
         Assert.Equal(CommandResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.UnitPositionChanged }, recorder.Types);
+        Assert.Equal(
+            new[] { GameUpdates.UnitPositionChanged, GameUpdates.PointChanged, GameUpdates.UnitActed }, // E1-33：行动后
+            recorder.Types);
         Assert.DoesNotContain(GameUpdates.CardDied, recorder.Types);
     }
 }

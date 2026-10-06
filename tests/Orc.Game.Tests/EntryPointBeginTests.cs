@@ -157,9 +157,9 @@ public class EntryPointBeginTests
         using var recorder = new UpdateRecorder(match.Engine);
         var result = await match.PlayManager.BeginCommandPrePlayAsync(command);
 
-        // 与兼容入口同一实现：照发 card.played（恰一次）、照扣费、离手
+        // 与兼容入口同一实现：照发 card.played（恰一次）、照扣费（E1-25 后续：收尾发 point.changed）、离手
         Assert.Equal(PlayResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.CardPlayed }, recorder.Types);
+        Assert.Equal(new[] { GameUpdates.CardPlayed, GameUpdates.PointChanged }, recorder.Types);
         Assert.Equal(0, player.Points);
         Assert.DoesNotContain(command, player.Hand);
 

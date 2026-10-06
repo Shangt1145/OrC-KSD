@@ -71,11 +71,11 @@ public class MatchInitializationTests
 
         await match.Initialize();
 
-        // 初始化期更新序列（2A 固定链＋W4-1 加性）：洗切 2 条 deck.shuffled（双方卡组各一）→ 双方卡组总数（40）张 card.load
-        // ＋ 3 条回合开始序列（先手第 1 回合不抽牌 → 无 card.drawn）
+        // 初始化期更新序列（2A 固定链＋W4-1 加性＋E1-25）：洗切 2 条 deck.shuffled（双方卡组各一）→ 双方卡组总数（40）张 card.load
+        // ＋ 5 条回合开始段（turn.start.before / turn.start / slot.changed〔结算〕 / point.changed〔点数设为〕 / turn.start.after；先手第 1 回合不抽牌 → 无 card.drawn）
         var expectedLoads = GameTestData.StandardDeckSize * 2;
         var shuffleSignals = 2; // W4-1：初始化双方卡组洗切信号（玩家索引升序）
-        Assert.Equal(shuffleSignals + expectedLoads + 3, recorder.Types.Count);
+        Assert.Equal(shuffleSignals + expectedLoads + 5, recorder.Types.Count);
         Assert.Equal(
             new[] { GameUpdates.DeckShuffled, GameUpdates.DeckShuffled },
             recorder.Types.Take(shuffleSignals));
@@ -85,7 +85,13 @@ public class MatchInitializationTests
         Assert.Same(recorder.Updates[1].Payload![GameUpdates.PayloadDeck], match.Players[1].Deck);
         Assert.Equal(expectedLoads, recorder.Types.Count(t => t == GameUpdates.CardLoad));
         Assert.Equal(
-            new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
+            new[]
+            {
+                GameUpdates.TurnStartBefore, GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
+                GameUpdates.TurnStartAfter,
+            },
             recorder.Types.Skip(shuffleSignals + expectedLoads));
         // 起手装载静默（装载不产生 drawn / hand.add 更新）
         Assert.DoesNotContain(GameUpdates.CardDrawn, recorder.Types);
@@ -157,7 +163,7 @@ public class MatchInitializationTests
     [Fact]
     public async Task Initialize_Updates_Are_Written_To_Root_Stream()
     {
-        // 初始化期无执行帧：45 条更新写入引擎总事件流（W4-1：40 张 card.load ＋ 2 条洗切信号 ＋ 3 条回合开始；与"边界 Emit→总流"语义一致）
+        // 初始化期无执行帧：47 条更新写入引擎总事件流（W4-1：40 张 card.load ＋ 2 条洗切信号 ＋ 5 条回合开始段〔含 E1-25 结算 slot.changed 与点数设为 point.changed〕；与"边界 Emit→总流"语义一致）
         var match = GameTestData.CreateStandardMatch(seed: 42);
 
         await match.Initialize();
@@ -168,10 +174,16 @@ public class MatchInitializationTests
             .ToArray();
         var expectedLoads = GameTestData.StandardDeckSize * 2;
         var shuffleSignals = 2; // W4-1
-        Assert.Equal(shuffleSignals + expectedLoads + 3, updates.Length);
+        Assert.Equal(shuffleSignals + expectedLoads + 5, updates.Length);
         Assert.Equal(expectedLoads, updates.Count(u => u == GameUpdates.CardLoad));
         Assert.Equal(
-            new[] { GameUpdates.TurnStartBefore, GameUpdates.TurnStart, GameUpdates.TurnStartAfter },
+            new[]
+            {
+                GameUpdates.TurnStartBefore, GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
+                GameUpdates.TurnStartAfter,
+            },
             updates.Skip(shuffleSignals + expectedLoads));
     }
 }

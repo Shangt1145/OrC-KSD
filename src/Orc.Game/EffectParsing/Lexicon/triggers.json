@@ -1,0 +1,8 @@
+{
+  "部署": { "role": "named", "name": "deploy" },
+  "亡计": { "role": "named", "name": "death" },
+  "动员": { "role": "named", "name": "mobilize" },
+  "抉择": { "role": "named", "name": "choose" },
+  "时": { "role": "suffix" },
+  "后": { "role": "suffix" }
+}

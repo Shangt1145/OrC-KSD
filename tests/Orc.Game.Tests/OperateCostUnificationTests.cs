@@ -100,13 +100,13 @@ public class OperateCostUnificationTests
 
         // 点数 2：有效 3 > 2 → PointShortage——判定读「有效值 3」
         // （若判定读基础值 2，则 2 ≥ 2 会通过——以拒绝锁定判定读取值＝有效值）。
-        match.ResourceManager.AddPoints(playerA, 1); // 回合 1 结算后 1 → 2
+        await match.ResourceManager.AddPointsAsync(playerA, 1); // 回合 1 结算后 1 → 2
         var blocked = match.CommandManager.GetCommandAvailability(unit);
         Assert.False(blocked.Move.CanUse);
         Assert.Equal(CommandBlockReason.PointShortage, blocked.Move.BlockReason);
 
         // 点数 3（＝有效值）：临界通过——判定读取值恰为 3。
-        match.ResourceManager.AddPoints(playerA, 1); // 2 → 3
+        await match.ResourceManager.AddPointsAsync(playerA, 1); // 2 → 3
         var available = match.CommandManager.GetCommandAvailability(unit);
         Assert.True(available.Move.CanUse);
 
@@ -141,13 +141,13 @@ public class OperateCostUnificationTests
 
         // 点数 2：有效 3 > 2 → PointShortage——判定读「有效值 3」
         // （若判定读基础值 1，则 2 ≥ 1 会通过——以拒绝锁定判定读取值＝有效值）。
-        match.ResourceManager.AddPoints(playerA, 1); // 1 → 2
+        await match.ResourceManager.AddPointsAsync(playerA, 1); // 1 → 2
         var blocked = match.CommandManager.GetCommandAvailability(attacker);
         Assert.False(blocked.Attack.CanUse);
         Assert.Equal(CommandBlockReason.PointShortage, blocked.Attack.BlockReason);
 
         // 点数 3（＝有效值）：临界通过——判定读取值恰为 3。
-        match.ResourceManager.AddPoints(playerA, 1); // 2 → 3
+        await match.ResourceManager.AddPointsAsync(playerA, 1); // 2 → 3
         var available = match.CommandManager.GetCommandAvailability(attacker);
         Assert.True(available.Attack.CanUse);
 

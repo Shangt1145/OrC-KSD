@@ -6,7 +6,8 @@ namespace Orc.Game.Managers;
 /// <summary>
 /// 回合管理器（回合领域真源：回合数、当前行动方）：回合推进编排（"信号先行、处理随后"模型）。
 /// 回合开始序列＝turn.start.before → turn.start →（开始处理：结算 → 单位行动状态恢复〔2C 加性〕→ 抽牌）→ turn.start.after；
-/// 结算＝资源管理器（槽 +1 至上限 → 点数＝槽值；静默）、行动状态恢复＝注入钩子（指挥管理器：行动方在场单位重置两 bool＋词条运行态清零；
+/// 结算＝资源管理器（槽 += 递增判定器值〔默认 1〕至上限 → 槽变化才发 <c>slot.changed</c> → 点数＝槽值）、
+/// 行动状态恢复＝注入钩子（指挥管理器：行动方在场单位重置两 bool＋词条运行态清零；
 /// 未接线＝跳过）、抽牌＝玩家管理器（缺省：先手第 1 回合不抽、其余照抽 1——K4：AllowFirstTurnDraw 配置可关闭该例外；抽时所发 card.drawn 位于 start 与 after 之间）；
 /// 回合结束序列＝turn.end.before → turn.end → 切换当前方、回合数 +1（点数保留——X3：回合结束不清零、敌方回合内保留）。
 /// 所有 turn 系列更新经总线 Emit（载荷＝{ 玩家, 回合数 }）；全部顺序 await 完结（调用返回即结算与更新完结）。
@@ -103,8 +104,9 @@ public sealed class TurnManager
         await EmitTurnAsync(GameUpdates.TurnStartBefore, current, TurnNumber, ct);
         await EmitTurnAsync(GameUpdates.TurnStart, current, TurnNumber, ct);
 
-        // 回合开始处理（静默）：资源结算（槽 +1 至上限 → 点数＝槽值）→ 单位行动状态恢复 → 抽牌（需抽时发 card.drawn）
-        _resourceManager.Settle(current);
+        // 回合开始处理：资源结算（槽 += 递增判定器值〔默认 1〕至上限 → 槽变化才发 slot.changed → 点数＝槽值）
+        // → 单位行动状态恢复 → 抽牌（需抽时发 card.drawn）
+        await _resourceManager.SettleAsync(current, ct);
         ActionStateRefresher?.Invoke(current);
         if (ShouldDrawForTurn(TurnNumber))
         {

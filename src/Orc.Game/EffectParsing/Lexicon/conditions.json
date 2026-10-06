@@ -1,0 +1,12 @@
+{
+  "不小于": { "kind": "compare" },
+  "不大于": { "kind": "compare" },
+  "不少于": { "kind": "compare" },
+  "不超过": { "kind": "compare" },
+  "至少": { "kind": "compare" },
+  "至多": { "kind": "compare" },
+  "大于": { "kind": "compare" },
+  "小于": { "kind": "compare" },
+  "等于": { "kind": "compare" },
+  "回合数": { "kind": "turn" }
+}

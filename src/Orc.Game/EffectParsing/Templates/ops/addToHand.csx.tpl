@@ -1,0 +1,6 @@
+// [addToHand] name={{name}} count={{count}}
+var runtime = self is null ? null : Orc.Game.Effects.EffectRuntime.ResolveFor(self);
+if (runtime is not null)
+{
+    await runtime.AddToHandAsync(self!, {{name}}, {{count}}, ct);
+}

@@ -25,9 +25,9 @@ public class PlayChainCommandTests
 
         var result = await match.PlayManager.PlayCommandAsync(command);
 
-        // 默认空集不改变流程：照发 card.played（恰一次）、照扣费（收尾）、离手。
+        // 默认空集不改变流程：照发 card.played（恰一次）、照扣费（收尾；E1-25 后续：发 point.changed）、离手。
         Assert.Equal(PlayResultStatus.Success, result.Status);
-        Assert.Equal(new[] { GameUpdates.CardPlayed }, recorder.Types);
+        Assert.Equal(new[] { GameUpdates.CardPlayed, GameUpdates.PointChanged }, recorder.Types);
         Assert.Equal(0, player.Points);
         Assert.DoesNotContain(command, player.Hand);
     }
@@ -291,7 +291,13 @@ public class PlayChainCommandTests
         Assert.Equal(PlayFailureReason.PlayVerificationRejected, result.FailureReason);
         // 零副作用：不触发主动 handler 集/不扣费/不发更新/不离手（本测试无 handler 集；更新仅来自 spender 的部署链——
         // W3-A3 起含放置驱动信号 card.placed）。
-        Assert.Equal(new[] { GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed }, recorder.Types);
+        Assert.Equal(
+            new[]
+            {
+                GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed,
+                GameUpdates.PointChanged, // spender 部署收尾扣费（E1-25 后续）
+            },
+            recorder.Types);
         Assert.Equal(0, player.Points);
         Assert.Contains(command, player.Hand);
         Assert.Contains(

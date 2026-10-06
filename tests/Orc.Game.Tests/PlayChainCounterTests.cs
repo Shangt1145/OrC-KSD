@@ -29,15 +29,17 @@ public class PlayChainCounterTests
         Assert.True(counter.GetData<CounterActivationData>().IsActive);
         Assert.Equal(0, player.Points);
         Assert.Equal(new[] { "效果甲", "效果乙" }, counter.RegisteredEffectHandlerNames);
-        Assert.Empty(recorder.Updates); // 使用反制不发任何游戏更新
+        // E1-25 后续：扣点经点数通用入口发 point.changed（不发其它游戏更新）
+        Assert.Equal(new[] { GameUpdates.PointChanged }, recorder.Types);
 
         // 取消：无条件退点（同额）→ 取消激活 ＋ 取消注册。
+        recorder.Clear();
         var deactivate = await match.PlayManager.UseCounterAsync(counter);
         Assert.Equal(PlayResultStatus.Success, deactivate.Status);
         Assert.False(counter.GetData<CounterActivationData>().IsActive);
         Assert.Equal(1, player.Points);
         Assert.Empty(counter.RegisteredEffectHandlerNames);
-        Assert.Empty(recorder.Updates);
+        Assert.Equal(new[] { GameUpdates.PointChanged }, recorder.Types); // 退点同样经通用入口
 
         // 再激活：重新注册。
         var reactivate = await match.PlayManager.UseCounterAsync(counter);

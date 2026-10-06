@@ -100,6 +100,14 @@ public class UnitAttackTriggerView
     public virtual Ref<Entity>? Target { get; set; }
 
     /// <summary>
+    /// 效果宿主卡（E1 加性可选面；与 <c>CardEventView.Host</c> 同一手法）：触发器所有者是带宿主的效果时由执行链注入，
+    /// 供动态（csx）handler 取"施动卡"。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual object? Host { get; set; }
+
+    /// <summary>
     /// 触发者卡牌引用（X1 加性；可选）：引发本次攻击的效果宿主卡——非空＝效果引发（且知来源卡）；空＝玩家主动操作（非效果引发）。
     /// 值＝<c>Ref&lt;Entity&gt;</c>（效果宿主卡实例的引用；判等以引用同一性为准）；缺省调用（未携带）＝空（向后兼容）。
     /// </summary>

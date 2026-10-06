@@ -41,7 +41,7 @@ public class G14HistoryCountTests
         var match = CommandTestKit.CreateCommandMatch(extraDefinitions: new[] { AltCommandDefinition });
         await match.Initialize();
         var player = match.Players[0];
-        match.ResourceManager.AddPoints(player, 10); // 受控加值面：准备打出费用
+        await match.ResourceManager.AddPointsAsync(player, 10); // 受控加值面：准备打出费用
 
         // 「X」＝轻指令（卡种/定义口径——同名卡＝同一定义）；监听 handler 自持计数（私有闭环）
         var watched = match.CardLibrary.Get(CommandTestKit.CommandCardId);
@@ -83,7 +83,7 @@ public class G14HistoryCountTests
         var w1 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0); // 攻 2 / 防 5
         var w2 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var w3 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        match.ResourceManager.AddPoints(playerA, 10); // 受控加值面：准备攻击行动费（每击 1 点）
+        await match.ResourceManager.AddPointsAsync(playerA, 10); // 受控加值面：准备攻击行动费（每击 1 点）
 
         var handler = new DamageThresholdWatchHandler(match.Engine, dummy, threshold: 3);
         handler.Attach(match.CommandManager);

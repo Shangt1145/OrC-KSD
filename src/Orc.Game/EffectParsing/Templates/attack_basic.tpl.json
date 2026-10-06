@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "attack_basic",
+  "actorFrom": "effectHost",
+  "slots": [
+    { "name": "on_event", "target": "mainTrigger.events[e1]" }
+  ],
+  "root": {
+    "mainTrigger": {
+      "id": "t_attack",
+      "stableKey": "tpl.attack_basic.main",
+      "kind": "active",
+      "viewType": "Orc.Game.Commanding.UnitAttackTriggerView",
+      "events": [
+        { "id": "e1", "entry": "HandleAsync" }
+      ]
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": [
+      { "target": "单位攻击触发器", "event": "e1" }
+    ]
+  }
+}

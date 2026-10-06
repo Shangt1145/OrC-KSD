@@ -1,0 +1,20 @@
+{
+  "步兵": { "dimension": "unitType", "value": "infantry" },
+  "坦克": { "dimension": "unitType", "value": "tank" },
+  "火炮": { "dimension": "unitType", "value": "artillery" },
+  "炮兵": { "dimension": "unitType", "value": "artillery" },
+  "战斗机": { "dimension": "unitType", "value": "fighter" },
+  "轰炸机": { "dimension": "unitType", "value": "bomber" },
+  "空军": { "dimension": "unitType", "value": "air" },
+  "闪击": { "dimension": "keyword", "value": "blitz" },
+  "烟幕": { "dimension": "keyword", "value": "smokescreen" },
+  "伏击": { "dimension": "keyword", "value": "ambush" },
+  "守护": { "dimension": "keyword", "value": "guard" },
+  "游击": { "dimension": "keyword", "value": "guerrilla" },
+  "攻击力": { "dimension": "attribute", "value": "attack" },
+  "防御力": { "dimension": "attribute", "value": "defense" },
+  "花费": { "dimension": "object", "value": "opCost" },
+  "行动花费": { "dimension": "object", "value": "opCost" },
+  "指挥点槽": { "dimension": "object", "value": "pointSlot" },
+  "指挥点": { "dimension": "object", "value": "point" }
+}

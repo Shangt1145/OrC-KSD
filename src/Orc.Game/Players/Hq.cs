@@ -28,12 +28,14 @@ public sealed class Hq : Card
     private readonly List<HqLethalIntervention> _lethalInterventions = new();
     private Func<Player?>? _opponentProvider;
     private Func<MatchLifecycle?>? _lifecycleProvider;
+    private readonly LogicEngine _damageEngine; // E1-33：受伤害信号发射用（构造期绑定）
 
     /// <summary>创建总部实体（随 Player 创建；对局装配路径——引擎绑定于构造期）。</summary>
     internal Hq(Player owner, LogicEngine engine)
         : base(engine, NameOf(owner))
     {
         Owner = owner;
+        _damageEngine = engine;
 
         // 组件容器：HQ 状态数据（血量本体＋占位槽）＋修饰机制容器（链/检测/集中触发）＋HQ 血量检测组件。
         AddData(new HqStateData());
@@ -181,10 +183,16 @@ public sealed class Hq : Card
 
         // ③ 应用（本体受控写入；不钳制——数值表现钳制在快照层〔「表现面不出现负数」，与单位侧损伤量模型同构：
         //   修饰贡献与伤害差额不被吞掉；≤0 由归零响应收敛〕）
+        var healthBefore = Health; // E1-33：受伤害信号按「改变才传播」
         state.Health += adjustment - rewritten;
 
         // ④ 数值落定（跑链 → 检测 → 集中触发——有变更才发；无变化＝整体不动、零发射）
         await Modifiers.RequestRerunAsync(ct);
+
+        if (Health != healthBefore)
+        {
+            await GameUpdates.EmitCardDamaged(_damageEngine, this, rewritten, ct); // E1-33：HQ 侧受伤害（改写后实际扣减）
+        }
     }
 
     // ---------- 终局响应（装配期注入；延迟读取） ----------

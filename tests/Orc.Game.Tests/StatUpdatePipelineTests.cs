@@ -35,7 +35,8 @@ public class StatUpdatePipelineTests
         recorder.Clear();
         await unit.ApplyDefenseDamageAsync(2);
         Assert.Equal(2, unit.Modifiers.GetEffectiveValue(CardStatFields.Defense)); // (4 − 2) + 0（防御无修饰）
-        Assert.Single(recorder.Updates);
+        Assert.Single(ModifierTestKit.StatChangedUpdates(recorder)); // E1-33：另有一条 card.damaged
+        Assert.Single(recorder.Updates, u => u.Type == GameUpdates.CardDamaged);
 
         // 再次稳定：零发射（显式请求对稳定态＝幂等）
         recorder.Clear();

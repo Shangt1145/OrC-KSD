@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "position_basic",
+  "actorFrom": "effectHost",
+  "slots": [
+    { "name": "on_event", "target": "mainTrigger.events[e1]" }
+  ],
+  "root": {
+    "mainTrigger": {
+      "id": "t_position",
+      "stableKey": "tpl.position_basic.main",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["unit.position.changed"],
+      "events": [
+        { "id": "e1", "entry": "HandleAsync" }
+      ]
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

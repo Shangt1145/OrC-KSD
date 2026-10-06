@@ -26,6 +26,8 @@ public class TurnCycleTests
                 GameUpdates.TurnEnd,
                 GameUpdates.TurnStartBefore,
                 GameUpdates.TurnStart,
+                GameUpdates.SlotChanged, // E1-25：回合开始结算（槽 +1）发 slot.changed（turn.start 之后、抽牌之前）
+                GameUpdates.PointChanged, // E1-25 后续：点数设为（＝槽值）发 point.changed
                 GameUpdates.CardDrawn, // 硬性位置：turn.start 之后、turn.start.after 之前
                 GameUpdates.CardHandAdd, // 2A：drawn → hand.add 连发（粒度不同、并存；顺序 drawn 先）
                 GameUpdates.TurnStartAfter,

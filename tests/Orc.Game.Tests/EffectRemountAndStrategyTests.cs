@@ -147,7 +147,7 @@ public class EffectRemountAndStrategyTests
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
         var playerA = match.Players[0];
-        match.ResourceManager.AddPoints(playerA, 3); // 受控加点（两次部署的实际扣费）
+        await match.ResourceManager.AddPointsAsync(playerA, 3); // 受控加点（两次部署的实际扣费）
 
         var unit = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.InfantryId, toHand: true);
         var effect = new DirectOnDeployEffect(match.Engine, "部署直挂效果");
@@ -177,7 +177,7 @@ public class EffectRemountAndStrategyTests
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
         var playerA = match.Players[0];
-        match.ResourceManager.AddPoints(playerA, 3);
+        await match.ResourceManager.AddPointsAsync(playerA, 3);
 
         var unit = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.InfantryId, toHand: true);
 

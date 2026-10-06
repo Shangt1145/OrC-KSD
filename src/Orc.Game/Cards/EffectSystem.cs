@@ -316,11 +316,12 @@ internal static class CardEffectLoader
                 continue;
             }
 
-            if (!card.TryFindNamedTrigger(inject.TargetTriggerName, out var target, out var viewType))
+            if (!card.TryFindNamedTrigger(inject.TargetTriggerName, out var target, out var viewType)
+                && !TryFindMatchTrigger(card, inject.TargetTriggerName, out target, out viewType))
             {
                 WriteInjectError(
                     engine, card,
-                    $"注入目标 '{inject.TargetTriggerName}' 未在宿主登记（隔离）。", inject.TargetTriggerName);
+                    $"注入目标 '{inject.TargetTriggerName}' 未在宿主或对局级登记（隔离）。", inject.TargetTriggerName);
                 continue;
             }
 
@@ -339,6 +340,23 @@ internal static class CardEffectLoader
                 WriteInjectError(engine, card, $"注入失败（隔离）：{ex.Message}", inject.EventId);
             }
         }
+    }
+
+    /// <summary>
+    /// 对局级具名触发器解析（E1-27 回退路径）：卡 → 玩家 → 对局级注册表（宿主卡未命中时使用）。
+    /// </summary>
+    private static bool TryFindMatchTrigger(Card card, string name, out object? trigger, out Type? viewType)
+    {
+        trigger = null;
+        viewType = null;
+        var registry = card switch
+        {
+            Players.Hq hq => hq.Owner.MatchTriggers,
+            CardBase cardBase => cardBase.Owner?.MatchTriggers,
+            _ => null,
+        };
+
+        return registry is not null && registry.TryFind(name, out trigger, out viewType);
     }
 
     private static void WriteInjectError(LogicEngine engine, CardBase card, string message, string detail)

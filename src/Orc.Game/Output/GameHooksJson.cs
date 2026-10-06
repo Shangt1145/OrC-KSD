@@ -96,7 +96,7 @@ public static class GameHooksJson
     private static readonly IReadOnlyList<string> CardPlayerPayload =
         [GameHooks.PayloadCard, GameHooks.PayloadPlayer];
 
-    /// <summary>18 条信号的权威描述表（与 03-hook定义 S2 对齐）。</summary>
+    /// <summary>26 条信号的权威描述表（与 03-hook定义 S2 对齐；E1-25 追加资源六项；E1-33 追加伤害/行动两项）。</summary>
     private static IReadOnlyList<SignalEntry> SignalMetadata { get; } = new[]
     {
         new SignalEntry(GameHooks.TurnStartBefore, TurnPayload,
@@ -153,9 +153,33 @@ public static class GameHooksJson
         new SignalEntry(GameHooks.UnitTypesChanged,
             [GameHooks.PayloadUnit, GameHooks.PayloadAddedType],
             ["Cards/UnitCard.cs:266·AddUnitTypeAsync"], []),
+        new SignalEntry(GameHooks.CardDamaged,
+            [GameHooks.PayloadCard, GameHooks.PayloadAmount],
+            ["Cards/UnitCard.cs·ApplyDefenseDamageAsync", "Players/Hq.cs·ApplyDamageAsync"], []),
+        new SignalEntry(GameHooks.UnitActed,
+            [GameHooks.PayloadUnit],
+            ["Commanding/CommandManager.cs·DispatchAttackAsync", "Commanding/CommandManager.cs·DispatchMoveAsync"], []),
+        new SignalEntry(GameHooks.SlotGained,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadAmount],
+            ["Managers/ResourceManager.cs·GainSlotsAsync"], []),
+        new SignalEntry(GameHooks.SlotLost,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadAmount],
+            ["Managers/ResourceManager.cs·LoseSlotsAsync"], []),
+        new SignalEntry(GameHooks.SlotChanged,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadOldSlots, GameHooks.PayloadNewSlots],
+            ["Managers/ResourceManager.cs·SettleAsync / GainSlotsAsync / LoseSlotsAsync"], []),
+        new SignalEntry(GameHooks.PointGained,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadAmount],
+            ["Managers/ResourceManager.cs·GainPointsAsync"], []),
+        new SignalEntry(GameHooks.PointLost,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadAmount],
+            ["Managers/ResourceManager.cs·LosePointsAsync"], []),
+        new SignalEntry(GameHooks.PointChanged,
+            [GameHooks.PayloadPlayer, GameHooks.PayloadOldPoints, GameHooks.PayloadNewPoints],
+            ["Managers/ResourceManager.cs·ChangePointsAsync / GainPointsAsync / LosePointsAsync"], []),
     };
 
-    /// <summary>15 条判定器的权威描述表（与 03-hook定义 S3-3 对齐）。</summary>
+    /// <summary>21 条判定器的权威描述表（与 03-hook定义 S3-3 对齐；E1-25 补齐 effect.target.resolve 缺口并追加资源五条）。</summary>
     private static IReadOnlyList<JudicatorEntry> JudicatorMetadata { get; } = new[]
     {
         new JudicatorEntry(GameHooks.JudicatorCostCheck,
@@ -184,6 +208,18 @@ public static class GameHooksJson
             ["Judicators/LegEligibilityJudicator.cs"], true),
         new JudicatorEntry(GameHooks.JudicatorMoveFrontlineEnemy,
             ["Judicators/MoveFrontlineEnemyJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorEffectTargetResolve,
+            ["Judicators/EffectTargetResolveJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorPointSlotIncrement,
+            ["Judicators/PointSlotIncrementJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorPointSlotGain,
+            ["Judicators/PointSlotGainAmountJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorPointSlotLose,
+            ["Judicators/PointSlotLoseAmountJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorPointGain,
+            ["Judicators/PointGainAmountJudicator.cs"], true),
+        new JudicatorEntry(GameHooks.JudicatorPointLose,
+            ["Judicators/PointLoseAmountJudicator.cs"], true),
         new JudicatorEntry(GameHooks.JudicatorDeckTopTag,
             ["Judicators/DeckTopTagJudicator.cs"], false),
         new JudicatorEntry(GameHooks.JudicatorTargetCandidateEligibility,

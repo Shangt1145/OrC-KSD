@@ -148,7 +148,7 @@ public class StatWiringTests
         await unit.ApplyDefenseDamageAsync(3);
         Assert.Equal(2, unit.Modifiers.GetEffectiveValue(CardStatFields.Attack)); // 5 − 3 = 2（自动随动）
         Assert.Equal(2, unit.Modifiers.GetEffectiveValue(CardStatFields.Defense));
-        var update = Assert.Single(recorder.Updates);
+        var update = Assert.Single(ModifierTestKit.StatChangedUpdates(recorder)); // E1-33：另有一条 card.damaged
         Assert.Equal(GameUpdates.CardStatChanged, update.Type);
         Assert.Equal(
             new[] { CardStatFields.Attack, CardStatFields.Defense },

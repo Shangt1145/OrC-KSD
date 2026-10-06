@@ -2,6 +2,7 @@ using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Collections;
+using Orc.Game.Managers;
 using Orc.Game.Targeting;
 
 namespace Orc.Game.Players;
@@ -159,6 +160,73 @@ public sealed class Player
         }
 
         CardService = service;
+    }
+
+    /// <summary>
+    /// 效果运行时门面（E1 加性面；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （csx handler 经 <c>Orc.Game.Effects.EffectRuntime.ResolveFor</c> 取用——消灭/伤害/修饰/词条/抽牌/无头选靶）；
+    /// 脱局场景（未注入）＝null（无服务面——解析自然产出 null、不抛错）。
+    /// </summary>
+    internal Orc.Game.Effects.EffectRuntime? EffectRuntime { get; private set; }
+
+    /// <summary>
+    /// 装配期注入效果运行时门面（E1；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">runtime 为 null。</exception>
+    /// <exception cref="InvalidOperationException">效果运行时门面已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureEffectRuntime(Orc.Game.Effects.EffectRuntime runtime)
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        if (EffectRuntime is not null)
+        {
+            throw new InvalidOperationException("玩家效果运行时门面已注入（重复注入被拒绝）。");
+        }
+
+        EffectRuntime = runtime;
+    }
+
+    /// <summary>
+    /// 资源管理器（E1-25 后续；internal）：对局装配期注入——「卡 → 玩家 → 服务」读取路径的玩家环节
+    /// （卡级扣费/退点经 <c>ResourceManager.ResolveFor</c> 取用；通用无语义来源统一走 <c>ChangePointsAsync</c>）；
+    /// 脱局场景（未注入）＝null（无服务面——相关解析自然产出 null、降级为直写）。
+    /// </summary>
+    internal ResourceManager? ResourceManager { get; private set; }
+
+    /// <summary>
+    /// 装配期注入资源管理器（E1-25 后续；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。
+    /// 时序：随管理器群创建（先于任何卡加载与回合开始）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">manager 为 null。</exception>
+    /// <exception cref="InvalidOperationException">资源管理器已注入（重复注入被拒绝）。</exception>
+    internal void ConfigureResourceManager(ResourceManager manager)
+    {
+        ArgumentNullException.ThrowIfNull(manager);
+        if (ResourceManager is not null)
+        {
+            throw new InvalidOperationException("玩家资源管理器已注入（重复注入被拒绝）。");
+        }
+
+        ResourceManager = manager;
+    }
+
+    /// <summary>
+    /// 对局级具名触发器注册表（E1-27；internal）：装配期注入——供效果预制体 <c>injects</c> 在宿主卡未命中时回退解析
+    /// （如对局级流程触发器「单位攻击触发器」）。
+    /// </summary>
+    internal Orc.Game.Cards.MatchNamedTriggers? MatchTriggers { get; private set; }
+
+    /// <summary>装配期注入对局级具名触发器注册表（E1-27；一次性注入、重复拒绝）。</summary>
+    /// <exception cref="ArgumentNullException">registry 为 null。</exception>
+    /// <exception cref="InvalidOperationException">已注入。</exception>
+    internal void ConfigureMatchTriggers(Orc.Game.Cards.MatchNamedTriggers registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        if (MatchTriggers is not null)
+        {
+            throw new InvalidOperationException("玩家对局级具名触发器注册表已注入（重复注入被拒绝）。");
+        }
+
+        MatchTriggers = registry;
     }
 
     // ---------- 玩家构筑配置（S10「G12补」加性面：主国/盟国——卡组构筑配置的读取承载） ----------

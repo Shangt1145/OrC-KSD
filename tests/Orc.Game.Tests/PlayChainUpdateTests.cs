@@ -43,9 +43,13 @@ public class PlayChainUpdateTests
         var result = await match.PlayManager.PlayUnitAsync(unit, line[1]);
 
         Assert.Equal(PlayResultStatus.Success, result.Status);
-        // 组合与互斥：played ×1 ＋ card.placed ×1（W3-A3 加线）＋ deployed ×1；不发 joined；顺序 played → placed → deployed。
+        // 组合与互斥：played ×1 ＋ card.placed ×1（W3-A3 加线）＋ deployed ×1 ＋ 末条 point.changed（收尾扣部署费；E1-25 后续）；
+        // 不发 joined；顺序 played → placed → deployed → point.changed。
         Assert.Equal(
-            new[] { GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed },
+            new[]
+            {
+                GameUpdates.CardPlayed, Updates.CardPlaced, GameUpdates.UnitDeployed, GameUpdates.PointChanged,
+            },
             recorder.Types);
         Assert.DoesNotContain(GameUpdates.UnitJoined, recorder.Types);
         // card.placed 载荷 {Card}（W3-A3：单位化完成后、完成信号之前）
@@ -95,8 +99,8 @@ public class PlayChainUpdateTests
         var result = await match.PlayManager.PlayCommandAsync(command);
 
         Assert.Equal(PlayResultStatus.Success, result.Status);
-        // 指令＝card.played ×1；不发 unit 类更新。
-        Assert.Equal(new[] { GameUpdates.CardPlayed }, recorder.Types);
+        // 指令＝card.played ×1 ＋ 末条 point.changed（收尾扣部署费；E1-25 后续）；不发 unit 类更新。
+        Assert.Equal(new[] { GameUpdates.CardPlayed, GameUpdates.PointChanged }, recorder.Types);
         Assert.DoesNotContain(GameUpdates.UnitJoined, recorder.Types);
         Assert.DoesNotContain(GameUpdates.UnitDeployed, recorder.Types);
     }

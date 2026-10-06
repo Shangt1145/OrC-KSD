@@ -74,7 +74,10 @@ public class CommandCombatTests
         Assert.Equal(
             new[]
             {
-                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardStatChanged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged, // E1-33：受伤害（先数值、后伤害信号）
+                GameUpdates.PointChanged, // 收尾扣行动费（E1-25 后续）
+                GameUpdates.UnitActed,    // E1-33：攻击者行动后（存活）
             },
             recorder.Types);
         var diedPayload = recorder.Updates[1].Payload!;
@@ -161,7 +164,7 @@ public class CommandCombatTests
         Assert.True(attacker.GetData<UnitStateData>().IsDestroyed);
         Assert.Equal(2, attacker.GetData<UnitStateData>().Defense); // 无 HP 扣减（直接死亡结果）
         Assert.Equal(6, ambusher.GetData<UnitStateData>().Defense); // 目标不受伤
-        Assert.Equal(new[] { GameUpdates.CardDied }, recorder.Types);
+        Assert.Equal(new[] { GameUpdates.CardDied, GameUpdates.PointChanged }, recorder.Types); // 末条＝收尾扣行动费
         Assert.Equal(0, playerA.Points); // 攻击者死亡不豁免收尾
     }
 

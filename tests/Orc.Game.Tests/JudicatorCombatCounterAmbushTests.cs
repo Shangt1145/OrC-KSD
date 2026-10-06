@@ -84,7 +84,7 @@ public class JudicatorCombatCounterAmbushTests
         var targetFighter = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.FighterId, 1); // 攻 3 / 防 2
         CommandTestKit.Activate(artillery);
         CommandTestKit.Activate(bomber);
-        match.ResourceManager.AddPoints(playerA, 10);
+        await match.ResourceManager.AddPointsAsync(playerA, 10);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
         // ② 攻击者＝炮兵 → 不受任何反击（流程级）：目标正常受伤（5-2=3）、炮兵防御不变。
@@ -145,7 +145,7 @@ public class JudicatorCombatCounterAmbushTests
         var ambusherMiss = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.AmbushId, 1); // 攻 5 / 防 6（伏击）
         CommandTestKit.Activate(weak);
         CommandTestKit.Activate(infantry);
-        match.ResourceManager.AddPoints(playerA, 10);
+        await match.ResourceManager.AddPointsAsync(playerA, 10);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
         // 命中（被攻击单位攻 5 ＞ 攻击者防 2）→ 改写成立：攻击者死亡（无 HP 扣减语义）、伏击者不受伤。
@@ -189,7 +189,7 @@ public class JudicatorCombatCounterAmbushTests
             CommandTestKit.Activate(unit);
         }
 
-        match.ResourceManager.AddPoints(playerA, 10);
+        await match.ResourceManager.AddPointsAsync(playerA, 10);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
         // ---------- 默认基线（改写前） ----------
@@ -259,7 +259,7 @@ public class JudicatorCombatCounterAmbushTests
         CommandTestKit.Activate(weak1);
         CommandTestKit.Activate(weak2);
         CommandTestKit.Activate(weak3);
-        match.ResourceManager.AddPoints(playerA, 10);
+        await match.ResourceManager.AddPointsAsync(playerA, 10);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
         // 条目可解析（固定内置注册段——无条件可用；moding 寻址前提）。

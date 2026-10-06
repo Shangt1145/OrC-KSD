@@ -1,0 +1,19 @@
+{
+  "或者": { "kind": "choice" },
+  "或": { "kind": "choice" },
+  "如果": { "kind": "condLead" },
+  "假如": { "kind": "condLead" },
+  "若": { "kind": "condLead" },
+  "则": { "kind": "then" },
+  "否则": { "kind": "else" },
+  "并且": { "kind": "conj" },
+  "而且": { "kind": "conj" },
+  "然后": { "kind": "conj" },
+  "同时": { "kind": "conj" },
+  "并": { "kind": "conj" },
+  "且": { "kind": "conj" },
+  "和": { "kind": "andAction" },
+  "每有": { "kind": "perPrefix" },
+  "直到": { "kind": "until" },
+  "直至": { "kind": "until" }
+}

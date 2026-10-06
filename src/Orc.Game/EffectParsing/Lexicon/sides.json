@@ -1,0 +1,9 @@
+{
+  "友方": { "value": "friendly" },
+  "我方": { "value": "friendly" },
+  "敌方": { "value": "enemy" },
+  "对方": { "value": "enemy" },
+  "对手": { "value": "enemy" },
+  "双方": { "value": "both" },
+  "任意方": { "value": "both" }
+}

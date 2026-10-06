@@ -29,20 +29,19 @@ public class TurnPhaseEffectTests
         var executions = 0;
         var pointsSeenAtExecution = -1;
         IDisposable? subscription = null;
-        subscription = match.Engine.Subscribe((type, payload, _) =>
+        subscription = match.Engine.Subscribe(async (type, payload, _) =>
         {
             if (type != GameUpdates.TurnStartAfter
                 || payload is null
                 || !ReferenceEquals(payload[GameUpdates.PayloadPlayer], playerA))
             {
-                return Task.CompletedTask;
+                return;
             }
 
             executions += 1;
             pointsSeenAtExecution = playerA.Points; // 锚点证据：执行时点晚于结算（读到的是本回合结算值）
-            match.ResourceManager.AddPoints(playerA, 10); // 到点执行：点数 +10
+            await match.ResourceManager.AddPointsAsync(playerA, 10); // 到点执行：点数 +10
             subscription!.Dispose(); // 执行后自清理
-            return Task.CompletedTask;
         });
 
         // 负控（硬性）：敌方回合开始不触发——B 回合结算后 A 点数原样保留（X3）。
@@ -183,7 +182,7 @@ public class TurnPhaseEffectTests
         var playerB = match.Players[1];
 
         // 制造「残留点数」（模拟"获得 N 点"类效果）：回合 1 的 1 点 → +5 → 6 点（超槽 1）。
-        match.ResourceManager.AddPoints(playerA, 5);
+        await match.ResourceManager.AddPointsAsync(playerA, 5);
         Assert.Equal(6, playerA.Points);
 
         // 「结束时读残留点数」探测（turn.end 时刻读数——X3：未清零）。
@@ -226,22 +225,22 @@ public class TurnPhaseEffectTests
         var playerA = match.Players[0]; // 回合 1：1 点
 
         // 硬性要件①：player null 拒绝（fail-fast）。
-        Assert.Throws<ArgumentNullException>(() => match.ResourceManager.AddPoints(null!, 1));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => match.ResourceManager.AddPointsAsync(null!, 1));
 
         // 硬性要件②：amount ≤ 0 拒绝（"加值"严格为正）。
-        Assert.Throws<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPoints(playerA, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPoints(playerA, -5));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPointsAsync(playerA, 0));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPointsAsync(playerA, -5));
 
         // 拒绝＝零副作用：点数原样。
         Assert.Equal(1, playerA.Points);
 
         // 正控：合法加值落地（受控写入、不钳制到槽）。
-        match.ResourceManager.AddPoints(playerA, 2);
+        await match.ResourceManager.AddPointsAsync(playerA, 2);
         Assert.Equal(3, playerA.Points);
         Assert.True(playerA.Points > playerA.PointSlots);
 
         // 防御性溢出防护（实现裁量）：加值后超出 int 上限＝拒绝、不产生溢出写。
-        Assert.Throws<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPoints(playerA, int.MaxValue));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => match.ResourceManager.AddPointsAsync(playerA, int.MaxValue));
         Assert.Equal(3, playerA.Points);
     }
 
@@ -306,19 +305,18 @@ public class TurnPhaseEffectTests
 
         var executions = 0;
         IDisposable? subscription = null;
-        subscription = match.Engine.Subscribe((type, payload, _) =>
+        subscription = match.Engine.Subscribe(async (type, payload, _) =>
         {
             if (type != GameUpdates.TurnStartAfter
                 || payload is null
                 || !ReferenceEquals(payload[GameUpdates.PayloadPlayer], playerA))
             {
-                return Task.CompletedTask;
+                return;
             }
 
             executions += 1;
-            match.ResourceManager.AddPoints(playerA, 10); // 到点执行：点数 +10
+            await match.ResourceManager.AddPointsAsync(playerA, 10); // 到点执行：点数 +10
             subscription!.Dispose();
-            return Task.CompletedTask;
         });
 
         await match.EndTurn(); // → 回合 3（A）：即将到来的己方回合开始 → 触发

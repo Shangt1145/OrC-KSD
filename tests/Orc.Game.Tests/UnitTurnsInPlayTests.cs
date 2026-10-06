@@ -165,20 +165,23 @@ public class UnitTurnsInPlayTests
         var unit = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0);
         using var recorder = new UpdateRecorder(match.Engine);
 
-        // 回合 2（B——对方回合）：递增不发生；序列＝既有 7 条（end.before/end/start.before/start/drawn/hand.add/start.after）
+        // 回合 2（B——对方回合）：TurnsInPlay 递增不发生；序列＝既有 9 条
+        // （end.before/end/start.before/start/slot.changed〔E1-25 结算〕/point.changed〔点数设为〕/drawn/hand.add/start.after）
         await match.EndTurn();
         Assert.Equal(
             new[]
             {
                 GameUpdates.TurnEndBefore, GameUpdates.TurnEnd,
                 GameUpdates.TurnStartBefore, GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
                 GameUpdates.CardDrawn, GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,
             },
             recorder.Types);
         Assert.Equal(1, unit.TurnsInPlay);
 
-        // 回合 3（A——己方回合）：递增发生且静默——序列同样仅既有 7 条（零额外信号；不新增信号面）
+        // 回合 3（A——己方回合）：TurnsInPlay 递增发生且静默——序列同样仅既有 9 条（零额外信号；不新增信号面）
         recorder.Clear();
         await match.EndTurn();
         Assert.Equal(
@@ -186,6 +189,8 @@ public class UnitTurnsInPlayTests
             {
                 GameUpdates.TurnEndBefore, GameUpdates.TurnEnd,
                 GameUpdates.TurnStartBefore, GameUpdates.TurnStart,
+                GameUpdates.SlotChanged,
+                GameUpdates.PointChanged,
                 GameUpdates.CardDrawn, GameUpdates.CardHandAdd,
                 GameUpdates.TurnStartAfter,
             },

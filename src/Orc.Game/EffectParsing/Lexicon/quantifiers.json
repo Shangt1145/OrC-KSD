@@ -1,0 +1,16 @@
+{
+  "所有": { "sel": "all" },
+  "全部": { "sel": "all" },
+  "全体": { "sel": "all" },
+  "随机": { "sel": "random" },
+  "任意": { "sel": "any" },
+  "一个": { "sel": "one" },
+  "个": { "sel": "measure" },
+  "名": { "sel": "measure" },
+  "辆": { "sel": "measure" },
+  "张": { "sel": "measure" },
+  "架": { "sel": "measure" },
+  "艘": { "sel": "measure" },
+  "支": { "sel": "measure" },
+  "枚": { "sel": "measure" }
+}

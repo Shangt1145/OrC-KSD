@@ -1,0 +1,11 @@
+{
+  "前线": { "value": "frontline" },
+  "支援阵线": { "value": "support" },
+  "支援线": { "value": "support" },
+  "支援": { "value": "support" },
+  "卡组": { "value": "deck" },
+  "牌库": { "value": "deck" },
+  "手牌": { "value": "hand" },
+  "手中": { "value": "hand" },
+  "总部": { "value": "hq" }
+}

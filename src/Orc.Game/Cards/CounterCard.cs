@@ -1,4 +1,5 @@
 using Orc.Core;
+using Orc.Game.Managers;
 using Orc.Game.Players;
 using Orc.Game.Triggers;
 
@@ -100,13 +101,13 @@ public class CounterCard : CardBase
         return null;
     }
 
-    /// <summary>使用反制默认事件（单入口状态翻转；按当前激活状态分派）。</summary>
-    private Task HandleUseCounterAsync(CardTriggerView view, Context ctx, CancellationToken ct)
+    /// <summary>使用反制默认事件（单入口状态翻转；按当前激活状态分派；E1-25 后续：扣点/退点经点数通用入口发 point.changed）。</summary>
+    private async Task HandleUseCounterAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
         if (view.Card is not CounterCard card || view.Player is not Player player)
         {
             ctx.Interrupt(); // 载荷缺失（结构性错误）：翻转不发生
-            return Task.CompletedTask;
+            return;
         }
 
         var activation = card.GetData<CounterActivationData>();
@@ -116,7 +117,7 @@ public class CounterCard : CardBase
             // 激活流程：读「有效部署费」（W3-2 G5——修饰贡献叠加后的链输出；与评估同口径）→ 扣点 →
             // 记录实扣额（取消按此退还——「扣点与退点同额」跨调用守恒）→ 置激活 → 注册（效果）handler（登记序）。
             var cost = card.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
-            player.Points -= cost;
+            await ChangePointsAsync(card, player, -cost, ct);
             card._chargedCost = cost;
             activation.IsActive = true;
             foreach (var effect in card._effectHandlers)
@@ -129,7 +130,7 @@ public class CounterCard : CardBase
             // 取消流程：退点（无条件、按激活实扣额——与期间修饰漂移解耦、点数守恒）→ 清记录 → 取消激活 → 取消注册。
             var refund = card._chargedCost ?? throw new InvalidOperationException(
                 $"反制 '{card.Name}' 处于激活态但无实扣额记录（结构性错误——激活须经使用流程；fail-fast、不静默）。");
-            player.Points += refund;
+            await ChangePointsAsync(card, player, refund, ct);
             card._chargedCost = null;
             activation.IsActive = false;
             foreach (var registration in card._activeRegistrations)
@@ -143,8 +144,18 @@ public class CounterCard : CardBase
             // （「取消后触发不执行」的严谨落实——注销立即生效于后续触发）。
             ctx.Stop();
         }
+    }
 
-        return Task.CompletedTask;
+    /// <summary>点数变更归口（E1-25 后续）：经资源管理器通用入口（发 point.changed）；脱局＝直写兜底（保持既有语义）。</summary>
+    private static async Task ChangePointsAsync(CounterCard card, Player player, int delta, CancellationToken ct)
+    {
+        if (ResourceManager.ResolveFor(card) is { } manager)
+        {
+            await manager.ChangePointsAsync(player, delta, PointChangeKind.Add, ct).ConfigureAwait(false);
+            return;
+        }
+
+        player.Points += delta;
     }
 
     private sealed record CounterEffectHandler(string Name, Func<CardTriggerView, Context, CancellationToken, Task> Handler);
