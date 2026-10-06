@@ -62,9 +62,33 @@
   - 校验：模板侧（schemaVersion/id 唯一/slots 命中/被指事件无既有 csx）；DSL 侧（template 存在/槽位名合法/op 名在注册表/参数合法）。
   - 命名空间 `Orc.Game.EffectParsing`（`.Templates`/`.Dsl`/`.Compilation`/`.Parsing`）；资产 `Templates/*.tpl.json`、`Templates/ops/*.csx.tpl`。
 
-### I11: 解析段 AST 的结构与"AST ↔ DSL"分层 {In Progress}
-- 待裁决：AST 是否**镜像 DSL**（几乎同构）、还是**与 DSL 解耦的中性语法树**（触发短语/条件子句/目标短语/动作短语/数值 → 再语义映射到 DSL）／极简短语序列。
-- 关联：若 AST ≡ DSL，则"AST 作为中间层"名存实亡（用户明确要求引入 AST 作中间层）。
+### I11: 解析段 AST 的结构与"AST ↔ DSL"分层 {Completed}
+- AST 形态：**甲**——**与 DSL 解耦的中性语法树**（触发短语/条件子句/目标短语/动作短语/数值），语义映射到 DSL 在下游。
+- AST 节点**保留原文 span**。
+- 词表资产：**分文件**；条目**引用 op 名**，由校验器强制 ∈ 注册表。
+
+### I12: 解析段对外接口与诊断形态 {Completed}
+- 接口：**甲**——`Parse(string) → ParseResult { Effects: DslInstance[], Unresolved: {Span,RawText,Reason}[] }`。
+- 验收形态：**iii**——测试守门 ＋ 生成 `.md` 覆盖率报告。
+
+## 状态：转换段已落地（S1–S5 完成）
+
+### I13: 句式切分规则（解析段 S8，C 阶段） {Completed}
+- P1 预处理：ASCII `.` 仅后随汉字视作句号；`;`/`,`/`:` 归一；**换行归一为空格**（唯一例外：整行仅词条/数值 ⇒ 丢弃该行）；成对引号屏蔽；未闭合引号不切分；本批**不建**错别字归一表（留钩子）。
+- P2 效果切分：`。！？` **硬边界**（单元独立）；`；` **软边界**（继承触发/条件）。**D1＝继承"最近的硬边界单元"**。产出 `SegmentedEffect{ Text, Span, HardBoundary }`。
+- P3 触发归属：触发短语＝**句首 → 第一个 `：` 或第一个 `，`**；显式具名触发（冒号界定）；监听型触发（句首监听主语且以 `时/后` 结尾）；**D2＝无显式触发时尽量解析为被动触发器（限支持的句式）**；多事件触发**拆分为多个效果**。
+- P4 抉择：`抉择：`；选项按 `或者/或` 优先、`；` 兜底；范围＝当前硬边界单元，句号后不受影响。
+- P5 代词回指：`其/它/该单位/将其/使其/对该` 指向前一单元目标短语；**D5＝认不准不替换**。
+- P6 单元内子句：`，`/`、` 为子句分隔（不产生新效果）；`：` 之后全部属该触发的正文。
+
+### I14: AST 节点形状（解析段 S8，B 阶段） {Completed}
+- 全部裁决通过：B-D1 **携带词法归类值**；B-D2 **AST 保持多事件、S9 展开为 N 个效果**；B-D3 软边界继承用**引用 `InheritsFrom`**；B-D4 span 口径＝**原文偏移**（tokenizer 维护归一映射表）；B-D5 **条件短语入 AST**，S9 判"超子集→显式失败"。
+- **修订（用户）**：`ActionPhrase` 的数值槽改为通用的 **`Payload`**，本批**仅允许整数**（`PayloadKind.Integer`，预留扩展）。
+
+### I15: token 字段与分类细节（解析段 S7，A 阶段） {Completed}
+- 全部裁决通过：A-D1 具名触发词由词法层产 `Trigger{Named}`、监听型短语由 AST 层组合识别（`时/后` 为 `Trigger{Suffix}`）；A-D2 **一字面一类别**（加载期强制）；A-D3 引号产 `QuoteOpen/QuoteClose`、切分器按深度跳过；A-D4 **不保留**空白/换行 token、tokenizer 内置归一→原文偏移映射；A-D5 `Unknown` **累积成段**。
+
+## 状态：全部设计闭合，S1–S11 已实现并验收
 
 ## 调研结论（kards-diy 证据 → token 类型）
 
@@ -100,3 +124,57 @@
 - 代词有**两条含义不同**的实现路径（compiler `EVENT_REF` vs parser-v2 代词原语），OrC 需显式择一。
 - OCR/错别字归一表在 kards-diy **只有 2 条**（`compiler.js:891`）⇒ OrC 需自建归一前置阶段。
 - `每当` 在 kards-diy 中**不存在**（只有"每有/每受到/每消灭"）。
+
+---
+
+# 指挥点槽事件改进（E1-25）实现层未决问题
+
+> 基线：委托定稿 `委托-指挥点槽事件改进.md`；本段为实现 grill 交叉核对代码后暴露的缺口/矛盾。
+
+### I16: `ResourceManager` 如何取得判定器（构造可达性 + 装配时序倒置） {Completed}
+- **矛盾事实**：`JudicatorRegistry` 为游戏层对象，`LogicEngine` 上**不可达**；且 `Match.Initialize` 中
+  `_resourceManager = new ResourceManager(...)`（`Match.cs:426`）**早于** `_judicators = new JudicatorRegistry()`（`Match.cs:502`）。
+  ⇒ 委托 §3.3 给的构造签名**不足以**实现 §3.2。
+- **裁决（用户：a）**：构造改 `ResourceManager(LogicEngine engine, Func<JudicatorRegistry?> judicators, int maxPointSlots = DefaultMaxPointSlots)`；
+  `Match.cs:426` 传 `() => _judicators`（延迟读取，与 `EffectRuntime` lambda 注入同构；**不动**既有创建顺序）。
+
+### I17: `Settle` 由同步 `void` 改异步 {Completed}
+- **矛盾事实**：`Settle` 现为同步 `void`（`ResourceManager.cs:34`），发 `slot.changed` 需 `Task`；委托未申报签名变更。
+- **裁决（用户：a）**：改名 `SettleAsync`（受控变更申报）；唯一调用点 `TurnManager.cs:107` 改 `await`。
+
+### I18: `GameHooksJson` 硬编码清单未纳入委托 {Completed}
+- **缺口事实**：`Output/GameHooksJson.cs:100-156` 的 `SignalMetadata` 是**硬编码 18 条**表；
+  测试断言 `signals`=18 且每条 `payloadKeys`/`emitters` 非空；`helpers(13)+turn(5)==Signals.Count`。
+- **裁决（用户：同意）**：3 条新信号补 `SignalMetadata` 条目 ＋ 受控更新 `GameHooksTests`（signals 18→21、helpers 13→16）。
+
+### I19: 判定器 JSON 表既有不自洽（15 vs 16） {Completed}
+- **事实**：`GameHooksJson.JudicatorMetadata` 仅 15 条（**缺** `effect.target.resolve`），`JudicatorNameList` 已 16 条。
+- **裁决（用户：同意）**：补新判定器 **并顺带补** `effect.target.resolve`（修既有缺口）。
+
+### I20: `slot.gained` / `slot.lost` 的 `Amount` 语义 {Completed}
+- **裁决（用户：同意）**：`Amount` ＝**实际 Δ**（`min(effective, Max-current)` / `min(effective, current)`）；信号只报事实。
+
+### I21: 加/减槽是否连带改点数（`player.Points`） {Completed}
+- **裁决（用户：同意）**：**不改** `Points`（`Settle` 的 `Points=PointSlots` 保持唯一重设点）。
+
+### I22: `失去` 的动词键命名 {Completed}
+- **裁决（用户：同意）**：动作词 `失去 → key "lose"`（与 `gain` 对称；映射层再判定 `pointSlot`）。
+  `Action_Lexicon_Keys_Are_Known_Verbs` 的 known 集加 `lose`。
+
+### I23: `获得 N 个指挥点槽` 无数值时的处置 {Completed}
+- **裁决（用户：同意）**：**显式失败**（`gainSlot` 登记 `Required:["amount"]`；不静默补 1）。
+
+### I24: 「额外获得 / 失去」的数字各自经"默认返回原值"的判定器包裹（用户追加） {Completed}
+- 用户口径原文：`指挥点槽的额外获得和失去的具体数字可以分别用一个默认返回原值的判定器包裹`。
+- **裁决（用户：A / 甲 / I）**：
+  - **A 施加位置**＝`ResourceManager.GainSlotsAsync`/`LoseSlotsAsync` **内部**包裹（任何调用方都经过、单一真源，与 `SettleAsync` 经 increment 判定器对称）。
+  - **甲 命名**＝`resource.slot.gain` / `resource.slot.lose`（与递增器 `resource.slot.increment` 同族）。
+  - **I 钳制与负值**＝`effective` 仍经 `min(·, Max-current)` / `min(·, current)` 钳制；`effective ≤ 0` ⇒ Δ=0 ⇒ **零信号、不抛错**。
+  - **注册面**＝三条新判定器均进 `Match.Initialize` **内置固定注册段**（默认名恒可解析）。
+- 与 `Settle` 的关系：递增判定器 `resource.slot.increment` 与这两条**互不影响**（回合开始递增不走 gained/lost 的包裹器）。
+
+### I25: 判定器清单计数影响（由 I19/I24 汇总） {Completed}
+- `JudicatorNames` 常量：16 → **19**；`GameHooks.JudicatorNameList`：16 → **19**；`BuiltInJudicatorNames`：14 → **17**；`External`：2（不变）。
+- `GameHooksJson.JudicatorMetadata`：15 → **19**（＋1 修 `effect.target.resolve`、＋3 新条目）——已落地。
+- `GameHooksTests` 受控更新：16→19、14→17、JSON judicators 15→19——已落地。
+- **交付结论**：构建 0 错误；全量测试 **1225 项全绿**（基线 1218 ＋ 新增 7 项）；对拍报告"指挥点槽"未解析原因**归零**（覆盖率 62.1% → 62.7%）。

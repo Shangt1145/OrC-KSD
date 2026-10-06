@@ -62,3 +62,67 @@
 ### Q9: 术语登记 {In Progress}
 - 拟新增术语（待用户确认后写入根 `CONTEXT.md`）：`词法单元（token）`、`词法层（tokenizer）`、`语法树（AST）`、`效果解析器`、`效果 DSL`、`模板效果`。
 - 沿用既有："卡牌数据体"（根 CONTEXT）、"效果快照/预制体"（review-chain CONTEXT）。
+
+---
+
+## 追加需求：指挥点事件改造（E1-25 后续） {Completed}
+
+> **最终裁决（用户口径）**：
+> 1. `指挥点也要同步改造，一个额外获得，一个额外失去＋一个设为和增减的共用入口`；
+> 2. `明确尽量把动作缝逻辑放在前两个触发器里，而不是在通用入口破坏兼容性`；
+> 3. `新增两个api(增加/失去)分别走两个hook，再来一个ChangePointsAsync给通用无语义的地方用，都走对应的hook`；
+> 4. `明确卡效果走增加/失去hook，游戏内通用效果，比如打牌，指挥和反制走通用路径`。
+>
+> **落地形态**：
+> - `GainPointsAsync`（卡效果·增加）→ `point.gained` → 共用 → `point.changed`
+> - `LosePointsAsync`（卡效果·失去）→ `point.lost` → 共用 → `point.changed`
+> - `ChangePointsAsync(player, value, kind∈{Set,Add})`（打牌/指挥/反制/回合设为）→ 只 `point.changed`
+> - `AddPointsAsync` ＝ `ChangePointsAsync(Add)` 薄包装（原校验/数值语义保留）
+> - 数字包裹判定器：`resource.point.gain` / `resource.point.lose`（默认恒等）
+> - 解析侧：`获得 N 个指挥点` → `gainPoint`／`失去 N 个指挥点` → `losePoint`
+> - **6 处归口**：`SettleAsync`(设为)／`OperateCosts.DeductAsync`(行动费)／`CommandCard`／`UnitCard`／`CounterCard`×2
+> - 词表冲突处置：`指挥点` 由 `conditions.json`(Cond) 迁至 `filters.json`(Object)——"一字面一类别"。
+
+> 来源＝用户中途口径原文：`指挥点也要同步改造，一个额外获得，一个额外失去+一个设为和增减的共用入口，明确尽量把动作缝逻辑放在前两个触发器里，而不是在通用入口破坏兼容性`。
+> **性质＝需求变更/范围扩张**：原委托 `委托-指挥点槽事件改进.md` §7 明确把「点数（`player.Points`）的信号化」列为**不在范围内**（"`AddPoints` 保持现状；user 只要求**槽**"）。
+
+### 基线事实（代码核对，含行号）
+- **点数写入点共 7 处**，其中 **5 处为旁路直写**（不经 `ResourceManager` ⇒ 不会有任何信号）：
+  | # | 位置 | 语义 |
+  |---|---|---|
+  | 1 | `src/Orc.Game/OperateCosts.cs:28` | 行动费扣除（`owner.Points -= Effective(unit)`） |
+  | 2 | `src/Orc.Game/Cards/CommandCard.cs:111` | 指令卡打出扣费（有效部署费） |
+  | 3 | `src/Orc.Game/Cards/UnitCard.cs:128` | 单位部署扣费（有效部署费） |
+  | 4 | `src/Orc.Game/Cards/CounterCard.cs:119` | 反制激活扣点（有效部署费） |
+  | 5 | `src/Orc.Game/Cards/CounterCard.cs:132` | 反制取消退点（按实扣额） |
+- **受控面 2 处**：`ResourceManager.SettleAsync`（`Points = PointSlots`＝设为）、`AddPoints(player, amount)`（加值：≤0 拒绝、不钳制到槽、溢出防护、**不发信号**）。
+- `AddPoints` 目前**无生产调用方**（仅测试用作"受控加值面"）。
+
+### R1: 「设为与增减的共用入口」的形态与"兼容性"边界 {Completed}
+- 用户口径拆解：**额外获得**（信号）＋ **额外失去**（信号）＋ **一个「设为」和「增减」的共用入口**；
+  且"尽量把**动作缝**逻辑放在前两个里，**不在通用入口破坏兼容性**"。
+- 选项：
+  - **甲**：`AddPoints(player,int)` 签名与数值语义**完全不变**（仍拒 ≤0、不钳制、溢出防护），仅内部改走共用收敛点并**新增发 `point.changed`**（不发 gained/lost）；
+    另加 `SetPointsAsync(player,int)`；额外获得/失去＝新方法（发 gained/lost → 走共用收敛点）。
+  - **乙**：`AddPoints` **完全不动**（连信号也不发——纯遗留面）；共用入口**另开**（`SetPointsAsync` ＋ 增减方法）；
+    额外获得/失去走新入口——`AddPoints` 成为"不经信号面的旁路"。
+  - **丙**：单一方法 `ChangePointsAsync(player, int value, PointChangeKind kind)`（`Set` | `Add`）＝**唯一**共用入口；
+    `AddPoints` 改为其**薄包装**（签名保留、行为等价）；额外获得/失去各为语义前置方法。
+- 需裁决：**兼容性**指"签名不变"还是"信号面也不变"？
+
+### R2: 5 处旁路直写是否纳入共用入口（"点数变化是否全覆盖信号"） {Completed}（裁决＝甲 全覆盖）
+- 选项：**甲**＝全部 5 处改走共用入口（`point.changed` 全覆盖；**但**多为"费用扣除"，会引入新信号并可能影响部署/指挥流程的既有序列断言）；
+  **乙**＝本轮**仅**收敛"设为/增减"入口（`SettleAsync` ＋ 新的加/减点方法），5 处费用旁路**保持直写**（信号面留洞、后续批次再收）。
+
+### R3: 三条信号的命名与载荷 {Completed}（`point.gained`/`point.lost`/`point.changed`；`Amount`/`OldPoints`/`NewPoints`）
+- 拟：`point.gained`（载荷 `Player` + `Amount`＝实际 Δ）／`point.lost`（同）／`point.changed`（`Player` + `OldPoints` + `NewPoints`）。
+- 或统一资源族命名 `resource.point.*`（与判定器族 `resource.slot.*` 呼应）。
+
+### R4: 点的「额外获得/失去」数字是否也各配"默认返回原值"判定器 {Completed}（采纳；`resource.point.gain`/`resource.point.lose`）
+- 与槽对称（`resource.point.gain` / `resource.point.lose`）；判定器总数 19 → **21**（若采纳）。
+
+### R5: `SettleAsync` 的 `Points = PointSlots`（设为）是否改走共用入口并因此发 `point.changed` {Completed}（采纳——走 `ChangePointsAsync(Set)`）
+- 若发：回合开始段信号再 +1（`turn.start` 之后多一条 `point.changed`），**新一波受控变更**（回合开始序列断言再改）。
+
+### R6: 效果解析侧是否本轮一并落地 `获得 N 个指挥点` → `gainPoint` / `失去 N 个指挥点` → `losePoint` {Completed}（采纳）
+- 语料实测存在真实文本（`获得 1 个指挥点。`／`失去 1 个指挥点。`／`获得 2 个指挥点。`），当前落 `needsCsx` 兜底。
