@@ -124,6 +124,12 @@ public class CounterCard : CardBase
             {
                 card._activeRegistrations.Add(card.UseCounterTrigger.Register(effect.Name, effect.Handler));
             }
+
+            // E1-53：**反制触发**信号（激活分支、恰一次；取消分支不发——退点撤销不属"触发"）。
+            if (ctx.Engine is { } engine)
+            {
+                await GameUpdates.EmitCounterTriggered(engine, card, player, ct).ConfigureAwait(false);
+            }
         }
         else
         {

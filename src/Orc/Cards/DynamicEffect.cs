@@ -252,13 +252,28 @@ internal static class TriggerReflection
             .Invoke(null, new object[] { trigger, name, handler, priority })!;
 
     /// <summary>撤销注册（S5 注入撤销用；目标触发器 <c>Unregister</c> 面）。</summary>
+    /// <remarks>
+    /// E1-36 修正：原实现从**开放式泛型** <c>typeof(Trigger&lt;&gt;)</c> 取 <c>MethodInfo</c>——该 <c>MethodInfo</c>
+    /// 的 <c>ContainsGenericParameters</c> 为 true，<c>Invoke</c> 必抛
+    /// 「Late bound operations cannot be performed on types or methods for which ContainsGenericParameters is true」；
+    /// 且即便封闭，取到的方法也属 <c>Trigger&lt;object&gt;</c>、无法作用于 <c>Trigger&lt;X&gt;</c> 实例。
+    /// 现改为**按实例运行时类型**反射（闭型 ⇒ Invoke 合法；按类型缓存）。
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">trigger / registration 为 null。</exception>
     internal static void Unregister(object trigger, TriggerRegistration registration)
-        => UnregisterMethod.Invoke(trigger, new object[] { registration });
+    {
+        ArgumentNullException.ThrowIfNull(trigger);
+        ArgumentNullException.ThrowIfNull(registration);
+
+        var method = UnregisterMethods.GetOrAdd(
+            trigger.GetType(),
+            type => type.GetMethod(nameof(Trigger<object>.Unregister), new[] { typeof(TriggerRegistration) })!);
+        method.Invoke(trigger, new object[] { registration });
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, MethodInfo> UnregisterMethods = new();
 
     private static readonly MethodInfo RegisterBandMethod = Get(nameof(RegisterBandCore));
-
-    private static readonly MethodInfo UnregisterMethod = typeof(Trigger<>)
-        .GetMethod(nameof(Trigger<object>.Unregister), new[] { typeof(TriggerRegistration) })!;
 
     private static TriggerRegistration RegisterBandCore<TView>(object trigger, string name, Delegate handler, int priority)
         where TView : class
@@ -326,6 +341,13 @@ public sealed class DynamicPassiveEffect : PassiveEffect, ISerializableEffect
         base.MountMainTrigger(bus); // 生命周期触发器（owner=this）
 
         if (_state is null)
+        {
+            return;
+        }
+
+        // E1-36（纯注入型效果支持）：主触发器**无 hooks** 时无总线订阅可挂——此时它是"注入载体"，
+        // 不参与挂载（挂上去会被总线拒绝）；注入由装载链（effect.injects）另行施加。
+        if (_snapshot.Root.MountedHooks.Count == 0)
         {
             return;
         }

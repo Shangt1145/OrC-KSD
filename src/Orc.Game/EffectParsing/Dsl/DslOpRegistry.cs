@@ -60,6 +60,8 @@ public static class DslOpRegistry
         new DslOpSpec(NeedsCsxOpName, Required: new[] { "script" }),
         // 内嵌效果（引号内的效果文本递归解析后的承载）。
         new DslOpSpec(NestedOpName, Required: new[] { "nested" }),
+        // E1-56：光环（持续态的正确机制——受益随进出/位置实时重算）。
+        new DslOpSpec("aura", Required: new[] { "field", "amount" }),
     };
 
     private static readonly Dictionary<string, DslOpSpec> ByName =
@@ -98,7 +100,9 @@ public static class DslOpRegistry
             errors.Add($"原语 '{op.Op}' 至少需要参数之一：{string.Join(" / ", spec.AnyOfFields)}。");
         }
 
-        if (op.Amount is < 0)
+        // E1-41/E1-56：`amount` 的"不能为负"只适用于**数值语义**原语（伤害/抽牌/资源增量）；
+        // `costMod`／`aura` 的 amount 是**修饰增量**（`-1 行动花费` 合法）⇒ 不在此列。
+        if (op.Amount is < 0 && op.Op is not ("costMod" or "aura"))
         {
             errors.Add($"原语 '{op.Op}' 的 amount 不能为负。");
         }
@@ -106,6 +110,19 @@ public static class DslOpRegistry
         if (op.Count is < 1)
         {
             errors.Add($"原语 '{op.Op}' 的 count 必须为正整数。");
+        }
+
+        // E1-41：期限只对**可携带期限**的 op 生效——否则"忽略期限＝永久增益"属静默语义错误。
+        if (!string.IsNullOrWhiteSpace(op.Until))
+        {
+            if (op.Until is not (Untils.TurnEnd or Untils.NextOwnerTurnStart))
+            {
+                errors.Add($"原语 '{op.Op}' 的 until 取值非法：'{op.Until}'（允许 {Untils.TurnEnd} / {Untils.NextOwnerTurnStart}）。");
+            }
+            else if (op.Op is not ("buff" or "costMod"))
+            {
+                errors.Add($"原语 '{op.Op}' 不支持期限（until 仅 buff / costMod 可用——忽略期限会产生永久增益）。");
+            }
         }
 
         return errors;
@@ -124,6 +141,8 @@ public static class DslOpRegistry
         "script" => !string.IsNullOrWhiteSpace(op.Script),
         "name" => !string.IsNullOrWhiteSpace(op.Name),
         "nested" => op.Nested is { Count: > 0 },
+        "until" => !string.IsNullOrWhiteSpace(op.Until),
+        "field" => !string.IsNullOrWhiteSpace(op.Field),
         _ => false,
     };
 }

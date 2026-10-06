@@ -191,8 +191,8 @@ public class GameHooksTests
         var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
             .Select(c => c.Value).ToList();
 
-        Assert.Equal(26, signals.Count);
-        Assert.Equal(15, payloadKeys.Count);
+        Assert.Equal(29, signals.Count);
+        Assert.Equal(16, payloadKeys.Count);
         Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
         Assert.Equal(payloadKeys.OrderBy(v => v, StringComparer.Ordinal),
@@ -249,6 +249,9 @@ public class GameHooksTests
             [GameHooks.PointChanged] = "EmitPointChanged",
             [GameHooks.CardDamaged] = "EmitCardDamaged",
             [GameHooks.UnitActed] = "EmitUnitActed",
+            [GameHooks.UnitCombatSurvived] = "EmitUnitCombatSurvived",
+            [GameHooks.UnitDamageDealt] = "EmitUnitDamageDealt",
+            [GameHooks.CounterTriggered] = "EmitCounterTriggered",
         };
         var turnSignals = new[]
         {
@@ -256,7 +259,7 @@ public class GameHooksTests
             GameHooks.TurnEndBefore, GameHooks.TurnEnd,
         };
 
-        Assert.Equal(21, helpers.Count);
+        Assert.Equal(24, helpers.Count);
         foreach (var (signal, method) in helpers)
         {
             Assert.Contains(signal, GameHooks.Signals);
@@ -270,7 +273,7 @@ public class GameHooksTests
         Assert.NotNull(typeof(TurnManager).GetMethod(
             "EmitTurnAsync", BindingFlags.NonPublic | BindingFlags.Instance));
 
-        // 20 + 5 = 25，无遗漏、无重复（E1-33 追加 card.damaged / unit.acted）
+        // 22 + 5 = 27，无遗漏、无重复（E1-33 追加 card.damaged / unit.acted；E1-39 追加 unit.combat.survived）
         Assert.Equal(GameHooks.Signals.Count,
             helpers.Keys.Concat(turnSignals).Distinct(StringComparer.Ordinal).Count());
     }
@@ -348,7 +351,7 @@ public class GameHooksTests
         using var document = JsonDocument.Parse(GameHooksJson.Serialize(indented: true));
         var root = document.RootElement;
 
-        Assert.Equal(26, root.GetProperty("signals").GetArrayLength());
+        Assert.Equal(29, root.GetProperty("signals").GetArrayLength());
         Assert.Equal(21, root.GetProperty("judicators").GetArrayLength());
         Assert.Equal(GameHooks.TriggerLayers.Count, root.GetProperty("triggerLayers").GetArrayLength());
         Assert.Equal(27, root.GetProperty("pending").GetArrayLength());

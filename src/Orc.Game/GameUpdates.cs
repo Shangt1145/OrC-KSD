@@ -120,6 +120,29 @@ public static class GameUpdates
     /// <summary>单位行动后（"unit.acted"；载荷＝{ Unit }）。调用点＝攻击/移动外层收尾成功后（<c>CommandManager.DispatchAttackAsync</c> / <c>DispatchMoveAsync</c>）——各自恰一次。</summary>
     public const string UnitActed = "unit.acted";
 
+    /// <summary>
+    /// **造成伤害**（"unit.damage.dealt"；载荷＝{ Unit, Card, Amount }——**施动方单位**＋**受方**（单位或 HQ）＋实际伤害量）。
+    /// 语义＝「某单位实际造成了伤害」（**来源侧**归属；与 <see cref="CardDamaged"/>「受方侧」互补）。
+    /// 调用点＝①单位互伤（<c>CommandManager.HandleDefaultAttackDamageAsync</c> 双方各自）②HQ 简路（<c>HandleUnitAttackAsync</c>）
+    /// ——**先落定后发射**、实际变化量 &gt; 0 才发（改变才传播）。
+    /// </summary>
+    public const string UnitDamageDealt = "unit.damage.dealt";
+
+    /// <summary>
+    /// **反制触发**（"counter.triggered"；载荷＝{ Card, Player }——被使用的反制卡＋其归属玩家）。
+    /// 语义＝「某张反制被**使用/触发**」（<c>CounterCard.HandleUseCounterAsync</c> 的**激活**分支——恰一次）；
+    /// 取消分支不发（退点撤销，不属"触发"）。
+    /// </summary>
+    public const string CounterTriggered = "counter.triggered";
+
+    /// <summary>
+    /// 交战并存活（"unit.combat.survived"；载荷＝{ Unit }——幸存单位）。
+    /// 语义＝「一次单位对战结算结束后，**参战且未阵亡**的单位各发射一次」（每单位各自恰一次；观察序＝被攻击者在前、攻击者在后）。
+    /// 调用点＝<c>CommandManager.HandleDefaultAttackDamageAsync</c> 结算收尾（含伏击改写路径——被攻击者不受伤即视为存活）。
+    /// 已阵亡/未参战＝不发射（死亡判定之后才发——不误导"幸存"）。
+    /// </summary>
+    public const string UnitCombatSurvived = "unit.combat.survived";
+
     // ---------- W4-1（G14 收尾）洗切一项：卡组信号 ----------
 
     /// <summary>
@@ -220,6 +243,12 @@ public static class GameUpdates
 
     /// <summary>载荷键：数量（值＝int；slot.gained / slot.lost 携带——**实际变化量** Δ）。</summary>
     public const string PayloadAmount = "Amount";
+
+    /// <summary>
+    /// 载荷键：击杀者（值＝<see cref="Cards.UnitCard"/> 对象引用，可缺省/为 null——非归属驱动来源的死亡无击杀者）。
+    /// <c>card.died</c> 携带（E1-47 加性：死亡＋**归属**）。
+    /// </summary>
+    public const string PayloadKiller = "Killer";
 
     /// <summary>载荷键：原槽值（值＝int；slot.changed 携带）。</summary>
     public const string PayloadOldSlots = "OldSlots";
@@ -419,14 +448,55 @@ public static class GameUpdates
             ct);
     }
 
-    /// <summary>发射 card.died（载荷＝{ 卡牌实例 }；2C 起调用点＝战斗死亡流程——清理就绪后、恰一次）。</summary>
-    public static Task EmitCardDied(LogicEngine engine, Card card, CancellationToken ct = default)
+    /// <summary>发射 card.died（载荷＝{ 卡牌实例, Killer? }；2C 起调用点＝战斗死亡流程——清理就绪后、恰一次）。</summary>
+    /// <param name="killer">击杀者（E1-47 加性；null＝非归属驱动来源，如修饰到期致防御归零）。</param>
+    public static Task EmitCardDied(LogicEngine engine, Card card, Card? killer = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(card);
         return engine.Emit(
             CardDied,
-            new Dictionary<string, object?> { [PayloadCard] = card },
+            new Dictionary<string, object?>
+            {
+                [PayloadCard] = card,
+                [PayloadKiller] = killer,
+            },
+            ct);
+    }
+
+    /// <summary>发射 counter.triggered（E1-53；载荷＝{ 反制卡, 归属玩家 }；激活分支调用一次）。</summary>
+    /// <exception cref="ArgumentNullException">engine / card / player 为 null。</exception>
+    public static Task EmitCounterTriggered(LogicEngine engine, Card card, Player player, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        ArgumentNullException.ThrowIfNull(player);
+        return engine.Emit(
+            CounterTriggered,
+            new Dictionary<string, object?>
+            {
+                [PayloadCard] = card,
+                [PayloadPlayer] = player,
+            },
+            ct);
+    }
+
+    /// <summary>发射 unit.damage.dealt（E1-47；载荷＝{ 施动方, 受方, 伤害量 }；实际变化量 &gt; 0 才发）。</summary>
+    /// <exception cref="ArgumentNullException">engine / unit / target 为 null。</exception>
+    public static Task EmitUnitDamageDealt(
+        LogicEngine engine, Card unit, Card target, int amount, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        ArgumentNullException.ThrowIfNull(target);
+        return engine.Emit(
+            UnitDamageDealt,
+            new Dictionary<string, object?>
+            {
+                [PayloadUnit] = unit,
+                [PayloadCard] = target,
+                [PayloadAmount] = amount,
+            },
             ct);
     }
 
@@ -454,6 +524,18 @@ public static class GameUpdates
         ArgumentNullException.ThrowIfNull(unit);
         return engine.Emit(
             UnitActed,
+            new Dictionary<string, object?> { [PayloadUnit] = unit },
+            ct);
+    }
+
+    /// <summary>发射 unit.combat.survived（载荷＝{ 单位 }；对战结算收尾后对每个幸存参战单位调用——各自恰一次）。</summary>
+    /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
+    public static Task EmitUnitCombatSurvived(LogicEngine engine, Card unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        return engine.Emit(
+            UnitCombatSurvived,
             new Dictionary<string, object?> { [PayloadUnit] = unit },
             ct);
     }

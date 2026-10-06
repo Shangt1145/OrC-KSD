@@ -54,6 +54,13 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
         ArgumentNullException.ThrowIfNull(viewer);
         ArgumentNullException.ThrowIfNull(selector);
 
+        // E1-41：`self` ＝**视角卡自身**（自指效果——中文卡面省略主语时即"本单位"）。
+        // 修前无本分支 ⇒ `sel` 无目标时按 `one` 取"第一个单位"（A 支援线→B 支援线→前线），**打错人**。
+        if (string.Equals(selector.Sel, "self", StringComparison.Ordinal))
+        {
+            return new[] { viewer };
+        }
+
         var viewerOwner = OwnerOf(viewer);
         var lines = SelectLines(battlefield, selector.Zone);
 
@@ -65,7 +72,8 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
                 if (slot.Occupant is not UnitCard unit
                     || !MatchesSide(unit, selector.Side, viewerOwner)
                     || !MatchesUnitType(unit, selector.UnitType)
-                    || !MatchesKeyword(unit, selector.Keyword))
+                    || !MatchesKeyword(unit, selector.Keyword)
+                    || !MatchesThreshold(unit, selector.Threshold))
                 {
                     continue;
                 }
@@ -130,6 +138,41 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
             "friendly" => unitIndex == viewerOwner.Index,
             "enemy" => unitIndex is { } index && index != viewerOwner.Index,
             _ => true,
+        };
+    }
+
+    /// <summary>
+    /// **目标阈值过滤**（E1-57）：按目标卡**有效值**判定 `字段 算子 取值`（未知字段/算子 ⇒ 不匹配）。
+    /// </summary>
+    private static bool MatchesThreshold(UnitCard unit, EffectThreshold? threshold)
+    {
+        if (threshold is null)
+        {
+            return true;
+        }
+
+        var field = threshold.Field switch
+        {
+            "attack" => CardStatFields.Attack,
+            "defense" => CardStatFields.Defense,
+            "opCost" => CardStatFields.OperateCost,
+            "deployCost" => CardStatFields.DeployCost,
+            _ => null,
+        };
+        if (field is null)
+        {
+            return false;
+        }
+
+        var value = unit.Modifiers.GetEffectiveValue(field);
+        return threshold.Op switch
+        {
+            "gte" => value >= threshold.Value,
+            "lte" => value <= threshold.Value,
+            "gt" => value > threshold.Value,
+            "lt" => value < threshold.Value,
+            "eq" => value == threshold.Value,
+            _ => false,
         };
     }
 

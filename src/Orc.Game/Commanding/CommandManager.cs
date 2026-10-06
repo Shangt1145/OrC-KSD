@@ -1098,7 +1098,13 @@ public sealed class CommandManager
             // 归零→终局：不内联于攻击流程——HQ 侧统一响应（数值变化下游；与「先数值变化、后终局记录」
             // 观察序一致）。当次结算收尾照常完成（内部步骤不经门禁）。
             var damage = attacker.Modifiers.GetEffectiveValue(CardStatFields.Attack);
+            var healthBefore = hq.Health;
             await hq.ApplyDamageAsync(damage, ct);
+            var dealt = healthBefore - hq.Health;
+            if (dealt > 0)
+            {
+                await GameUpdates.EmitUnitDamageDealt(_engine, attacker, hq, dealt, ct); // E1-47：HQ 路径的来源侧
+            }
         }
         else if (targetEntity is UnitCard)
         {
@@ -1149,7 +1155,8 @@ public sealed class CommandManager
         if (resolution.IsRewritten)
         {
             // 伏击改写（已判定成立）：替代默认——攻击者死亡（统一死亡流程、无 HP 逐步扣减语义）、被攻击者不受伤
-            await ProcessDeathAsync(attacker, ct);
+            await ProcessDeathAsync(attacker, ct, killer: target); // E1-47：被攻击者为击杀者（伏击反杀）
+            await EmitCombatSurvivedAsync(_engine, target, ct); // E1-39：被攻击者确经交战且未阵亡 ⇒ 幸存
             return;
         }
 
@@ -1163,10 +1170,19 @@ public sealed class CommandManager
         var damageToAttacker = ResolveIncomingDamage(resolution, target, attacker);
         var counterAttacks = _combatCounterEligibility(attacker, target); // K2：反击资格判定通道（对局＝条目句柄；独立构造＝内置默认）
 
-        await target.ApplyDefenseDamageAsync(damageToTarget, ct); // 门户：伤害＝即时变更（只扣当前、不减上限）
+        var targetDefenseBefore = target.Modifiers.GetEffectiveValue(CardStatFields.Defense);
+        // E1-47：结算窗口内设置**伤害来源游标**——门户触发的「防御归零统一死亡衔接」在同一同步调用链内执行，
+        // 故游标可把"谁造成了这次伤害"带给死亡衔接（游标外恒 null＝非归属驱动）。
+        await WithDamageSourceAsync(
+            attacker, () => target.ApplyDefenseDamageAsync(damageToTarget, ct));
+        await EmitDamageDealtAsync(_engine, attacker, target, targetDefenseBefore, ct); // E1-47：**来源侧**实际造成量
+
         if (counterAttacks)
         {
-            await attacker.ApplyDefenseDamageAsync(damageToAttacker, ct);
+            var attackerDefenseBefore = attacker.Modifiers.GetEffectiveValue(CardStatFields.Defense);
+            await WithDamageSourceAsync(
+                target, () => attacker.ApplyDefenseDamageAsync(damageToAttacker, ct));
+            await EmitDamageDealtAsync(_engine, target, attacker, attackerDefenseBefore, ct); // E1-47：反击方向
         }
 
         // 死亡判定（互扣后防御有效值 ≤0；数值表现钳制后 ≤0 即 ==0）；同归于尽＝两枚 card.died 均发射，顺序：被攻击者在前、攻击者在后。
@@ -1175,14 +1191,21 @@ public sealed class CommandManager
         if (!target.GetData<UnitStateData>().IsDestroyed
             && target.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
         {
-            await ProcessDeathAsync(target, ct);
+            await ProcessDeathAsync(target, ct, killer: attacker); // E1-47：对战致死 ⇒ 攻击者胜出
         }
 
         if (counterAttacks && !attacker.GetData<UnitStateData>().IsDestroyed
             && attacker.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
         {
-            await ProcessDeathAsync(attacker, ct);
+            await ProcessDeathAsync(attacker, ct, killer: target); // E1-47：反击致死 ⇒ 被攻击者胜出
         }
+
+        // E1-47：来源侧伤害信号（发射点＝各处扣减之后——实际变化量 > 0 才发）。
+        // E1-39：交战存活信号（死亡判定**之后**才发——已阵亡者不发射，不误导"幸存"）。
+        // 双方**皆参战**（反击豁免只影响"是否互伤"，不影响"是否参战"），故各自按存活与否发射。
+        // 观察序＝被攻击者在前、攻击者在后（与同归于尽的 card.died 观察序一致）。
+        await EmitCombatSurvivedAsync(_engine, target, ct);
+        await EmitCombatSurvivedAsync(_engine, attacker, ct);
     }
 
     /// <summary>
@@ -1203,6 +1226,48 @@ public sealed class CommandManager
     }
 
     /// <summary>
+    /// **伤害来源游标**（E1-47）：伤害门户触发的「防御归零统一死亡衔接」与本调用**同一同步调用链**，
+    /// 故以结算窗口内的临时游标承载"本次伤害的施动方"（窗口外恒 null ⇒ 死亡无击杀者归属）。
+    /// 用**恢复式**赋值（try/finally 还原上一值）——嵌套伤害（如伤害链内的再触发）亦保持作用域正确。
+    /// </summary>
+    private UnitCard? _damageSourceCursor;
+
+    private async Task WithDamageSourceAsync(UnitCard source, Func<Task> action)
+    {
+        var previous = _damageSourceCursor;
+        _damageSourceCursor = source;
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _damageSourceCursor = previous;
+        }
+    }
+
+    /// <summary>
+    /// 发射 unit.damage.dealt（E1-47；**来源侧**）：实际防御变化量 &gt; 0 才发（改变才传播）。
+    /// 受方为 HQ 时亦适用（调用侧另行给出 HQ 路径的发射点）。
+    /// </summary>
+    private static Task EmitDamageDealtAsync(
+        LogicEngine engine, UnitCard dealer, UnitCard target, int defenseBefore, CancellationToken ct)
+    {
+        var dealt = defenseBefore - target.Modifiers.GetEffectiveValue(CardStatFields.Defense);
+        return dealt > 0
+            ? GameUpdates.EmitUnitDamageDealt(engine, dealer, target, dealt, ct)
+            : Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 发射 unit.combat.survived（E1-39）：仅对**未阵亡**的参战单位发射（恰一次；已死亡＝零发射）。
+    /// </summary>
+    private static Task EmitCombatSurvivedAsync(LogicEngine engine, UnitCard unit, CancellationToken ct)
+        => unit.GetData<UnitStateData>().IsDestroyed
+            ? Task.CompletedTask
+            : GameUpdates.EmitUnitCombatSurvived(engine, unit, ct);
+
+    /// <summary>
     /// 统一死亡流程（攻击结算判定死亡后调用；伏击改写的攻击者死亡同走此流程）。
     /// 完整次序（A4 定稿·唯一权威口径——《需求文档》Q&A-1）：
     /// ①槽位释放（变空槽）→ ②IsDestroyed 置位 → ③**亡计结算**（新增步：仅含亡计词条的卡驱动其内部效果动作一次；
@@ -1214,10 +1279,39 @@ public sealed class CommandManager
     /// ⑧UnitStateData.Position 置空（实例保留可查询）→ ⑨card.died 发射（恰一次；死亡状态就绪后）。
     /// 不发 unit.position.changed（该更新专属移动语义）。HQ 不入死亡/销毁链——本流程不适用（边界）。
     /// </summary>
-    internal async Task KillUnitAsync(UnitCard unit, CancellationToken ct = default)
+    internal async Task KillUnitAsync(UnitCard unit, UnitCard? killer = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(unit);
-        await ProcessDeathAsync(unit, ct).ConfigureAwait(false);
+        await ProcessDeathAsync(unit, ct, killer).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 无头伤害（效果运行期受控入口；经 <c>Orc.Game.Effects.EffectRuntime.DamageAsync</c> 在有**来源**时调用，E1-50）：
+    /// 在**伤害来源游标**作用下执行单位伤害门户（⇒ 致死时死亡衔接拿到击杀者）→ 发射 <c>unit.damage.dealt</c>。
+    /// </summary>
+    internal async Task DealDamageAsync(UnitCard target, int amount, UnitCard source, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(source);
+
+        var before = target.Modifiers.GetEffectiveValue(CardStatFields.Defense);
+        await WithDamageSourceAsync(source, () => target.ApplyDefenseDamageAsync(amount, ct)).ConfigureAwait(false);
+        await EmitDamageDealtAsync(_engine, source, target, before, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>无头 HQ 伤害（效果运行期；经 <c>EffectRuntime.DamageAsync</c> 在有来源时调用，E1-50）。</summary>
+    internal async Task DealDamageToHqAsync(Hq hq, int amount, UnitCard source, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(hq);
+        ArgumentNullException.ThrowIfNull(source);
+
+        var healthBefore = hq.Health;
+        await hq.ApplyDamageAsync(amount, ct).ConfigureAwait(false);
+        var dealt = healthBefore - hq.Health;
+        if (dealt > 0)
+        {
+            await GameUpdates.EmitUnitDamageDealt(_engine, source, hq, dealt, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -1267,7 +1361,8 @@ public sealed class CommandManager
         return box.Result is { IsSuccess: true };
     }
 
-    private async Task ProcessDeathAsync(UnitCard unit, CancellationToken ct)
+    /// <param name="killer">击杀者（E1-47 加性；null＝非归属驱动来源——如修饰到期致防御归零）。</param>
+    private async Task ProcessDeathAsync(UnitCard unit, CancellationToken ct, UnitCard? killer = null)
     {
         var state = unit.GetData<UnitStateData>();
 
@@ -1301,7 +1396,7 @@ public sealed class CommandManager
         }
 
         state.Position = null;
-        await GameUpdates.EmitCardDied(_engine, unit, ct);
+        await GameUpdates.EmitCardDied(_engine, unit, killer, ct); // E1-47：死亡 ＋ **归属**（Killer 可为 null）
         // 守护维护由本更新驱动（清位后等效触达——被守护状态可观测变化）
     }
 
@@ -1323,7 +1418,8 @@ public sealed class CommandManager
 
         if (unit.Modifiers.GetEffectiveValue(CardStatFields.Defense) <= 0)
         {
-            await ProcessDeathAsync(unit, ct);
+            // E1-47：击杀者归属＝结算窗口内的**伤害来源游标**（窗口外/非伤害来源＝null）。
+            await ProcessDeathAsync(unit, ct, killer: _damageSourceCursor);
         }
     }
 

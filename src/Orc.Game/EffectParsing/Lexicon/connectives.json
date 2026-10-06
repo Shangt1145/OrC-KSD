@@ -14,6 +14,8 @@
   "且": { "kind": "conj" },
   "和": { "kind": "andAction" },
   "每有": { "kind": "perPrefix" },
+  "本回合": { "kind": "duration" },
+  "此回合": { "kind": "duration" },
   "直到": { "kind": "until" },
   "直至": { "kind": "until" }
 }

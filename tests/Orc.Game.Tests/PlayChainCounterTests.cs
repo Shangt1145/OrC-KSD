@@ -29,8 +29,8 @@ public class PlayChainCounterTests
         Assert.True(counter.GetData<CounterActivationData>().IsActive);
         Assert.Equal(0, player.Points);
         Assert.Equal(new[] { "效果甲", "效果乙" }, counter.RegisteredEffectHandlerNames);
-        // E1-25 后续：扣点经点数通用入口发 point.changed（不发其它游戏更新）
-        Assert.Equal(new[] { GameUpdates.PointChanged }, recorder.Types);
+        // E1-25 后续：扣点经点数通用入口发 point.changed；E1-53：激活分支追加 **counter.triggered**（取消分支不发）
+        Assert.Equal(new[] { GameUpdates.PointChanged, GameUpdates.CounterTriggered }, recorder.Types);
 
         // 取消：无条件退点（同额）→ 取消激活 ＋ 取消注册。
         recorder.Clear();

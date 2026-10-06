@@ -5,6 +5,7 @@
   "摧毁": { "key": "destroy" },
   "抽": { "key": "draw" },
   "获得": { "key": "gain" },
+  "具有": { "key": "state" },
   "失去": { "key": "lose" },
   "移动": { "key": "move" },
   "移动至": { "key": "move" },

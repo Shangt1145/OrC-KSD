@@ -131,13 +131,27 @@ public static class DslJson
         Keyword = op.Keyword,
         Zone = op.Zone,
         Script = op.Script,
-        Condition = op.Condition is null ? null : new ConditionDto { Kind = op.Condition.Kind, Raw = op.Condition.Raw },
+        Condition = op.Condition is null ? null : ToDto(op.Condition),
         Name = op.Name,
         Nested = op.Nested?.Select(ToDto).ToList(),
+        Until = op.Until,
     };
 
     private static FilterDto? ToDto(DslFilter? filter) =>
-        filter is null ? null : new FilterDto { UnitType = filter.UnitType, Keyword = filter.Keyword };
+        filter is null ? null : new FilterDto
+    {
+        UnitType = filter.UnitType,
+        Keyword = filter.Keyword,
+        Faction = filter.Faction,
+        ExcludeSelf = filter.ExcludeSelf ? true : null,
+    };
+
+    private static ConditionDto ToDto(DslCondition condition) => new()
+    {
+        Kind = condition.Kind,
+        Raw = condition.Raw,
+        All = condition.All?.Select(ToDto).ToList(),
+    };
 
     private static DslOp FromDto(OpDto dto)
     {
@@ -161,9 +175,10 @@ public static class DslJson
                 dto.Keyword,
                 dto.Zone,
                 dto.Script,
-                dto.Condition is null ? null : new DslCondition(dto.Condition.Kind ?? string.Empty, dto.Condition.Raw),
+                dto.Condition is null ? null : FromDto(dto.Condition),
                 dto.Name,
-                dto.Nested?.Select(FromDto).ToList());
+                dto.Nested?.Select(FromDto).ToList(),
+                dto.Until);
 
             var errors = DslOpRegistry.Validate(op);
             if (errors.Count > 0)
@@ -188,7 +203,8 @@ public static class DslJson
 
         try
         {
-            return new DslFilter(dto.UnitType, dto.Keyword);
+            return new DslFilter(
+                dto.UnitType, dto.Keyword, dto.Faction, dto.ExcludeSelf ?? false);
         }
         catch (ArgumentException ex)
         {
@@ -234,15 +250,29 @@ public static class DslJson
 
         public string? Name { get; set; }
 
+        /// <summary>期限（E1-41；<c>buff</c>/<c>costMod</c> 用；null＝无期限）。</summary>
+        public string? Until { get; set; }
+
+        /// <summary>目标字段（E1-56；仅 <c>aura</c>）。</summary>
+        public string? Field { get; set; }
+
         /// <summary>内嵌效果（递归 DSL）。</summary>
         public List<InstanceDto>? Nested { get; set; }
     }
+
+    private static DslCondition FromDto(ConditionDto dto) => new(
+        dto.Kind ?? string.Empty,
+        dto.Raw,
+        dto.All is { Count: > 0 } ? dto.All.Select(FromDto).ToList() : null);
 
     private sealed class ConditionDto
     {
         public string? Kind { get; set; }
 
         public string? Raw { get; set; }
+
+        /// <summary>合取子条件（仅 <c>all</c>；递归）。</summary>
+        public List<ConditionDto>? All { get; set; }
     }
 
     private sealed class SelectorDto
@@ -263,5 +293,12 @@ public static class DslJson
         public string? UnitType { get; set; }
 
         public string? Keyword { get; set; }
+
+        /// <summary>阵营（E1-56）。</summary>
+        public string? Faction { get; set; }
+
+        /// <summary>排除宿主自身（E1-56；null＝不排除——保持既有 JSON 可读）。</summary>
+        public bool? ExcludeSelf { get; set; }
+
     }
 }

@@ -36,8 +36,10 @@ public class CommandUpdateTests
         Assert.Equal(
             new[]
             {
-                GameUpdates.CardStatChanged, GameUpdates.CardDamaged,
-                GameUpdates.CardStatChanged, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged, GameUpdates.UnitDamageDealt, // E1-47：来源侧
+                GameUpdates.CardStatChanged, GameUpdates.CardDamaged, GameUpdates.UnitDamageDealt, // E1-47：反击方向
+                GameUpdates.UnitCombatSurvived, // E1-39：被攻击者交战存活
+                GameUpdates.UnitCombatSurvived, // E1-39：攻击者交战存活（观察序＝被攻击者在前、攻击者在后）
                 GameUpdates.PointChanged, // 收尾扣行动费（E1-25 后续：指挥走点数通用路径）
                 GameUpdates.UnitActed,    // E1-33：行动后（攻击收尾）
             },
@@ -115,7 +117,10 @@ public class CommandUpdateTests
             new[]
             {
                 GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardDamaged,
+                GameUpdates.UnitDamageDealt, // E1-47：来源侧（攻击者造成）
                 GameUpdates.CardStatChanged, GameUpdates.CardDamaged, // E1-33：受伤害（先数值、后伤害信号）
+                GameUpdates.UnitDamageDealt, // E1-47：来源侧（被攻击者反击造成）
+                GameUpdates.UnitCombatSurvived, // E1-39：攻击者交战存活（被攻击者已阵亡＝不发射）
                 GameUpdates.PointChanged, // 收尾扣行动费（E1-25 后续）
                 GameUpdates.UnitActed,    // E1-33：攻击者行动后（存活）
             },

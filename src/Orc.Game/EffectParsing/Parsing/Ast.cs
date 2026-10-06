@@ -130,8 +130,10 @@ public sealed class TargetPhrase
         bool excludeSelf,
         bool hasPronoun,
         string? pronounForm,
-        TextSpan span)
+        TextSpan span,
+        bool hasUnrecognizedQualifier = false)
     {
+        HasUnrecognizedQualifier = hasUnrecognizedQualifier;
         QuantifierRaw = quantifierRaw;
         QuantifierSel = quantifierSel;
         SideRaw = sideRaw;
@@ -177,6 +179,13 @@ public sealed class TargetPhrase
 
     /// <summary>原文区间。</summary>
     public TextSpan Span { get; }
+
+    /// <summary>
+    /// 目标区（**动词之前**）是否含**未识别限定词**（E1-52）：如 `相邻陆军`／`本单位左侧所有单位`／
+    /// `敌方指令`／`受伤单位`——此类限定词无法表达，**静默丢弃会产出错误目标**，故由语义层据此拒绝映射。
+    /// 纯句法虚词（`使`/`将`/`对`/`的`…）不计入。
+    /// </summary>
+    public bool HasUnrecognizedQualifier { get; }
 }
 
 /// <summary>数值载荷节点（本批仅整数——用户修订）。</summary>
@@ -231,6 +240,75 @@ public sealed class ActionPhrase
 public sealed record ConditionPhrase(string RawText, TextSpan Span);
 
 /// <summary>子句节点。</summary>
+/// <summary>
+/// **数值比较短语**（E1-57）：`&lt;左度量&gt; &lt;比较算子&gt; &lt;右操作数&gt;`——如
+/// `友方单位数 不小于 3`／`其攻击力 不大于 3`／`友方总部防御力 大于 敌方总部`。
+/// <para>左度量由**算子之前的**过滤短语/阵营/区域与"计数标记（`…数`）"判定；右操作数＝算子的数值，
+/// 或"同一度量在**另一方**上"（`敌方单位`/`敌方总部`）。</para>
+/// </summary>
+public sealed class ComparisonPhrase
+{
+    /// <summary>创建比较短语。</summary>
+    public ComparisonPhrase(
+        string opRaw,
+        string op,
+        IReadOnlyList<FilterPhrase> leftFilters,
+        string? leftSide,
+        string? leftZone,
+        bool leftIsCount,
+        int? rightValue,
+        bool rightIsCount,
+        string? rightSide,
+        string? rightZone,
+        TextSpan span)
+    {
+        OpRaw = opRaw;
+        Op = op;
+        LeftFilters = leftFilters;
+        LeftSide = leftSide;
+        LeftZone = leftZone;
+        LeftIsCount = leftIsCount;
+        RightValue = rightValue;
+        RightIsCount = rightIsCount;
+        RightSide = rightSide;
+        RightZone = rightZone;
+        Span = span;
+    }
+
+    /// <summary>算子原文（`不小于`…）。</summary>
+    public string OpRaw { get; }
+
+    /// <summary>算子键（`gte`／`lte`／`gt`／`lt`）。</summary>
+    public string Op { get; }
+
+    /// <summary>左度量的过滤短语（算子之前的属性/对象维度）。</summary>
+    public IReadOnlyList<FilterPhrase> LeftFilters { get; }
+
+    /// <summary>左度量阵营（`friendly`／`enemy`）。</summary>
+    public string? LeftSide { get; }
+
+    /// <summary>左度量区域（如 `hq`）。</summary>
+    public string? LeftZone { get; }
+
+    /// <summary>左度量是否"计数"（`…数`）。</summary>
+    public bool LeftIsCount { get; }
+
+    /// <summary>右操作数数值（无＝null）。</summary>
+    public int? RightValue { get; }
+
+    /// <summary>右操作数是否"计数"（`敌方单位`）。</summary>
+    public bool RightIsCount { get; }
+
+    /// <summary>右操作数阵营（引用形态）。</summary>
+    public string? RightSide { get; }
+
+    /// <summary>右操作数区域（引用形态）。</summary>
+    public string? RightZone { get; }
+
+    /// <summary>原文区间。</summary>
+    public TextSpan Span { get; }
+}
+
 public sealed class ClauseNode
 {
     /// <summary>创建子句节点。</summary>
@@ -239,14 +317,19 @@ public sealed class ClauseNode
         TargetPhrase? target,
         IReadOnlyList<ActionPhrase> actions,
         TextSpan span,
-        bool isTargetDeclaration = false)
+        bool isTargetDeclaration = false,
+        ComparisonPhrase? comparison = null)
     {
         Condition = condition;
         Target = target;
         Actions = actions;
         Span = span;
         IsTargetDeclaration = isTargetDeclaration;
+        Comparison = comparison;
     }
+
+    /// <summary>数值比较短语（E1-57；无＝null）。</summary>
+    public ComparisonPhrase? Comparison { get; }
 
     /// <summary>
     /// 是否**纯目标声明**子句（无动作、但含至少一个已识别 token）——用于"先声明目标、后接动作"句式

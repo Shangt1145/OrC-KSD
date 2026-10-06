@@ -9,8 +9,8 @@
     "mainTrigger": {
       "id": "t_attack",
       "stableKey": "tpl.attack_basic.main",
-      "kind": "active",
-      "viewType": "Orc.Game.Commanding.UnitAttackTriggerView",
+      "kind": "passive",
+      "viewType": "Orc.Game.Commanding.UnitAttackTriggerView, Orc.Game",
       "events": [
         { "id": "e1", "entry": "HandleAsync" }
       ]

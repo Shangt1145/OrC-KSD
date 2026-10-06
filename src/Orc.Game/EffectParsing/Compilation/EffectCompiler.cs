@@ -139,17 +139,120 @@ public sealed class EffectCompiler
 
     private static string ConditionExpression(DslCondition condition) => condition.Kind switch
     {
+        // 事件卡取值：card.* 载荷在 Card；unit.* 载荷在 Unit（E1-34——否则 unit.* 系守卫恒假）。
         DslCondition.OwnerSame =>
-            $"self is {CardBaseType} actorSelf && view.Card is {CardBaseType} actorEvent"
+            $"(view.Card ?? view.Unit) is {CardBaseType} actorEvent && self is {CardBaseType} actorSelf"
             + " && actorSelf.Owner is not null && object.ReferenceEquals(actorSelf.Owner, actorEvent.Owner)",
         DslCondition.OwnerDifferent =>
-            $"!(self is {CardBaseType} actorSelf && view.Card is {CardBaseType} actorEvent"
+            $"!((view.Card ?? view.Unit) is {CardBaseType} actorEvent && self is {CardBaseType} actorSelf"
             + " && actorSelf.Owner is not null && object.ReferenceEquals(actorSelf.Owner, actorEvent.Owner))",
+        // E1-39：载荷**只有玩家**（slot.gained/slot.lost）时按"宿主玩家 vs 载荷玩家"比较（事件卡面缺失，故取 Player）。
+        DslCondition.OwnerSameByPlayer =>
+            $"view.Player is {PlayerType} actorPlayer && self is {CardBaseType} actorSelf"
+            + " && actorSelf.Owner is not null && object.ReferenceEquals(actorSelf.Owner, actorPlayer)",
+        DslCondition.OwnerDifferentByPlayer =>
+            $"!(view.Player is {PlayerType} actorPlayer && self is {CardBaseType} actorSelf"
+            + " && actorSelf.Owner is not null && object.ReferenceEquals(actorSelf.Owner, actorPlayer))",
+        // E1-42/E1-54：事件卡属性过滤（`Raw` ＝ `维度:取值`）——真实 csx 守卫。
+        DslCondition.EventCardFilter => EventCardFilterExpression(condition.Raw),
+        // E1-47：载荷字段**自指**（`Raw` ＝ 视图属性名）——`object.ReferenceEquals(view.X, self)`。
+        DslCondition.PayloadSelf =>
+            $"object.ReferenceEquals(view.{ViewProperty(condition.Raw)}, self)",
+        // E1-47：载荷字段**是 HQ**（`Raw` ＝ 视图属性名）——`view.X is Hq`。
+        DslCondition.PayloadIsHq =>
+            $"view.{ViewProperty(condition.Raw)} is {HqType}",
+        // E1-50：载荷字段的**归属面**（`Raw` ＝ 视图属性名）——`(view.X as CardBase)?.Owner` 与 `self.Owner` 同一性。
+        DslCondition.PayloadOwnerSame =>
+            PayloadOwnerExpression(condition.Raw),
+        DslCondition.PayloadOwnerDifferent =>
+            "!(" + PayloadOwnerExpression(condition.Raw) + ")",
+        // E1-42：合取（`all`）——`(a && b && …)`；空＝恒真。
+        // E1-57：**数值比较条件**（真实求值；`Raw` ＝ 规范串）——求值是纯函数 ⇒ 可参与 `&&` 合取。
+        DslCondition.Compare => ComparisonSpec.IsValid(condition.Raw)
+            ? $"{RuntimeType}.EvaluateCondition(self, {CsStringLiteral(condition.Raw!)})"
+            : "false /* TODO 条件规范串非法 */",
+        DslCondition.AllKind =>
+            condition.All is { Count: > 0 }
+                ? "(" + string.Join(" && ", condition.All.Select(ConditionExpression)) + ")"
+                : "true",
         _ => $"false /* TODO 条件占位：{EscapeComment(condition.Raw)} */",
     };
 
+    /// <summary>C# 字符串字面量（csx 片段用；键/标识均为受控短串）。</summary>
+    private static string CsStringLiteral(string value) =>
+        "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+
     // csx 默认导入不含 Orc.Game.*，故游戏层类型一律**全限定**（否则编译失败——E1 编译校验会拦下）。
     private const string CardBaseType = "Orc.Game.Cards.CardBase";
+
+    private const string PlayerType = "Orc.Game.Players.Player";
+
+    private const string HqType = "Orc.Game.Players.Hq";
+
+    private const string TagDataType = "Orc.Game.Cards.TagData";
+
+    private const string RuntimeType = "Orc.Game.Effects.EffectRuntime";
+
+    /// <summary>
+    /// 视图属性名白名单（E1-47；`payload.self`/`payload.hq` 的 `Raw`）——**只允许已知可选面**，
+    /// 防止拼出的 csx 片段引用不存在的属性（编译期即失败，此处提前收敛）。
+    /// </summary>
+    private static readonly HashSet<string> ViewProperties = new(StringComparer.Ordinal)
+    {
+        "Card", "Unit", "Killer", "Player", "Host", "Effect",
+    };
+
+    /// <summary>
+    /// **事件卡属性过滤**的 csx 表达式（E1-54）：`Raw` ＝ `维度:取值`（取值经**枚举白名单**校验，
+    /// 不把原文拼进代码）；各维度用**互不相同的模式变量名**——多条经 `all` 合取时会落在同一表达式里。
+    /// </summary>
+    private static string EventCardFilterExpression(string? spec)
+    {
+        var text = spec ?? string.Empty;
+        var separator = text.IndexOf(':', StringComparison.Ordinal);
+        var dimension = separator < 0 ? text : text[..separator];
+        var value = separator < 0 ? string.Empty : text[(separator + 1)..];
+        var card = $"(view.Card as {CardBaseType})";
+
+        return dimension switch
+        {
+            "keyword" =>
+                $"{card} is {{ }} actorEventKeyword && actorEventKeyword.Keywords.Has({CsStringLiteral(value)})",
+            "tag" =>
+                $"{card} is {{ }} actorEventTagCard && actorEventTagCard.TryGetData<{TagDataType}>(out var actorEventTags)"
+                + $" && actorEventTags.ContainsTag({CsStringLiteral(value)})",
+            "category" => EnumValue<Orc.Game.Cards.CardCategory>(value) is { } category
+                ? $"{card} is {{ }} actorEventCategoryCard && actorEventCategoryCard.Definition.Category == {category}"
+                : "false /* TODO 未知卡类型 */",
+            "faction" => EnumValue<Orc.Game.Cards.Faction>(value) is { } faction
+                ? $"{card} is {{ }} actorEventFactionCard && actorEventFactionCard.Definition.Faction == {faction}"
+                : "false /* TODO 未知阵营 */",
+            "name" =>
+                $"{card} is {{ }} actorEventNameCard && string.Equals(actorEventNameCard.Name, {CsStringLiteral(value)}, System.StringComparison.Ordinal)",
+            _ => "false /* TODO 未知事件卡过滤维度 */",
+        };
+    }
+
+    /// <summary>枚举取值 → **全限定枚举字面量**（非法取值＝null——不把原文拼进代码）。</summary>
+    private static string? EnumValue<TEnum>(string value) where TEnum : struct, Enum =>
+        Enum.TryParse<TEnum>(value, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
+            ? $"{typeof(TEnum).FullName}.{parsed}"
+            : null;
+
+    /// <summary>
+    /// 载荷字段的归属比较表达式（E1-50）：`(view.X as CardBase)?.Owner` 与 `self.Owner` 同一性
+    /// （字段非卡/字段为空/任一 Owner 为空＝假）。
+    /// </summary>
+    private static string PayloadOwnerExpression(string? name)
+    {
+        var property = ViewProperty(name);
+        return $"(view.{property} as {CardBaseType})?.Owner is {{ }} actorEventOwner"
+            + $" && self is {CardBaseType} actorSelf && actorSelf.Owner is not null"
+            + " && object.ReferenceEquals(actorSelf.Owner, actorEventOwner)";
+    }
+
+    private static string ViewProperty(string? name) =>
+        name is not null && ViewProperties.Contains(name) ? name : "Card";
 
     private static string EscapeComment(string? text) =>
         text?.Replace("*/", "* /", StringComparison.Ordinal) ?? string.Empty;
@@ -198,9 +301,12 @@ public sealed class EffectCompiler
     private static string WrapHandler(string viewTypeName, string entryName, string body, ActorFrom actorFrom)
     {
         var builder = new StringBuilder();
-        // 视图类型一律**全限定**（csx 默认导入不含游戏层命名空间，如 Orc.Game.Commanding）。
-        builder.Append("Func<").Append(viewTypeName)
+        // 视图类型一律**全限定**（csx 默认导入不含游戏层命名空间，如 Orc.Game.Commanding）；
+        // 模板里可能带**程序集限定**（内核 Type.GetType 对跨程序集名只认限定名）——此处剥掉 ", Assembly" 部分再写代码。
+        var csTypeName = viewTypeName.Split(',')[0].Trim();
+        builder.Append("Func<").Append(csTypeName)
             .Append(", Context, CancellationToken, Task> ").Append(entryName)
+            .Append("")
             .AppendLine(" = async (view, ctx, ct) =>");
         builder.AppendLine("{");
         builder.Append("    var self = ").Append(

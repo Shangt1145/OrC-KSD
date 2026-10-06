@@ -36,7 +36,8 @@ public sealed class OpTemplateCatalog
     private static readonly HashSet<string> KnownPlaceholders = new(StringComparer.Ordinal)
     {
         "op", "amount", "count", "attack", "defense", "keyword", "zone", "script", "target", "filter",
-        "sel", "side", "filterUnitType", "filterKeyword", "name", "rawText",
+        "sel", "side", "filterUnitType", "filterKeyword", "name", "rawText", "until",
+        "selZone", "field", "auraFilter", "selThreshold",
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -167,8 +168,36 @@ public sealed class OpTemplateCatalog
         "rawText" => SanitizeComment(op.Script),
         "zone" => op.Zone is null ? "null" : StringLiteral(op.Zone),
         "script" => op.Script,
+        // E1-41：期限 → EffectDuration 枚举字面量（游戏层类型，全限定——csx 默认导入不含 Orc.Game.*）。
+        "until" => op.Until switch
+        {
+            null or "" => "Orc.Game.Effects.EffectDuration.Permanent",
+            "turnEnd" => "Orc.Game.Effects.EffectDuration.TurnEnd",
+            "nextOwnerTurnStart" => "Orc.Game.Effects.EffectDuration.NextOwnerTurnStart",
+            _ => "Orc.Game.Effects.EffectDuration.Permanent",
+        },
+        // E1-56：光环的目标字段（`attack`／`defense`／`opCost`／`deployCost`）。
+        "field" => op.Field is null ? "null" : StringLiteral(op.Field),
+        // E1-56：光环受益谓词（**一次渲染全部实参**——谓词本体在游戏层构造，不进 csx）。
+        "auraFilter" =>
+            "new Orc.Game.Effects.EffectAuraFilter("
+            + $"{StringLiteralOrNull(op.Target?.Side)}, {StringLiteralOrNull(op.Target?.Filter?.Faction)}, "
+            + $"{StringLiteralOrNull(op.Target?.Filter?.UnitType)}, {StringLiteralOrNull(op.Target?.Filter?.Keyword)}, "
+            + $"{(op.Target?.Filter?.ExcludeSelf == true ? "true" : "false")}, "
+
+            + $"{StringLiteralOrNull(op.Target?.Zone)})",
+        // E1-56：选择器区域（`frontline`／`support`）——E1-41 前一直是 `null`（**丢 zone 的近似**）。
+        "selZone" => op.Target?.Zone is null ? "null" : StringLiteral(op.Target.Zone),
+        // E1-57：目标阈值（`花费不大于 3 的单位`）——渲染为游戏层 `EffectThreshold`（或 null）。
+        "selThreshold" => op.Target?.Filter is
+            { ThresholdField: { } thresholdField, ThresholdOp: { } thresholdOp, ThresholdValue: { } thresholdValue }
+                ? "new Orc.Game.Effects.EffectThreshold("
+                  + $"{StringLiteral(thresholdField)}, {StringLiteral(thresholdOp)}, "
+                  + $"{thresholdValue.ToString(System.Globalization.CultureInfo.InvariantCulture)})"
+                : "null",
         // 选择器字段（供 EffectRuntime.SelectAsync 的 EffectSelector 实参）。
-        "sel" => StringLiteral(op.Target?.Sel ?? "one"),
+        // E1-41：**缺省＝self**——中文卡面省略主语时主语即"本单位"；原缺省 `one` 会取"第一个单位"（打错人）。
+        "sel" => StringLiteral(op.Target?.Sel ?? "self"),
         "side" => op.Target?.Side is null ? "null" : StringLiteral(op.Target.Side),
         "filterUnitType" => op.Target?.Filter?.UnitType is null ? "null" : StringLiteral(op.Target.Filter.UnitType),
         "filterKeyword" => op.Target?.Filter?.Keyword is null ? "null" : StringLiteral(op.Target.Filter.Keyword),
@@ -186,6 +215,9 @@ public sealed class OpTemplateCatalog
 
     private static string? Number(int? value) =>
         value?.ToString(CultureInfo.InvariantCulture);
+
+    private static string StringLiteralOrNull(string? value) =>
+        value is null ? "null" : StringLiteral(value);
 
     private static string StringLiteral(string value)
     {

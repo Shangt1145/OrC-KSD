@@ -224,6 +224,14 @@ public sealed class AstBuilder
         int? secondValue = null;
         string? secondRaw = null;
         var secondSpan = default(TextSpan);
+        var hasUnrecognizedQualifier = false;
+        string? comparisonOp = null;
+        var comparisonSpan = default(TextSpan);
+        int? comparisonRight = null;
+        var comparisonRightIsCount = false;
+        string? comparisonRightSide = null;
+        string? comparisonRightZone = null;
+        var leftIsCount = false;
 
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -241,10 +249,22 @@ public sealed class AstBuilder
                     quantifierSel ??= sel;
                     break;
                 case TokenType.Side:
+                    if (comparisonOp is not null)
+                    {
+                        comparisonRightSide ??= token.Get("value");
+                        break;
+                    }
+
                     sideRaw ??= token.Lexeme;
                     sideValue ??= token.Get("value");
                     break;
                 case TokenType.Zone:
+                    if (comparisonOp is not null)
+                    {
+                        comparisonRightZone ??= token.Get("value");
+                        break;
+                    }
+
                     zoneRaw ??= token.Lexeme;
                     zoneValue ??= token.Get("value");
                     break;
@@ -256,6 +276,28 @@ public sealed class AstBuilder
                         new TextSpan(token.Start, token.Length)));
                     break;
                 case TokenType.Num:
+                    // E1-57：**比较算子之后**的数值＝右操作数（不是动作载荷——否则 `消灭 1 个花费不大于 3 的单位`
+                    // 的 `3` 会被当成"第二数值"）。
+                    if (comparisonOp is not null && token.Start > comparisonSpan.Start)
+                    {
+                        comparisonRight ??= token.IntValue;
+                        break;
+                    }
+
+                    // E1-41：`[数字][量词(measure)]` 且**此子句尚未出现动作词** ⇒ 该数字是**数量短语**
+                    // （目标量词，如 `使 1 个友方步兵具有 +2 攻击力` 的 `1 个`），不是动作载荷；
+                    // 例外：紧跟**引号卡名**时仍是数量载荷（`将 3 张“X”加入手中`）。
+                    if (i + 1 < tokens.Count
+                        && tokens[i + 1].Type == TokenType.Quant
+                        && string.Equals(tokens[i + 1].Get("sel"), "measure", StringComparison.Ordinal)
+                        && actions.Count == 0
+                        && !(i + 2 < tokens.Count
+                             && tokens[i + 2].Type == TokenType.Filter
+                             && string.Equals(tokens[i + 2].Get("dimension"), "name", StringComparison.Ordinal)))
+                    {
+                        break;
+                    }
+
                     if (numberValue is null)
                     {
                         numberValue = token.IntValue;
@@ -281,11 +323,30 @@ public sealed class AstBuilder
                 case TokenType.Cond:
                     conditionRaw ??= token.Lexeme;
                     conditionSpan = new TextSpan(token.Start, token.Length);
+                    if (ComparisonOperators.TryGetValue(token.Lexeme, out var opKey))
+                    {
+                        comparisonOp = opKey;
+                        comparisonSpan = new TextSpan(token.Start, token.Length);
+                    }
+
                     break;
                 case TokenType.Unknown:
+                    // 计数标记＝`单位数` 这类**多字**未知段结尾的 `数`（裸 `数` 除外——如 `指挥点数` 的 `数`
+                    // 被过滤器切开后自成一字，不当计数）。
+                    if (comparisonOp is null && token.Lexeme.Trim().Length >= 2
+                        && token.Lexeme.TrimEnd().EndsWith('数'))
+                    {
+                        leftIsCount = true; // 友方单位数：计数度量（E1-57）
+                    }
+
                     if (actions.Count > 0)
                     {
                         objectParts.Add(token.Lexeme);
+                    }
+                    else if (!IsSyntacticParticle(token.Lexeme))
+                    {
+                        // 目标区的未识别限定词（E1-52）：记录在案，供语义层拒绝"静默丢弃限定词"的映射。
+                        hasUnrecognizedQualifier = true;
                     }
 
                     break;
@@ -294,6 +355,7 @@ public sealed class AstBuilder
 
         var span = new TextSpan(tokens[0].Start, tokens[^1].End - tokens[0].Start);
         var condition = conditionRaw is null ? null : new ConditionPhrase(conditionRaw, conditionSpan);
+        var comparison = BuildComparison(tokens, comparisonOp, comparisonSpan, comparisonRight, comparisonRightSide, comparisonRightZone, leftIsCount, sideValue, zoneValue, span);
 
         var hasQualifier = quantifierRaw is not null || sideRaw is not null || zoneRaw is not null || filters.Count > 0;
         TargetPhrase? target;
@@ -305,7 +367,7 @@ public sealed class AstBuilder
         {
             target = new TargetPhrase(
                 quantifierRaw, quantifierSel, sideRaw, sideValue, zoneRaw, zoneValue,
-                filters, excludeSelf: false, hasPronoun, pronounForm, span);
+                filters, excludeSelf: false, hasPronoun, pronounForm, span, hasUnrecognizedQualifier);
             lastTarget = target;
         }
 
@@ -313,7 +375,7 @@ public sealed class AstBuilder
         {
             // 纯目标声明判定：无动作、但含至少一个**已识别** token（如「指向 1 个单位」）。
             var isDeclaration = tokens.Any(token => token.Type != TokenType.Unknown);
-            return new ClauseNode(condition, target, Array.Empty<ActionPhrase>(), span, isDeclaration);
+            return new ClauseNode(condition, target, Array.Empty<ActionPhrase>(), span, isDeclaration, comparison);
         }
 
         var actionPhrases = actions
@@ -343,7 +405,83 @@ public sealed class AstBuilder
             actionPhrases[attach] = new ActionPhrase(source.Verb, source.Key, objectRaw, payload, source.Span, secondary);
         }
 
-        return new ClauseNode(condition, target, actionPhrases, span);
+        return new ClauseNode(condition, target, actionPhrases, span, comparison: comparison);
+    }
+
+    /// <summary>
+    /// 构造**数值比较短语**（E1-57）：左度量＝算子**之前**的过滤短语（属性/对象维度）＋阵营/区域＋计数标记。
+    /// </summary>
+    private static ComparisonPhrase? BuildComparison(
+        List<Token> tokens,
+        string? op,
+        TextSpan opSpan,
+        int? rightValue,
+        string? rightSide,
+        string? rightZone,
+        bool leftIsCount,
+        string? leftSide,
+        string? leftZone,
+        TextSpan span)
+    {
+        if (op is null)
+        {
+            return null;
+        }
+
+        var left = new List<FilterPhrase>();
+        foreach (var token in tokens)
+        {
+            if (token.Type == TokenType.Filter && token.Start < opSpan.Start)
+            {
+                left.Add(new FilterPhrase(
+                    ParseFilterKind(token.Get("dimension")), token.Lexeme, token.Get("value"), new TextSpan(token.Start, token.Length)));
+            }
+        }
+
+        var rightIsCount = rightValue is null && rightSide is not null;
+        return new ComparisonPhrase(
+            tokens.First(token => token.Start == opSpan.Start && token.Length == opSpan.Length).Lexeme,
+            op, left, leftSide, leftZone, leftIsCount,
+            rightValue, rightIsCount, rightSide, rightZone, new TextSpan(opSpan.Start, opSpan.Length));
+    }
+
+    /// <summary>
+    /// 纯句法虚词（E1-52）：出现在动词前也不构成"未识别限定词"——如 `使 1 个友方步兵具有…` 的 `使`、
+    /// `对 1 个敌方单位造成…` 的 `对`。**只收虚词**（不收实义词：`相邻`／`单位`／`指令`／`陆军`… 仍视为限定词）。
+    /// </summary>
+    /// <summary>比较算子词表（E1-57）：不小于／不大于／大于／小于 ⇒ 键。</summary>
+    private static readonly Dictionary<string, string> ComparisonOperators = new(StringComparer.Ordinal)
+    {
+        ["不小于"] = "gte",
+        ["不大于"] = "lte",
+        ["大于"] = "gt",
+        ["小于"] = "lt",
+        ["等于"] = "eq",
+    };
+
+    private static bool IsSyntacticParticle(string lexeme)
+    {
+        var trimmed = lexeme.Replace(" ", string.Empty, StringComparison.Ordinal);
+
+        // 通用名词（"单位/卡牌/牌"）：本身不承载限定语义（`1 个友方单位`／`所有敌方单位`），
+        // 而其**修饰词**（`受伤单位`／`相邻陆军` 等）各自成段、仍会被判为限定词。
+        if (trimmed is "单位" or "卡牌" or "牌" or "其他" or "其它")
+        {
+            return true;
+        }
+
+        // `其他/其它` 的部分片段（`其` 是代词、余下字符自成一未知段）——E1-56 由排除自身维度承载。
+        if (trimmed is "他" or "它" or "其")
+        {
+            return true;
+        }
+
+        return trimmed.Length > 0 && trimmed.Length <= 2 && (trimmed[0]) switch
+        {
+            '使' or '令' or '将' or '把' or '对' or '向' or '给' or '与' or '和' or '且' or '并'
+                or '的' or '之' or '于' or '为' or '则' or '后' or '前' or '时' or '中' or '内' or '外' => true,
+            _ => false,
+        };
     }
 
     private static FilterKind ParseFilterKind(string? dimension) => dimension switch

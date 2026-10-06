@@ -173,7 +173,16 @@ public static class GameHooks
     /// <summary>单位行动后（<c>unit.acted</c>；E1-33）。</summary>
     public const string UnitActed = GameUpdates.UnitActed;
 
-    /// <summary>对外信号全量（26 条；稳定序＝定义序）。</summary>
+    /// <summary>交战并存活（<c>unit.combat.survived</c>；E1-39）。</summary>
+    public const string UnitCombatSurvived = GameUpdates.UnitCombatSurvived;
+
+    /// <summary>造成伤害（<c>unit.damage.dealt</c>；E1-47）。</summary>
+    public const string UnitDamageDealt = GameUpdates.UnitDamageDealt;
+
+    /// <summary>反制触发（<c>counter.triggered</c>；E1-53）。</summary>
+    public const string CounterTriggered = GameUpdates.CounterTriggered;
+
+    /// <summary>对外信号全量（29 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> Signals { get; } = new[]
     {
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
@@ -183,10 +192,10 @@ public static class GameHooks
         DeckShuffled, UnitTypesChanged,
         SlotGained, SlotLost, SlotChanged,
         PointGained, PointLost, PointChanged,
-        CardDamaged, UnitActed,
+        CardDamaged, UnitActed, UnitCombatSurvived, UnitDamageDealt, CounterTriggered,
     };
 
-    // ---------- 载荷键（15 条；转发引用 GameUpdates） ----------
+    // ---------- 载荷键（16 条；转发引用 GameUpdates） ----------
 
     /// <summary>载荷键：玩家。</summary>
     public const string PayloadPlayer = GameUpdates.PayloadPlayer;
@@ -233,12 +242,16 @@ public static class GameHooks
     /// <summary>载荷键：新点数。</summary>
     public const string PayloadNewPoints = GameUpdates.PayloadNewPoints;
 
-    /// <summary>载荷键全量（15 条；稳定序＝定义序）。</summary>
+    /// <summary>载荷键：击杀者（E1-47）。</summary>
+    public const string PayloadKiller = GameUpdates.PayloadKiller;
+
+    /// <summary>载荷键全量（16 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> PayloadKeys { get; } = new[]
     {
         PayloadPlayer, PayloadTurnNumber, PayloadCard, PayloadUnit, PayloadPosition,
         PayloadOldPosition, PayloadNewPosition, PayloadChangedFields, PayloadDeck, PayloadAddedType,
         PayloadAmount, PayloadOldSlots, PayloadNewSlots, PayloadOldPoints, PayloadNewPoints,
+        PayloadKiller,
     };
 
     // ---------- 判定器名（21 条；转发引用 JudicatorNames） ----------

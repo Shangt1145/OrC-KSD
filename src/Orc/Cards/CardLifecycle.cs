@@ -25,6 +25,30 @@ public class CardEventView
     [Optional]
     [Read]
     public virtual object? Host { get; set; }
+
+    /// <summary>
+    /// 事件单位（E1-34 加性可选面）：<c>unit.*</c> 系列信号（<c>unit.joined</c>/<c>unit.deployed</c>/<c>unit.position.changed</c>）
+    /// 的载荷键是 <c>Unit</c> 而**非** <c>Card</c>；本属性让视图侧也能取到"事件卡"（归属过滤等按卡语义比较用）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual object? Unit { get; set; }
+
+    /// <summary>
+    /// 事件玩家（E1-39 加性可选面）：载荷**只有玩家、没有事件卡**的信号（如 <c>slot.gained</c>/<c>slot.lost</c>）
+    /// 的载荷键是 <c>Player</c>；本属性让视图侧也能取到"事件归属玩家"（归属过滤的玩家面比较用）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual object? Player { get; set; }
+
+    /// <summary>
+    /// 击杀者（E1-47 加性可选面）：<c>card.died</c> 的载荷键 <c>Killer</c>（可为 null）；
+    /// 供"本单位消灭…时"类监听按**归属**过滤（自指守卫读本面）。
+    /// </summary>
+    [Optional]
+    [Read]
+    public virtual object? Killer { get; set; }
 }
 
 /// <summary>S4 更新与流程载荷键名约定（card.placed / effect.removed / card.destroyed；攻击/伤害结算流程视图属性同名）。</summary>

@@ -58,22 +58,35 @@ public sealed class SemanticMapper
         // 触发 → 模板（多事件展开）
         if (ast.Trigger is { Kind: TriggerSyntaxKind.Listen } listen)
         {
-            var listenTemplate = ResolveListenTemplate(listen.RawText);
-            if (listenTemplate is null)
+            // 事件卡过滤的**原文切片**（含引号——`listen.RawText` 已剥引号，卡名维度须用原切片）。
+            var listenOriginal = RawOf(original, listen.Span);
+            var listenTemplate = ResolveListenTemplate(listen.RawText, listenOriginal, out var eventCardFilters);
+            if (listenTemplate is null
+                || (NeedsPayloadSubject(listenTemplate) && PayloadGuardOf(listenTemplate, listen.RawText) is null))
             {
+                // 主体不可辨识（既非"本单位"也非"友方/敌方单位"）⇒ 显式失败（不泛触发）。
                 unresolved.Add(Fail(original, ast.Span, $"监听型触发暂不在子集内：'{listen.RawText}'。"));
                 return;
             }
 
-            // 归属过滤（A）：监听短语里的阵营 → owner 条件（真实 csx；仅当载荷携带事件卡时可用）。
-            var sideCondition = SupportsOwnerFilter(listenTemplate)
-                ? listen.SideValue switch
-                {
-                    "friendly" => new DslCondition(DslCondition.OwnerSame),
-                    "enemy" => new DslCondition(DslCondition.OwnerDifferent),
-                    _ => null,
-                }
-                : null;
+            // 归属过滤（A）：监听短语里的阵营 → owner 条件（真实 csx；仅当**载荷面**能承载归属比较时可用）。
+            // 事件卡属性过滤（E1-42 乙）：`使用情报牌时` 等 → **事件卡词条守卫**（真实 csx）。
+            // 自指/受方面过滤（E1-47）：`本单位造成伤害时`／`本单位消灭…时`／`…对敌方总部…` → **载荷字段守卫**。
+            // 三者可并存 ⇒ 合成**合取**条件（`all`）。
+            var guards = new List<DslCondition?>();
+            if (OwnerGuardKind(listenTemplate, listen.SideValue) is { } guardKind)
+            {
+                guards.Add(new DslCondition(guardKind));
+            }
+
+            // 事件卡属性过滤（可多维——**扁平**合取，避免嵌套 all）。
+            foreach (var filter in eventCardFilters)
+            {
+                guards.Add(new DslCondition(DslCondition.EventCardFilter, filter));
+            }
+
+            guards.Add(PayloadGuardOf(listenTemplate, listen.RawText));
+            var sideCondition = CombineGuards(guards.ToArray());
 
             if (!TryBuildOps(original, ast, out var listenOps, out var listenFailures, sideCondition))
             {
@@ -133,6 +146,81 @@ public sealed class SemanticMapper
         }
     }
 
+    /// <summary>
+    /// **数值比较 → 条件规范串**（E1-57）：只产出**可求值**的形态，其余返回 null（交回 `raw` 占位）。
+    /// <para>左度量：`友方单位数`（计数）／`剩余指挥点数`（视角玩家资源）／`友方总部防御力`（己方 HQ 属性）。
+    /// 右操作数：`#n` 或**同类度量在另一方**（`敌方单位`；敌方 HQ 属性因缺"对手对象"而**不接**，
+    /// 与求值层保持一致 ⇒ 侧向引用为 `#n`/计数时才产出）。</para>
+    /// </summary>
+    private static string? ComparisonSpecOf(ComparisonPhrase? comparison)
+    {
+        if (comparison is null)
+        {
+            return null;
+        }
+
+        var left = MeasureSpec(comparison.LeftFilters, comparison.LeftSide, comparison.LeftZone, comparison.LeftIsCount);
+        if (left is null)
+        {
+            return null;
+        }
+
+        string right;
+        if (comparison.RightValue is { } literal)
+        {
+            right = "#" + literal;
+        }
+        else if (comparison.LeftIsCount && comparison.RightSide is { } rightSide)
+        {
+            right = $"count=s={rightSide}";
+        }
+        else
+        {
+            return null; // 侧向引用形态（如 `大于敌方总部`）暂不可求值 ⇒ 交回占位。
+        }
+
+        return $"{left}:{comparison.Op}:{right}";
+    }
+
+    /// <summary>
+    /// **目标阈值**比较（E1-57）：左度量是**可被选中的卡的属性**（`攻击力`／`防御力`／`花费`）且右操作数是数值
+    /// ⇒ 作为选择器过滤（`(字段, 算子, 取值)`）；"计数/区域"形态（`友方单位数`／`友方总部防御力`）→ null（走全局条件）。
+    /// </summary>
+    private static (string Field, string Op, int Value)? ThresholdOf(ComparisonPhrase? comparison)
+    {
+        if (comparison is null || comparison.LeftIsCount || comparison.LeftZone is not null
+            || comparison.RightValue is not { } value)
+        {
+            return null;
+        }
+
+        var attribute = FindFilter(comparison.LeftFilters, FilterKind.Attribute);
+        var objectNoun = FindFilter(comparison.LeftFilters, FilterKind.Object);
+        var field = attribute ?? (objectNoun == "opCost" ? "opCost" : null);
+        return field is null ? null : (field, comparison.Op, value);
+    }
+
+    /// <summary>度量规范（`count:`／`points:`／`stat:`；不可表达＝null）。</summary>
+    private static string? MeasureSpec(
+        IReadOnlyList<FilterPhrase> filters, string? side, string? zone, bool isCount)
+    {
+        if (isCount)
+        {
+            return $"count=s={side ?? "friendly"}";
+        }
+
+        var objectNoun = FindFilter(filters, FilterKind.Object);
+        if (objectNoun == "point")
+        {
+            return "points=s=friendly"; // `剩余指挥点数`＝视角玩家资源
+        }
+
+        var attribute = FindFilter(filters, FilterKind.Attribute);
+        return attribute is not null && zone == "hq" && side is not null
+            ? $"stat=f={attribute};s={side};z=hq"
+            : null;
+    }
+
     /// <summary>模板的（唯一）槽位名：部署骨架＝<c>on_deploy</c>；监听/事件骨架＝<c>on_event</c>。</summary>
     private static string SlotNameFor(string template) =>
         string.Equals(template, DefaultTemplate, StringComparison.Ordinal) ? "on_deploy" : "on_event";
@@ -148,11 +236,33 @@ public sealed class SemanticMapper
         failures = new List<UnresolvedRecord>();
         var ok = true;
 
-        // 前置扫：纯条件子句（无动作）＝整效果的占位条件（甲：结构支持）——归属过滤用 owner（真实 csx）。
+        // E1-41：期限（`直到回合结束`／`本回合…`／`直到下个友方回合开始`）——**整效果**颗粒度（子句切分后
+        // 「本回合」往往自成前置子句，逐子句识别会漏）；取值见 Dsl.Untils。
+        var effectText = RawOf(original, ast.Span);
+        var until = UntilOf(effectText);
+
+        // E1-56：**静态/持续**文本（无触发且无期限）⇒ `具有 ±N` 走**光环**（受益随进出/位置实时重算）；
+        // 触发体内的一次性动作仍走修饰器（`buff`/`costMod`，可带期限）。
+        var staticText = ast.Trigger is null && until is null;
+        var excludeSelf = effectText.Contains("其他", StringComparison.Ordinal)
+                          || effectText.Contains("其它", StringComparison.Ordinal);
+
+        // 前置扫：**纯条件子句**（无动作）＝整效果的条件——
+        // E1-57：可识别的**数值比较**（`若友方单位数不小于 3`）⇒ **真实条件**（求值是纯函数）；
+        // 其余（`若有友方动员单位`／`若上回合没有被攻击`…）⇒ `raw` 占位（`if (false)`）。
         var defaultCondition = effectCondition;
         foreach (var clause in ast.Clauses)
         {
-            if (clause.Condition is not null && clause.Actions.Count == 0)
+            if (clause.Actions.Count > 0)
+            {
+                continue;
+            }
+
+            if (ComparisonSpecOf(clause.Comparison) is { } spec)
+            {
+                defaultCondition = new DslCondition(DslCondition.Compare, spec);
+            }
+            else if (clause.Condition is not null)
             {
                 defaultCondition = new DslCondition(DslCondition.RawKind, clause.Condition.RawText);
             }
@@ -160,9 +270,14 @@ public sealed class SemanticMapper
 
         foreach (var clause in ast.Clauses)
         {
+            // E1-57：同子句的**目标阈值**比较（`消灭 1 个花费不大于 3 的单位`）⇒ 落到**选择器过滤**
+            // （不再是占位条件——占位＝`if (false)`＝效果永不执行）。
+            var threshold = ThresholdOf(clause.Comparison);
             var condition = clause.Condition is null
                 ? defaultCondition
-                : new DslCondition(DslCondition.RawKind, clause.Condition.RawText);
+                : threshold is not null
+                    ? null
+                    : new DslCondition(DslCondition.RawKind, clause.Condition.RawText);
 
             if (clause.Actions.Count == 0)
             {
@@ -178,27 +293,90 @@ public sealed class SemanticMapper
 
             foreach (var action in clause.Actions)
             {
-                if (TryMapAction(action, clause.Target, out var op, out var reason))
+                var clauseText = RawOf(original, clause.Span);
+
+                if (string.Equals(action.VerbKey, "state", StringComparison.Ordinal))
                 {
-                    ops.Add(WithCondition(op, condition));
+                    if (TryMapStateAction(
+                        action, clause.Target, effectText, staticText, excludeSelf, threshold, out var stateOps, out var stateReason))
+                    {
+                        foreach (var stateOp in stateOps)
+                        {
+                            if (until is not null && stateOp.Op is not ("buff" or "costMod"))
+                            {
+                                // 期限不可承载（如 grant 无期限面）⇒ 不产"永久"错误效果，改留痕 needsCsx。
+                                ops.Add(WithCondition(
+                                    new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
+                                continue;
+                            }
+
+                            ops.Add(WithCondition(WithUntil(stateOp, until), condition));
+                        }
+
+                        continue;
+                    }
+
+                    _ = stateReason;
+                    ops.Add(WithCondition(new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
+                    continue;
+                }
+
+                if (TryMapAction(action, clause.Target, threshold, out var op, out var reason))
+                {
+                    // 期限只对**可承载期限**的 op 有意义（buff/costMod）；其余（如 grant 无期限面）
+                    // 若带期限 ⇒ 不产"永久"错误效果，改留痕 needsCsx（E1-41）。
+                    if (until is not null && op.Op is not ("buff" or "costMod"))
+                    {
+                        ops.Add(WithCondition(new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
+                        continue;
+                    }
+
+                    ops.Add(WithCondition(WithUntil(op, until), condition));
                     continue;
                 }
 
                 // 「op 无法解析」（非句式）⇒ **原文保留进 DSL** 并标记"需要 csx 实现"（用户口径）——
                 // 不产未解析记录（句式层失败才计未解析）。
                 _ = reason;
-                ops.Add(WithCondition(
-                    new DslOp(DslOpRegistry.NeedsCsxOpName, script: RawOf(original, clause.Span)),
-                    condition));
+                ops.Add(WithCondition(new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
             }
         }
 
         if (ops.Count == 0)
         {
             ok = false;
+
+            // R8 修正（E1-38）：**整效果颗粒度**上不得"既无效果、又无诊断"。
+            // 此前纯目标声明/纯条件子句在 `clause.Actions.Count == 0` 分支里 continue（不计失败），
+            // 而此处只置 ok=false **不补记录** ⇒ 调用方 `unresolved.AddRange(failures)` 加了 0 条
+            // ⇒ 整卡**静默丢弃**（语料实测 295 条：既无效果、也无未解析记录——违反 R8「不静默丢弃」）。
+            // 现：以**整效果**为粒度补一条诊断（不改变"子句颗粒度不计失败"的既定口径——E1-20 的意图保留）。
+            if (failures.Count == 0)
+            {
+                var declaration = FindTargetDeclaration(ast);
+                failures.Add(declaration is null
+                    ? Fail(original, ast.Clauses.Count > 0 ? ast.Clauses[0].Span : ast.Span,
+                        "未产出任何可执行效果（整条均为条件/无动作短语）。")
+                    : Fail(original, declaration.Span,
+                        "未产出任何可执行效果（整条均为目标声明/回指，无动作短语）。"));
+            }
         }
 
         return ok;
+    }
+
+    /// <summary>取首个"纯目标声明"子句（用于整效果无产出时的诊断定位；无＝null）。</summary>
+    private static ClauseNode? FindTargetDeclaration(EffectAst ast)
+    {
+        foreach (var clause in ast.Clauses)
+        {
+            if (clause.Actions.Count == 0 && clause.IsTargetDeclaration)
+            {
+                return clause;
+            }
+        }
+
+        return null;
     }
 
     private static DslOp WithCondition(DslOp op, DslCondition? condition) =>
@@ -206,17 +384,22 @@ public sealed class SemanticMapper
             ? op
             : new DslOp(
                 op.Op, op.Target, op.Filter, op.Amount, op.Count, op.Attack, op.Defense,
-                op.Keyword, op.Zone, op.Script, condition, op.Name, op.Nested);
+                op.Keyword, op.Zone, op.Script, condition, op.Name, op.Nested, op.Until);
 
     /// <summary>引号内容是否"本身是一段效果"（含触发界定符或句号 ⇒ 判为内嵌效果文本，而非卡名）。</summary>
     private static bool LooksLikeNestedEffect(string quoted) =>
         quoted.Contains('：') || quoted.Contains(':') || quoted.Contains('。');
 
-    private bool TryMapAction(ActionPhrase action, TargetPhrase? target, out DslOp op, out string? reason)
+    private bool TryMapAction(
+        ActionPhrase action,
+        TargetPhrase? target,
+        (string Field, string Op, int Value)? threshold,
+        out DslOp op,
+        out string? reason)
     {
         op = null!;
         reason = null;
-        var selector = BuildSelector(target);
+        var selector = BuildSelector(target, action, threshold: threshold);
 
         switch (action.VerbKey)
         {
@@ -385,25 +568,266 @@ public sealed class SemanticMapper
         }
     }
 
-    private static DslSelector? BuildSelector(TargetPhrase? target)
+    /// <summary>
+    /// 「具有」类状态/属性描述（E1-41）：动词**之后**的过滤短语＝宾语（属性/词条/花费），可含多项
+    /// （`+1 攻击力和奋战`）⇒ 展开为多个 op。
+    /// <para>**保守守卫**：整效果文本含**计数/对抗/相位**语式（`每有`/`对抗`/`回合中`/`每回合`）时不做映射——
+    /// 那些语式映射成"单次无条件"即为语义错误（交由 `needsCsx` 留痕）。</para>
+    /// </summary>
+    private static bool TryMapStateAction(
+        ActionPhrase action,
+        TargetPhrase? target,
+        string effectText,
+        bool staticText,
+        bool excludeSelf,
+        (string Field, string Op, int Value)? threshold,
+        out List<DslOp> ops,
+        out string? reason)
+    {
+        ops = new List<DslOp>();
+        reason = null;
+
+        if (HasUnmappableStateModifier(effectText))
+        {
+            reason = "持续态含计数/对抗/相位条件（暂不可表达）。";
+            return false;
+        }
+
+        // E1-52（**正确性修正**）：**目标区的未识别限定词**（`相邻陆军`／`本单位左侧所有单位`／`敌方指令`／
+        // `谢尔曼`／`受伤单位`／`手牌中的所有单位`…）一旦存在，目标就**不可精确表达**——
+        // 静默丢弃它们会产出"打到宿主自己/全场"的**错误效果** ⇒ 一律拒绝（落 needsCsx）。
+        if (target?.HasUnrecognizedQualifier == true)
+        {
+            reason = "状态描述的目标区含未识别限定词——目标不可精确表达。";
+            return false;
+        }
+
+        // 宾语区的未识别词（`具有 山地` 等）同理拒绝。
+        if (!string.IsNullOrWhiteSpace(action.ObjectRaw))
+        {
+            reason = $"状态描述含未识别宾语（'{action.ObjectRaw}'）——不可表达。";
+            return false;
+        }
+
+        var selector = BuildSelector(target, action, excludeSelf, threshold);
+        var objects = ObjectFilters(target, action);
+
+        // `具有 +1+1`（两个数、无属性名词）＝攻击力/防御力。
+        if (action.Payload is not null && action.SecondaryPayload is not null
+            && FindFilter(objects, FilterKind.Attribute) is null)
+        {
+            ops.Add(new DslOp("buff", selector, attack: action.Payload.Int, defense: action.SecondaryPayload.Int));
+            return true;
+        }
+
+        // E1-52：**两个数值 ＋ 属性名词**＝歧义（首个数值多属限定词，如 `防御力为 1 的友方步兵具有 +2 攻击力`）
+        // ⇒ 拒绝（避免把限定值当成增益量）。
+        if (action.Payload is not null && action.SecondaryPayload is not null)
+        {
+            reason = "状态描述含两个数值（限定值与增益量歧义）——不可表达。";
+            return false;
+        }
+
+        foreach (var phrase in objects)
+        {
+            switch (phrase.Kind)
+            {
+                case FilterKind.Attribute when action.Payload is not null:
+                    ops.Add(string.Equals(phrase.Value, "attack", StringComparison.Ordinal)
+                        ? new DslOp("buff", selector, attack: action.Payload.Int)
+                        : new DslOp("buff", selector, defense: action.Payload.Int));
+                    break;
+                case FilterKind.Object when string.Equals(phrase.Value, "opCost", StringComparison.Ordinal)
+                                           && action.Payload is not null:
+                    ops.Add(new DslOp("costMod", selector, amount: action.Payload.Int));
+                    break;
+                case FilterKind.Keyword when !string.IsNullOrWhiteSpace(phrase.Value):
+                    ops.Add(new DslOp("grant", selector, keyword: phrase.Value));
+                    break;
+                default:
+                    break; // 未支持宾语（未实现词条/阈值等）→ 不产 op（由下方"无产出"判定兜底）
+            }
+        }
+
+        if (ops.Count == 0)
+        {
+            reason = "『具有』后无法判定的宾语。";
+            return false;
+        }
+
+        // E1-56：静态文本 ⇒ `buff`/`costMod` 改走**光环**（受益集合随进出/位置实时重算）。
+        if (staticText)
+        {
+            ops = ToAuraOps(ops);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 把"持续态"的 `buff`/`costMod` 转换为**光环** op（E1-56）：`buff(atk)` ⇒ `aura(field=attack)`、
+    /// `buff(def)` ⇒ `aura(field=defense)`、`buff(atk,def)` ⇒ **两条**、`costMod` ⇒ `aura(field=opCost)`；
+    /// 其余（如 `grant` —— 词条无光环面）**原样保留**（一次性授予，登记为待改进）。
+    /// </summary>
+    private static List<DslOp> ToAuraOps(IReadOnlyList<DslOp> ops)
+    {
+        var result = new List<DslOp>();
+        foreach (var op in ops)
+        {
+            switch (op.Op)
+            {
+                case "buff" when op.Attack is { } attackValue:
+                    result.Add(AuraOp(op, "attack", attackValue));
+                    if (op.Defense is { } defenseValue)
+                    {
+                        result.Add(AuraOp(op, "defense", defenseValue));
+                    }
+
+                    break;
+                case "buff" when op.Defense is { } onlyDefense:
+                    result.Add(AuraOp(op, "defense", onlyDefense));
+                    break;
+                case "costMod" when op.Amount is { } amount:
+                    result.Add(AuraOp(op, "opCost", amount));
+                    break;
+                default:
+                    result.Add(op);
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    private static DslOp AuraOp(DslOp source, string field, int amount) =>
+        new("aura", source.Target, source.Filter, amount: amount, field: field);
+
+    /// <summary>
+    /// 持续态守卫（E1-41）：**计数/对抗/相位**语式——映射成"单次无条件"即语义错误，故整效果不做映射。
+    /// </summary>
+    private static bool HasUnmappableStateModifier(string text) =>
+        text.Contains("每有", StringComparison.Ordinal)
+        || text.Contains("每拥有", StringComparison.Ordinal)
+        || text.Contains("每回合", StringComparison.Ordinal)
+        || text.Contains("对抗", StringComparison.Ordinal)
+        || text.Contains("回合中", StringComparison.Ordinal)
+        || text.Contains("交战", StringComparison.Ordinal)
+        || text.Contains("对战时", StringComparison.Ordinal);
+    // 注：`其他/其它`（排除自身）已由 E1-56 的过滤维度 `excludeSelf` 承载（不再是"不可表达"）。
+
+    /// <summary>整效果文本里的**期限**语式 → <see cref="Untils"/> 取值（无＝null）。</summary>
+    private static string? UntilOf(string text)
+    {
+        if (text.Contains("直到下个友方回合开始", StringComparison.Ordinal)
+            || text.Contains("直到你的下个回合开始", StringComparison.Ordinal)
+            || text.Contains("直到下个回合开始", StringComparison.Ordinal))
+        {
+            return Untils.NextOwnerTurnStart;
+        }
+
+        if (text.Contains("直到回合结束", StringComparison.Ordinal)
+            || text.Contains("直到本回合结束", StringComparison.Ordinal)
+            || text.Contains("本回合", StringComparison.Ordinal))
+        {
+            return Untils.TurnEnd;
+        }
+
+        return null;
+    }
+
+    /// <summary>补写期限（其它字段原样保留）。</summary>
+    private static DslOp WithUntil(DslOp op, string? until) =>
+        until is null
+            ? op
+            : new DslOp(
+                op.Op, op.Target, op.Filter, op.Amount, op.Count, op.Attack, op.Defense,
+                op.Keyword, op.Zone, op.Script, op.Condition, op.Name, op.Nested, until);
+
+    private static DslSelector? BuildSelector(
+        TargetPhrase? target,
+        ActionPhrase? action = null,
+        bool excludeSelf = false,
+        (string Field, string Op, int Value)? threshold = null)
     {
         if (target is null)
         {
             return null;
         }
 
+        // E1-41：**动词之后**的过滤短语是"动作的宾语"（如 `具有 +1 攻击力`、`获得闪击`），
+        // 不是目标限定词——否则会被当成 target 过滤（`获得闪击` 会变成"选一个带闪击的单位"）。
+        var qualifiers = QualifierFilters(target, action);
         var hasQualifier = target.QuantifierSel is not null || target.SideValue is not null
-                           || target.ZoneValue is not null || target.Filters.Count > 0;
+                           || target.ZoneValue is not null || qualifiers.Count > 0 || excludeSelf
+                           || threshold is not null;
         if (!hasQualifier)
         {
             return null;
         }
 
-        var unitType = FindFilter(target, FilterKind.UnitType);
-        var keyword = FindFilter(target, FilterKind.Keyword);
-        var filter = unitType is null && keyword is null ? null : new DslFilter(unitType, keyword);
+        var unitType = FindFilter(qualifiers, FilterKind.UnitType);
+        var keyword = FindFilter(qualifiers, FilterKind.Keyword);
+        var filter = unitType is null && keyword is null && !excludeSelf && threshold is null
+            ? null
+            : new DslFilter(
+                unitType, keyword, excludeSelf: excludeSelf,
+                thresholdField: threshold?.Field, thresholdOp: threshold?.Op, thresholdValue: threshold?.Value);
 
         return new DslSelector(target.QuantifierSel ?? "one", target.SideValue, target.ZoneValue, filter, null);
+    }
+
+    /// <summary>目标限定词（过滤短语中位于**动词之前**者；动词之后者＝动作宾语——E1-41）。</summary>
+    private static IReadOnlyList<FilterPhrase> QualifierFilters(TargetPhrase target, ActionPhrase? action)
+    {
+        if (action is null)
+        {
+            return target.Filters;
+        }
+
+        var result = new List<FilterPhrase>();
+        foreach (var filter in target.Filters)
+        {
+            if (filter.Span.Start < action.Span.Start)
+            {
+                result.Add(filter);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>动作宾语（过滤短语中位于**动词之后**者——E1-41）。</summary>
+    private static IReadOnlyList<FilterPhrase> ObjectFilters(TargetPhrase? target, ActionPhrase action)
+    {
+        var result = new List<FilterPhrase>();
+        if (target is null)
+        {
+            return result;
+        }
+
+        foreach (var filter in target.Filters)
+        {
+            if (filter.Span.Start >= action.Span.End)
+            {
+                result.Add(filter);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>在过滤短语清单中按维度取值（E1-41 重载：供限定词/宾语分离后使用）。</summary>
+    private static string? FindFilter(IReadOnlyList<FilterPhrase> filters, FilterKind kind)
+    {
+        foreach (var filter in filters)
+        {
+            if (filter.Kind == kind)
+            {
+                return filter.Value;
+            }
+        }
+
+        return null;
     }
 
     private static string? FindFilter(TargetPhrase? target, FilterKind kind)
@@ -447,8 +871,10 @@ public sealed class SemanticMapper
     /// 监听短语 → 监听模板（按事件关键词；本批覆盖：被消灭、移动、抽牌）。
     /// 未命中＝null（由调用方记未解析——保持显式失败）。
     /// </summary>
-    private static string? ResolveListenTemplate(string rawText)
+    private static string? ResolveListenTemplate(string rawText, string rawOriginal, out IReadOnlyList<string> eventCardFilters)
     {
+        eventCardFilters = FindEventCardFilters(rawText, rawOriginal);
+
         if (rawText.Contains("被消灭", StringComparison.Ordinal)
             || rawText.Contains("阵亡", StringComparison.Ordinal)
             || rawText.Contains("死亡", StringComparison.Ordinal))
@@ -460,6 +886,26 @@ public sealed class SemanticMapper
         if (rawText.Contains("受到伤害", StringComparison.Ordinal) || rawText.Contains("受伤", StringComparison.Ordinal))
         {
             return "damaged_basic";
+        }
+
+        // E1-47 新信号：**造成伤害**（来源侧）——`本单位造成伤害时/后`／`本单位对敌方总部造成伤害时/后`／`…对战伤害…`。
+        // 主体须为"本单位"（归属面由 PayloadGuardOf 表达；其余主体由调用方拒绝映射——不泛触发）。
+        if (rawText.Contains("造成", StringComparison.Ordinal) && rawText.Contains("伤害", StringComparison.Ordinal))
+        {
+            return "damage_dealt_basic";
+        }
+
+        // E1-47 归属：**消灭**（击杀者）——`本单位消灭 N 个单位时/后`；`被消灭` 已在最前分支处理（受动面）。
+        if (rawText.Contains("消灭", StringComparison.Ordinal))
+        {
+            return "killed_basic";
+        }
+
+        // E1-39 新信号：交战并存活（"本单位交战并存活后"/"本单位对战并存活后"）。
+        // 置于"攻击/行动"之前——更具体者优先（"攻击并存活"应判为存活）。
+        if (rawText.Contains("存活", StringComparison.Ordinal))
+        {
+            return "combat_survived_basic";
         }
 
         if (rawText.Contains("行动", StringComparison.Ordinal))
@@ -478,7 +924,9 @@ public sealed class SemanticMapper
             return "position_basic";
         }
 
-        if (rawText.Contains("抽牌", StringComparison.Ordinal))
+        // E1-38 修正：归一后文本里数量词与"牌"之间**夹数字**（"抽 1 张牌" → 归一为 "抽1张牌"），
+        // 原判据 `Contains("抽牌")` 对其**恒不命中** ⇒ 改为"抽 … 牌"共现判据。
+        if (rawText.Contains("抽", StringComparison.Ordinal) && rawText.Contains("牌", StringComparison.Ordinal))
         {
             return "drawn_basic";
         }
@@ -564,11 +1012,178 @@ public sealed class SemanticMapper
             return "played_basic";
         }
 
+        // E1-53：**反制触发**（`友方反制触发时`／`触发敌方反制时`）——载荷 {Card, Player} ⇒ 走**卡面**归属过滤。
+        if (rawText.Contains("反制", StringComparison.Ordinal))
+        {
+            return "counter_basic";
+        }
+
+        // E1-42/E1-54：`使用<属性>牌时` ⇒ played_basic ＋ **事件卡属性守卫**（真实 csx；见 FindEventCardFilters）。
+        if (eventCardFilters.Count > 0)
+        {
+            return "played_basic";
+        }
+
+        // E1-39：指挥点槽增减（`slot.gained`/`slot.lost` 已有信号；载荷只有 Player ⇒ 走**玩家面**归属过滤）。
+        if (rawText.Contains("指挥点槽", StringComparison.Ordinal))
+        {
+            return rawText.Contains("失去", StringComparison.Ordinal) ? "slot_lost_basic" : "slot_gained_basic";
+        }
+
         return null;
     }
 
     /// <summary>
-    /// 该监听模板的视图是否携带"事件卡"（决定能否做归属过滤——白名单口径，避免误用）：
+    /// **事件卡属性过滤**（E1-42 乙 → **E1-54 甲**）：`使用/打出 …<属性>牌` ⇒ 返回 `维度:取值` 清单
+    /// （多维度＝**合取**，如"英国指令"＝`faction:Britain` ＋ `category:Command`）。
+    /// <para>维度：`keyword`（词条）／`tag`（子类别）／`category`（卡类型）／`faction`（阵营）／`name`（**引号卡名**，
+    /// 取自**原文切片**——`listen.RawText` 已剥引号）。</para>
+    /// </summary>
+    private static IReadOnlyList<string> FindEventCardFilters(string rawText, string rawOriginal)
+    {
+        var filters = new List<string>();
+        if (!rawText.Contains("使用", StringComparison.Ordinal) && !rawText.Contains("打出", StringComparison.Ordinal))
+        {
+            return filters;
+        }
+
+        foreach (var (lexeme, filter) in EventCardFilterLexicon)
+        {
+            if (rawText.Contains(lexeme, StringComparison.Ordinal))
+            {
+                filters.Add(filter);
+            }
+        }
+
+        // 引号卡名：`使用“计划”时`（原文切片保留引号）⇒ `name:计划`。
+        foreach (var quote in new[] { ('“', '”'), ('「', '」'), ('"', '"') })
+        {
+            var start = rawOriginal.IndexOf(quote.Item1);
+            var end = start < 0 ? -1 : rawOriginal.IndexOf(quote.Item2, start + 1);
+            if (start >= 0 && end > start + 1)
+            {
+                var name = rawOriginal[(start + 1)..end];
+                if (!filters.Any(item => item.StartsWith("name:", StringComparison.Ordinal)))
+                {
+                    filters.Add("name:" + name);
+                }
+            }
+        }
+
+        return filters;
+    }
+
+    /// <summary>
+    /// 事件卡**属性词表**（E1-54；值为 `维度:取值`——取值经枚举白名单校验，见 <c>EffectCompiler.EnumValue</c>）。
+    /// </summary>
+    private static readonly (string Lexeme, string Filter)[] EventCardFilterLexicon =
+    {
+        // 词条（KeywordIds 标识）
+        ("情报", "keyword:" + Orc.Game.Cards.KeywordIds.Intelligence),
+        // 子类别 tag（TagData 开放集合——值即中文 tag 本身）
+        ("海军", "tag:海军"),
+        ("协力", "tag:协力"),
+        // 卡类型（CardCategory）
+        ("指令", "category:Command"),
+        // 阵营（Faction）
+        ("英国", "faction:Britain"),
+        ("日本", "faction:Japan"),
+        ("美国", "faction:USA"),
+        ("苏联", "faction:Soviet"),
+        ("德国", "faction:Germany"),
+        ("法国", "faction:France"),
+        ("中立", "faction:Neutral"),
+    };
+
+    /// <summary>多个守卫条件的合成：全 null＝null／单条＝原样／多条＝**合取**（`all`）。</summary>
+    private static DslCondition? CombineGuards(params DslCondition?[] guards)
+    {
+        var present = new List<DslCondition>();
+        foreach (var guard in guards)
+        {
+            if (guard is not null)
+            {
+                present.Add(guard);
+            }
+        }
+
+        return present.Count switch
+        {
+            0 => null,
+            1 => present[0],
+            _ => new DslCondition(DslCondition.AllKind, null, present),
+        };
+    }
+
+    /// <summary>
+    /// **载荷字段守卫**（E1-47）：<c>damage_dealt_basic</c>／<c>killed_basic</c> 的"自指/受方面"过滤。
+    /// <para>**未支持的主体一律返回 null 且由调用方拒绝映射**（见 <see cref="NeedsPayloadSubject"/>）——
+    /// 例如 `友方单位造成伤害时`（施动方归属面）／`目标单位造成伤害时` 暂不可表达，宁可未解析也不泛触发。</para>
+    /// </summary>
+    private static DslCondition? PayloadGuardOf(string template, string rawText)
+    {
+        // 主体归属面（E1-50）：**先看"本单位"**（自指），再看"友方/敌方"（归属）——
+        // 注意 `本单位对敌方总部造成伤害时` 的"敌方"是**宾语**，不可误判为施动方归属。
+        var selfSubject = ContainsSelfSubject(rawText);
+
+        if (string.Equals(template, "damage_dealt_basic", StringComparison.Ordinal))
+        {
+            var subject = selfSubject
+                ? new DslCondition(DslCondition.PayloadSelf, "Unit")              // 载荷 Unit＝施动方
+                : SubjectOwnerGuard(rawText, "Unit");                            // 友方/敌方单位造成
+            if (subject is null)
+            {
+                return null;
+            }
+
+            return ContainsHq(rawText)
+                ? new DslCondition(DslCondition.AllKind, null,
+                    new[] { subject, new DslCondition(DslCondition.PayloadIsHq, "Card") }) // 受方＝总部
+                : subject;
+        }
+
+        if (string.Equals(template, "killed_basic", StringComparison.Ordinal))
+        {
+            return selfSubject
+                ? new DslCondition(DslCondition.PayloadSelf, "Killer")           // 载荷 Killer＝击杀者
+                : SubjectOwnerGuard(rawText, "Killer");
+        }
+
+        return null;
+    }
+
+    /// <summary>主体＝友方/敌方时的**归属守卫**（E1-50）；主体不可辨识＝null（调用方拒绝映射）。</summary>
+    private static DslCondition? SubjectOwnerGuard(string rawText, string property)
+    {
+        if (rawText.Contains("友方", StringComparison.Ordinal))
+        {
+            return new DslCondition(DslCondition.PayloadOwnerSame, property);
+        }
+
+        if (rawText.Contains("敌方", StringComparison.Ordinal))
+        {
+            return new DslCondition(DslCondition.PayloadOwnerDifferent, property);
+        }
+
+        return null;
+    }
+
+    /// <summary>短语是否指向**总部**（受方面限定）。</summary>
+    private static bool ContainsHq(string rawText) => rawText.Contains("总部", StringComparison.Ordinal);
+
+    /// <summary>短语主体是否＝**本单位**（自指；`本单位`／`该单位`）。</summary>
+    private static bool ContainsSelfSubject(string rawText) =>
+        rawText.Contains("本单位", StringComparison.Ordinal) || rawText.Contains("该单位", StringComparison.Ordinal);
+
+    /// <summary>
+    /// 该监听模板是否**必须**有"本单位"主体（E1-47）：`damage_dealt_basic`／`killed_basic` 的归属面
+    /// 无法用既有 owner 过滤表达 ⇒ 无"本单位"时不映射（避免"任意单位造成伤害/消灭"的泛触发）。
+    /// </summary>
+    private static bool NeedsPayloadSubject(string template) =>
+        template is "damage_dealt_basic" or "killed_basic";
+
+    /// <summary>
+    /// 该监听模板的载荷**携带"事件卡/单位"**（决定能否按**卡面**做归属过滤——白名单口径，避免误用）：
     /// 载荷/视图不含卡（如 <c>turn.start</c>/<c>turn.end</c>/<c>deck.shuffled</c> 只有 Player/Deck；
     /// <c>attack_basic</c> 视图是 <c>UnitAttackTriggerView</c>）⇒ 不做归属过滤（否则守卫恒假或编译不过）。
     /// </summary>
@@ -588,9 +1203,31 @@ public sealed class SemanticMapper
         "load_basic",       // card.load        载荷 {Player, Card}
         "placed_basic",     // card.placed      载荷 {Card}
         "damaged_basic",    // card.damaged     载荷 {Card, Amount}（E1-33）
+        "combat_survived_basic", // unit.combat.survived 载荷 {Unit}（E1-39）
+        "counter_basic",    // counter.triggered 载荷 {Card, Player}（E1-53）
     };
 
-    private static bool SupportsOwnerFilter(string template) => OwnerFilterableTemplates.Contains(template);
+    /// <summary>
+    /// 该监听模板的载荷**只有玩家、没有事件卡**（E1-39）：按**玩家面**做归属过滤
+    /// （宿主玩家 vs 载荷玩家；守卫读 <c>view.Player</c>）。
+    /// </summary>
+    private static readonly HashSet<string> PlayerFilterableTemplates = new(StringComparer.Ordinal)
+    {
+        "slot_gained_basic", // slot.gained 载荷 {Player, Amount}
+        "slot_lost_basic",   // slot.lost   载荷 {Player, Amount}
+    };
+
+    /// <summary>
+    /// 监听短语的阵营归类 → 归属过滤**条件种类**（按模板的载荷面二选一；无所属面/无阵营＝null ⇒ 不加守卫）。
+    /// </summary>
+    private static string? OwnerGuardKind(string template, string? sideValue) => sideValue switch
+    {
+        "friendly" when OwnerFilterableTemplates.Contains(template) => DslCondition.OwnerSame,
+        "friendly" when PlayerFilterableTemplates.Contains(template) => DslCondition.OwnerSameByPlayer,
+        "enemy" when OwnerFilterableTemplates.Contains(template) => DslCondition.OwnerDifferent,
+        "enemy" when PlayerFilterableTemplates.Contains(template) => DslCondition.OwnerDifferentByPlayer,
+        _ => null,
+    };
 
     private static UnresolvedRecord Fail(string original, TextSpan span, string reason) =>
         new(span.Start, span.Length, RawOf(original, span), reason);

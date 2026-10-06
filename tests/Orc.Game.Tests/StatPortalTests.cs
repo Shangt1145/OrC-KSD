@@ -335,8 +335,13 @@ public class StatPortalTests
 
         Assert.Equal(CommandResultStatus.Success, result.Status);
         // 伤害链零发射（无 card.stat.changed / card.died / 位置类）；仅收尾扣行动费一条（E1-25 后续）。
+        // E1-39：交战存活信号与伤害无关（参战即发）——双方皆存活 ⇒ 两条（被攻击者在前、攻击者在后）。
         Assert.Equal(
-            new[] { GameUpdates.PointChanged, GameUpdates.UnitActed }, // E1-33：攻击收尾＝行动后（伤害 0＝无 card.damaged）
+            new[]
+            {
+                GameUpdates.UnitCombatSurvived, GameUpdates.UnitCombatSurvived,
+                GameUpdates.PointChanged, GameUpdates.UnitActed, // E1-33：攻击收尾＝行动后（伤害 0＝无 card.damaged）
+            },
             recorder.Types);
         Assert.Equal(2, target.Modifiers.GetEffectiveValue(CardStatFields.Defense));
         Assert.False(target.GetData<UnitStateData>().IsDestroyed);

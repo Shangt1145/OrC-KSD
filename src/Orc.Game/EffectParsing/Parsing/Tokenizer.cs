@@ -84,6 +84,25 @@ public sealed class Tokenizer
                 continue;
             }
 
+            // E1-41：带符号数值（`+2` / `-1` / 全角 `＋`／`－`）＝**一个** Num token（符号并入值）。
+            // 修前符号单成 Unknown、数值为正 ⇒ `-1 行动花费` 会被读成 `+1`（静默反向）。
+            if (IsSignChar(ch) && i + 1 < text.Length && char.IsAsciiDigit(text[i + 1]))
+            {
+                var signStart = i;
+                var negative = IsMinusChar(ch);
+                i++;
+                while (i < text.Length && char.IsAsciiDigit(text[i]))
+                {
+                    i++;
+                }
+
+                var signed = int.Parse(text[(signStart + 1)..i], CultureInfo.InvariantCulture);
+                tokens.Add(CreateToken(
+                    TokenType.Num, text, normalized, signStart, i - signStart, null,
+                    negative ? -signed : signed));
+                continue;
+            }
+
             if (char.IsAsciiDigit(ch))
             {
                 var start = i;
@@ -123,7 +142,14 @@ public sealed class Tokenizer
     private bool IsTokenStart(string text, int index) =>
         IsPunctChar(text[index])
         || char.IsAsciiDigit(text[index])
+        || (IsSignChar(text[index]) && index + 1 < text.Length && char.IsAsciiDigit(text[index + 1]))
         || _lexicons.TryMatch(text, index, out _, out _);
+
+    /// <summary>数值符号（半角/全角加号、半角/全角减号与 Unicode 减号）。</summary>
+    private static bool IsSignChar(char ch) => ch is '+' or '-' or '＋' or '－' or '−';
+
+    /// <summary>负号（决定符号位）。</summary>
+    private static bool IsMinusChar(char ch) => ch is '-' or '－' or '−';
 
     private static bool IsPunctChar(char ch) => ch switch
     {

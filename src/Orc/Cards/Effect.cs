@@ -103,6 +103,35 @@ public abstract class Effect
         return registration;
     }
 
+    /// <summary>视图类型是否声明了可读 <c>Host</c> 数据面（决定是否需要包一层宿主注入；带缓存）。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> HostPropertyCache = new();
+
+    private static bool DeclaresHostProperty(Type viewType) =>
+        HostPropertyCache.GetOrAdd(viewType, type => type.GetProperty("Host") is { CanRead: true });
+
+    /// <summary>按视图类型包一层「调用前注入宿主到数据面」（反射泛型适配——同 <c>TriggerReflection</c> 手法）。</summary>
+    private static Delegate WrapWithHost(Delegate handler, Type viewType, object host) =>
+        (Delegate)WrapWithHostMethod.MakeGenericMethod(viewType).Invoke(null, new[] { handler, host })!;
+
+    private static readonly System.Reflection.MethodInfo WrapWithHostMethod = typeof(Effect)
+        .GetMethod(nameof(WrapWithHostCore), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+    private static Func<TView, Context, CancellationToken, Task> WrapWithHostCore<TView>(Delegate handler, Effect effect)
+        where TView : class
+    {
+        var inner = (Func<TView, Context, CancellationToken, Task>)handler;
+        return (view, ctx, ct) =>
+        {
+            // 宿主注入走**数据面**（与内核「所有者是带宿主的效果」时的注入同手法）：
+            // 视图是框架生成的**代理**，其访问器被烘焙成权限闸门（[Read] 属性禁止写入——经 PropertyInfo.SetValue
+            // 会抛 PermissionDeniedException、并被反射包成 TargetInvocationException），故**不能**写属性 setter；
+            // 而 getter 直读 `__orc_data`，与该数据面同一载体（Context 构造时已拷贝调用方字典，不污染载荷）。
+            // 「调用时」取宿主（时机无关；未绑定＝null ⇒ 与键缺失同效，可选面回退 default、op 自然 no-op）。
+            ctx.Data["Host"] = effect.HostOrNull;
+            return inner(view, ctx, ct);
+        };
+    }
+
     /// <summary>
     /// 框架侧注入（S5；装载链调用）：把 handler 注册进目标触发器的**默认区段**并把撤销动作登记到本效果
     /// （随卸载自动撤销）。与 <see cref="Inject{TView}"/> 的区别：不经"装载语境"校验、目标以 object ＋ 视图类型给出
@@ -115,6 +144,15 @@ public abstract class Effect
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(viewType);
         ArgumentNullException.ThrowIfNull(handler);
+
+        // E1-36/E1-37：inject 型处理器的**宿主注入**——注入进的是**共享**触发器（所有者＝装载方而非本效果），
+        // 故内核「所有者是带宿主的效果时注入视图数据」对它不生效；此处在调用前把本效果的宿主注入**数据面**
+        // （与内核同手法；视图未声明 Host 数据面则原样注册）。这样 inject 型 csx handler 也能拿到 "self"（施动卡）。
+        if (DeclaresHostProperty(viewType))
+        {
+            // 传**本效果**而非宿主快照：宿主在**调用时**解析（与装载/绑定时机无关）。
+            handler = WrapWithHost(handler, viewType, this);
+        }
 
         var registration = TriggerReflection.RegisterDefaultBand(target, viewType, name, handler, priority);
         var record = new EffectInjection(target, name, Orc.Core.DefaultBands.Default, priority, registration);

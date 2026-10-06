@@ -39,7 +39,7 @@ public class EffectParsingTests
         var result = EffectTemplateLoader.LoadDirectory(EffectTemplateLoader.DefaultDirectory);
 
         Assert.Empty(result.Failures);
-        Assert.Equal(23, result.Templates.Count);
+        Assert.Equal(29, result.Templates.Count);
 
         var template = Assert.Single(result.Templates, item => item.Id == "deploy_basic");
         Assert.Equal(TriggerKind.Passive, template.Root.MainTrigger.Kind);

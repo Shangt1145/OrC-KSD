@@ -84,8 +84,11 @@ public sealed class DslOp
         string? script = null,
         DslCondition? condition = null,
         string? name = null,
-        IReadOnlyList<DslEffectInstance>? nested = null)
+        IReadOnlyList<DslEffectInstance>? nested = null,
+        string? until = null,
+        string? field = null)
     {
+        Field = field;
         ArgumentException.ThrowIfNullOrWhiteSpace(op);
 
         if (string.Equals(op, "csx", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(script))
@@ -106,7 +109,20 @@ public sealed class DslOp
         Condition = condition;
         Name = name;
         Nested = nested;
+        Until = until;
     }
+
+    /// <summary>
+    /// **目标字段**（E1-56；仅 <c>aura</c>）：`attack`／`defense`／`opCost`／`deployCost`。
+    /// </summary>
+    public string? Field { get; }
+
+    /// <summary>
+    /// **期限**（E1-41）：<c>buff</c>/<c>costMod</c> 类"持续态"的到期相位。
+    /// 取值＝<see cref="Untils"/> 中的常量（<c>turnEnd</c>＝本回合结束、<c>nextOwnerTurnStart</c>＝下个己方回合开始）；
+    /// null＝无期限（修饰器随效果存续）。**忽略期限会产出"永久增益"＝语义错误**，故不支持期限的 op 不得带本字段。
+    /// </summary>
+    public string? Until { get; }
 
     /// <summary>
     /// **内嵌效果**（嵌套效果解析）：引号里"本身是一段效果"的文本被递归解析后的 DSL 效果序列
@@ -152,34 +168,98 @@ public sealed class DslOp
 }
 
 /// <summary>
-/// 条件（结构支持）：<see cref="Kind"/>＝<c>owner</c>（归属过滤——**真实 csx**：宿主与事件卡同主/异主）
+/// 期限取值（E1-41；<see cref="DslOp.Until"/> 的词表）：持续态修饰器的**到期相位**。
+/// </summary>
+public static class Untils
+{
+    /// <summary>本回合结束（`直到回合结束`／`本回合…`）。</summary>
+    public const string TurnEnd = "turnEnd";
+
+    /// <summary>下个己方回合开始（`直到下个友方回合开始`）。</summary>
+    public const string NextOwnerTurnStart = "nextOwnerTurnStart";
+}
+
+/// <summary>
+/// 条件（结构支持）：<see cref="Kind"/>＝归属过滤（**真实 csx**——按"事件归属"的载荷面取同主/异主）、
+/// 事件卡属性过滤（**真实 csx**——<see cref="EventCardKeyword"/>）、合取（<see cref="AllKind"/>）
 /// 或 <c>raw</c>（其它条件——**占位**：渲染为 <c>if (false /* TODO */)</c>，待求值面就绪）。
+/// <para>归属过滤的**取值面**（E1-39 拆分）：事件载荷是**卡/单位**（<c>card.*</c>/<c>unit.*</c>）用
+/// <see cref="OwnerSame"/>/<see cref="OwnerDifferent"/>；载荷**只有玩家、无事件卡**（<c>slot.gained</c>/<c>slot.lost</c>）
+/// 用 <see cref="OwnerSameByPlayer"/>/<see cref="OwnerDifferentByPlayer"/>（比较宿主玩家与载荷玩家）。</para>
 /// </summary>
 public sealed class DslCondition
 {
-    /// <summary>归属过滤：同主。</summary>
+    /// <summary>归属过滤：同主（事件载荷为卡/单位）。</summary>
     public const string OwnerSame = "owner.same";
 
-    /// <summary>归属过滤：异主。</summary>
+    /// <summary>归属过滤：异主（事件载荷为卡/单位）。</summary>
     public const string OwnerDifferent = "owner.different";
+
+    /// <summary>归属过滤：同主（事件载荷为玩家——无事件卡信号）。</summary>
+    public const string OwnerSameByPlayer = "owner.same.player";
+
+    /// <summary>归属过滤：异主（事件载荷为玩家——无事件卡信号）。</summary>
+    public const string OwnerDifferentByPlayer = "owner.different.player";
+
+    /// <summary>
+    /// **事件卡属性过滤**（E1-42 乙 → E1-54 甲）：<see cref="Raw"/> 承载 `维度:取值`——
+    /// `keyword:情报`（词条）／`tag:海军`（子类别）／`category:Command`（卡类型）／`faction:Britain`（阵营）／`name:计划`（卡名）。
+    /// 渲染为真实 csx 守卫（读 <c>view.Card</c>）；多个维度经 <see cref="AllKind"/> 合取。
+    /// </summary>
+    public const string EventCardFilter = "eventCard.filter";
+
+    /// <summary>
+    /// 载荷字段**自指**（E1-47）：<see cref="Raw"/> 承载**视图属性名**（受控词表：`Card`／`Unit`／`Killer`／`Player`／`Host`），
+    /// 渲染为 <c>object.ReferenceEquals(view.&lt;属性&gt;, self)</c>——用于「本单位造成伤害时／本单位消灭…时」的**自指守卫**
+    /// （修 I35 同族缺口：监听不再对"任意单位"泛触发）。
+    /// </summary>
+    public const string PayloadSelf = "payload.self";
+
+    /// <summary>
+    /// 载荷字段**是 HQ**（E1-47）：<see cref="Raw"/> 承载视图属性名，渲染为 <c>view.&lt;属性&gt; is Hq</c>——
+    /// 用于「对敌方总部造成伤害时」（受方是总部）。
+    /// </summary>
+    public const string PayloadIsHq = "payload.hq";
+
+    /// <summary>
+    /// 载荷字段的**归属面**（E1-50）：<see cref="Raw"/> 承载视图属性名，渲染为
+    /// 「该字段（按卡取 Owner）与 self 同主」——用于「友方单位造成伤害时／友方单位消灭…时」。
+    /// </summary>
+    public const string PayloadOwnerSame = "payload.owner.same";
+
+    /// <summary>载荷字段的归属面：异主（见 <see cref="PayloadOwnerSame"/>）。</summary>
+    public const string PayloadOwnerDifferent = "payload.owner.different";
+
+    /// <summary>
+    /// **数值比较条件**（E1-57）：<see cref="Raw"/> 承载 左度量:算子:右操作数 规范串（如 count:s=friendly:gte:#3）。
+    /// 渲染为真实 csx（EffectRuntime.EvaluateCondition）——**求值是纯函数**（可安全参与 &amp;&amp; 合取）。
+    /// </summary>
+    public const string Compare = "compare";
+
+    /// <summary>合取：<see cref="All"/> 中全部子条件为真才为真（渲染为 <c>(a &amp;&amp; b)</c>）。</summary>
+    public const string AllKind = "all";
 
     /// <summary>其它条件（占位）。</summary>
     public const string RawKind = "raw";
 
     /// <summary>创建条件。</summary>
     /// <exception cref="ArgumentException">kind 空白。</exception>
-    public DslCondition(string kind, string? raw = null)
+    public DslCondition(string kind, string? raw = null, IReadOnlyList<DslCondition>? all = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         Kind = kind;
         Raw = raw;
+        All = all;
     }
 
-    /// <summary>条件种类（<c>owner.same</c>｜<c>owner.different</c>｜<c>raw</c>）。</summary>
+    /// <summary>条件种类（<c>owner.same</c>｜<c>owner.different</c>｜<c>owner.same.player</c>｜<c>owner.different.player</c>｜<c>eventCard.keyword</c>｜<c>all</c>｜<c>raw</c>）。</summary>
     public string Kind { get; }
 
-    /// <summary>原文（诊断/占位注释用）。</summary>
+    /// <summary>原文（诊断/占位注释用）；<see cref="EventCardKeyword"/> 时承载**词条标识**。</summary>
     public string? Raw { get; }
+
+    /// <summary>合取子条件（仅 <see cref="AllKind"/>；空/null＝恒真）。</summary>
+    public IReadOnlyList<DslCondition>? All { get; }
 }
 
 /// <summary>目标选择器（沿用 kards-diy 命名，MVP 启用子集字段）。</summary>
@@ -217,16 +297,29 @@ public sealed class DslSelector
 public sealed class DslFilter
 {
     /// <summary>创建过滤（至少一个维度）。</summary>
-    /// <exception cref="ArgumentException">两个维度都为空。</exception>
-    public DslFilter(string? unitType = null, string? keyword = null)
+    /// <exception cref="ArgumentException">所有维度都为空。</exception>
+    public DslFilter(
+        string? unitType = null,
+        string? keyword = null,
+        string? faction = null,
+        bool excludeSelf = false,
+        string? thresholdField = null,
+        string? thresholdOp = null,
+        int? thresholdValue = null)
     {
-        if (string.IsNullOrWhiteSpace(unitType) && string.IsNullOrWhiteSpace(keyword))
+        if (string.IsNullOrWhiteSpace(unitType) && string.IsNullOrWhiteSpace(keyword)
+            && string.IsNullOrWhiteSpace(faction) && !excludeSelf && string.IsNullOrWhiteSpace(thresholdField))
         {
-            throw new ArgumentException("过滤条件至少需要一个维度（unitType/keyword）。", nameof(unitType));
+            throw new ArgumentException("过滤条件至少需要一个维度（unitType/keyword/faction/excludeSelf/threshold）。", nameof(unitType));
         }
 
         UnitType = unitType;
         Keyword = keyword;
+        Faction = faction;
+        ExcludeSelf = excludeSelf;
+        ThresholdField = thresholdField;
+        ThresholdOp = thresholdOp;
+        ThresholdValue = thresholdValue;
     }
 
     /// <summary>兵种（unitType）。</summary>
@@ -234,4 +327,20 @@ public sealed class DslFilter
 
     /// <summary>词条（keyword）。</summary>
     public string? Keyword { get; }
+
+    /// <summary>阵营（E1-56；<see cref="Orc.Game.Cards.Faction"/> 枚举名）。</summary>
+    public string? Faction { get; }
+
+    /// <summary>排除宿主自身（E1-56；`其他/其它…`）。</summary>
+    public bool ExcludeSelf { get; }
+
+    /// <summary>阈值维度（E1-57；ttack／defense／opCost——目标属性过滤，null＝不限）。</summary>
+    public string? ThresholdField { get; }
+
+    /// <summary>阈值算子（gte／lte／gt／lt／eq）。</summary>
+    public string? ThresholdOp { get; }
+
+    /// <summary>阈值取值。</summary>
+    public int? ThresholdValue { get; }
+
 }
