@@ -55,6 +55,7 @@ public sealed class CardModifierComponent
         new(ReferenceEqualityComparer.Instance); // 各组件缓存（上次快照；有效值与检测快照合一承载）
     private readonly HashSet<string> _computingFields = new(StringComparer.Ordinal); // 现算读取执行窗（引用链循环/重入防护；单线程语义）
     private bool _isRunning; // 跑链执行窗标志（重入保护；单线程语义）
+    private int _rerunDeferrals; // 重跑延迟窗口计数（S1 加性；>0＝窗口内——「请求重跑」挂起不执行）
 
     /// <summary>
     /// 创建卡侧修饰器组件（由卡牌基类构造装配；每卡实例恰一份；W3-3：宿主＝引擎薄容器 Card——含非卡实体如 HQ）。
@@ -290,12 +291,71 @@ public sealed class CardModifierComponent
     /// 每轮＝全量重跑（基准 → 链 → 有效值）→ 更新检测（生成/比较，集中调用一次）→ 有变更：更新缓存＋最后集中触发；
     /// 无变更：整体不动（零发射、无副作用）。
     /// 重入策略＝拒绝并明确错误（跑链执行窗内再次请求或被并发请求均同步拒绝——防嵌套与中间态）。
+    /// S1 加性（重跑延迟窗口）：窗口内（<see cref="BeginRerunDeferral"/>）＝**挂起**——不执行跑链、不发射、
+    /// 返回已完成任务；窗口退出后由持有方显式补跑一次（「单次重算」口径——全部数值处置合并为一次重算、一次集中触发）。
     /// </summary>
     /// <exception cref="InvalidOperationException">跑链执行中（重入）；或无就绪检测组件（缺必要基准/组件——不得静默）。</exception>
     public Task RequestRerunAsync(CancellationToken ct = default)
     {
         EnsureNotRunning();
+        if (_rerunDeferrals > 0)
+        {
+            // 延迟窗口：请求挂起（不执行、不发射）——窗口退出后由持有方显式补跑一次（合并重算）。
+            return Task.CompletedTask;
+        }
+
         return RequestRerunCoreAsync(ct);
+    }
+
+    // ---------- 重跑延迟窗口（S1 加性；形态切换的原子执行段内部支撑） ----------
+
+    /// <summary>
+    /// 进入重跑延迟窗口（S1 内部支撑——升级/形态切换等「执行段」用）：窗口内全部「请求重跑」被挂起
+    /// （不执行跑链、不发射、返回已完成任务）；窗口退出（<see cref="RerunDeferral.Dispose"/>）后由持有方**显式补跑一次**
+    /// （合并为一次重算、一次集中触发——「单次重算」口径）。计数语义（可嵌套；内层挂起、最外层退出后补跑一次）。
+    /// 窗口仅抑制「自动衔接」——读取面（有效值/有效上限）在窗口内读到的是最近一次落定值（纯读不触发跑链、与既有语义一致）。
+    /// </summary>
+    internal RerunDeferral BeginRerunDeferral()
+    {
+        _rerunDeferrals++;
+        return new RerunDeferral(this);
+    }
+
+    /// <summary>退出重跑延迟窗口（内部；由 <see cref="RerunDeferral.Dispose"/> 调用——计数递减）。</summary>
+    private void EndRerunDeferral()
+    {
+        if (_rerunDeferrals > 0)
+        {
+            _rerunDeferrals--;
+        }
+    }
+
+    /// <summary>
+    /// 重跑延迟窗口句柄（S1；由 <see cref="BeginRerunDeferral"/> 创建、<see cref="Dispose"/> 退出）：
+    /// 窗口内「请求重跑」挂起不执行；退出后调用方须显式补跑一次（<see cref="RequestRerunAsync"/>）以整合窗口内全部变更。
+    /// </summary>
+    internal sealed class RerunDeferral : IDisposable
+    {
+        private readonly CardModifierComponent _owner;
+        private bool _disposed;
+
+        internal RerunDeferral(CardModifierComponent owner)
+        {
+            ArgumentNullException.ThrowIfNull(owner);
+            _owner = owner;
+        }
+
+        /// <summary>退出窗口（幂等——重复 Dispose＝无操作）。</summary>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _owner.EndRerunDeferral();
+        }
     }
 
     // ---------- 有效值读取（纯读） ----------
@@ -542,7 +602,7 @@ public sealed class CardModifierComponent
         }
 
         _modifiers.Clear();
-        await RequestRerunCoreAsync(ct); // 一次衔接（有变更才发；无修饰＝零变化、零发射）
+        await RequestRerunAsync(ct); // 一次衔接（有变更才发；无修饰＝零变化、零发射；S1 延迟窗口内＝挂起）
     }
 
     // ---------- 死亡清理（W2b；死亡流程内部特殊路径） ----------

@@ -191,7 +191,7 @@ public class GameHooksTests
         var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
             .Select(c => c.Value).ToList();
 
-        Assert.Equal(29, signals.Count);
+        Assert.Equal(31, signals.Count); // S1 受控适配（29 → 30）：新增 unit.upgraded（老兵升级）；S2 受控适配（30 → 31）：新增 unit.revealed（揭示）
         Assert.Equal(16, payloadKeys.Count);
         Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
@@ -212,9 +212,10 @@ public class GameHooksTests
         Assert.Equal(names.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal));
 
-        // 装配面：19 内置固定注册段（4 验证类＋6 交战类＋3 动作资格类＋1 效果选靶类＋5 资源类） + 2 外部装配段 = 全量 21
-        Assert.Equal(19, GameHooks.BuiltInJudicatorNames.Count);
-        Assert.Equal(2, GameHooks.ExternalJudicatorNames.Count);
+        // 装配面：20 内置固定注册段（4 验证类＋6 交战类＋3 动作资格类＋1 效果选靶类＋5 资源类
+        // ＋1 目标候选合法性〔S2 提入〕） + 1 外部装配段 = 全量 21
+        Assert.Equal(20, GameHooks.BuiltInJudicatorNames.Count);
+        Assert.Single(GameHooks.ExternalJudicatorNames);
         Assert.Equal(GameHooks.JudicatorNameList.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.BuiltInJudicatorNames.Concat(GameHooks.ExternalJudicatorNames)
                 .OrderBy(v => v, StringComparer.Ordinal));
@@ -225,7 +226,7 @@ public class GameHooksTests
     [Fact]
     public void Every_Signal_Has_A_Static_Emit_Callpoint()
     {
-        // 18 条经 GameUpdates.Emit* 助手；5 条 turn.* 经 TurnManager.EmitTurnAsync 直发（无助手）
+        // 25 条经 GameUpdates.Emit* 助手；5 条 turn.* 经 TurnManager.EmitTurnAsync 直发（无助手）
         var helpers = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [GameHooks.CardPlayed] = "EmitCardPlayed",
@@ -239,6 +240,8 @@ public class GameHooksTests
             [GameHooks.UnitJoined] = "EmitUnitJoined",
             [GameHooks.UnitDeployed] = "EmitUnitDeployed",
             [GameHooks.UnitPositionChanged] = "EmitUnitPositionChanged",
+            [GameHooks.UnitUpgraded] = "EmitUnitUpgraded",
+            [GameHooks.UnitRevealed] = "EmitUnitRevealed",
             [GameHooks.DeckShuffled] = "EmitDeckShuffled",
             [GameHooks.UnitTypesChanged] = "EmitUnitTypesChanged",
             [GameHooks.SlotGained] = "EmitSlotGained",
@@ -259,7 +262,7 @@ public class GameHooksTests
             GameHooks.TurnEndBefore, GameHooks.TurnEnd,
         };
 
-        Assert.Equal(24, helpers.Count);
+        Assert.Equal(26, helpers.Count); // S1 受控适配（24 → 25）：新增 unit.upgraded（EmitUnitUpgraded）；S2 受控适配（25 → 26）：新增 unit.revealed（EmitUnitRevealed）
         foreach (var (signal, method) in helpers)
         {
             Assert.Contains(signal, GameHooks.Signals);
@@ -273,7 +276,8 @@ public class GameHooksTests
         Assert.NotNull(typeof(TurnManager).GetMethod(
             "EmitTurnAsync", BindingFlags.NonPublic | BindingFlags.Instance));
 
-        // 22 + 5 = 27，无遗漏、无重复（E1-33 追加 card.damaged / unit.acted；E1-39 追加 unit.combat.survived）
+        // 26 + 5 = 31，无遗漏、无重复（E1-33 追加 card.damaged / unit.acted；E1-39 追加 unit.combat.survived；
+        // S1 追加 unit.upgraded；S2 追加 unit.revealed）
         Assert.Equal(GameHooks.Signals.Count,
             helpers.Keys.Concat(turnSignals).Distinct(StringComparer.Ordinal).Count());
     }
@@ -284,13 +288,14 @@ public class GameHooksTests
         var match = GameTestData.CreateStandardMatch(seed: 42);
         await match.Initialize();
 
-        // 固定注册段（Match.Initialize 内置段）：4 条验证类恒可达
+        // 固定注册段（Match.Initialize 内置段）：验证类/交战类/资格类/效果选靶类/资源类/目标候选合法性类恒可达
         foreach (var name in GameHooks.BuiltInJudicatorNames)
         {
             Assert.NotNull(match.Judicators.Resolve(name));
         }
 
-        // 外部装配段（judicatorAssembly）：未注入 ⇒ 2 条示范类不可达（fail-fast）
+        // 外部装配段（judicatorAssembly）：未注入 ⇒ 1 条示范类（DeckTopTag）不可达（fail-fast）
+        // 〔S2 受控适配（2 → 1）：目标候选合法性判定提入内置段——原经外部装配段〕
         foreach (var name in GameHooks.ExternalJudicatorNames)
         {
             Assert.Throws<KeyNotFoundException>(() => match.Judicators.Resolve(name));
@@ -351,7 +356,7 @@ public class GameHooksTests
         using var document = JsonDocument.Parse(GameHooksJson.Serialize(indented: true));
         var root = document.RootElement;
 
-        Assert.Equal(29, root.GetProperty("signals").GetArrayLength());
+        Assert.Equal(31, root.GetProperty("signals").GetArrayLength()); // S1 受控适配（29 → 30）：新增 unit.upgraded；S2 受控适配（30 → 31）：新增 unit.revealed
         Assert.Equal(21, root.GetProperty("judicators").GetArrayLength());
         Assert.Equal(GameHooks.TriggerLayers.Count, root.GetProperty("triggerLayers").GetArrayLength());
         Assert.Equal(27, root.GetProperty("pending").GetArrayLength());

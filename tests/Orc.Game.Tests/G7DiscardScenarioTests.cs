@@ -384,7 +384,7 @@ public class G7DiscardScenarioTests
         Assert.True(accepted, "手牌选择提交应被接受（卡仍在手牌）。");
 
         var result = await task;
-        Assert.Equal(TargetingStatus.Success, result.Status);
+        Assert.Equal(TargeterStatus.Ok, result.Status);
         var selected = Assert.Single(result.Outcome!.GetSelection("hand"));
         return Assert.IsAssignableFrom<CardBase>(selected.Value);
     }

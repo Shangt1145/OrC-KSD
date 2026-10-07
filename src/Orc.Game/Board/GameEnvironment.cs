@@ -162,7 +162,9 @@ public sealed class GameEnvironment
     /// <summary>
     /// 收集「受益卡 + 字段」命中的光环声明（纯只读——不触发重跑、无副作用；稳定序＝收集面登记序）：
     /// 过滤链＝① 字段匹配（声明贡献目标字段＝本次求值字段）；② 通用门禁（声明宿主在场/存活/未离场——
-    /// 必经兜底：卡组期注册的声明被拦截、死亡/离场后不命中）；③ 声明谓词（附加条件——如「相邻」「源在前线」）。
+    /// 必经兜底：卡组期注册的声明被拦截、死亡/离场后不命中）；③ 声明谓词（附加条件——如「相邻」「源在前线」）；
+    /// ④ S2 加性（隐蔽机制·豁免剔除单点收口）：受益者为「隐蔽」单位＝不收集（隐蔽单位不作为光环受益者——
+    /// 不被任何光环影响，含友方光环；作为光环**来源**不受限——宿主门禁照常、其光环照常作用于其他单位）。
     /// 合成规则＝命中声明独立参与、按登记序依次施加（确定变换——同输入同序同输出）；零声明＝空列表（快速路径）。
     /// </summary>
     /// <exception cref="ArgumentNullException">beneficiary 为 null。</exception>
@@ -171,6 +173,12 @@ public sealed class GameEnvironment
     {
         ArgumentNullException.ThrowIfNull(beneficiary);
         ArgumentException.ThrowIfNullOrWhiteSpace(field);
+
+        // S2：隐蔽单位为受益人＝不收集（零声明快速路径之前先行拦截——语义上不可能有命中）。
+        if (beneficiary is UnitCard covertUnit && CovertRules.IsCovert(covertUnit))
+        {
+            return Array.Empty<AuraDeclaration>();
+        }
 
         var declarations = Auras.All;
         if (declarations.Count == 0)

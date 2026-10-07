@@ -79,6 +79,26 @@ public static class KeywordIds
     /// </summary>
     public const string Deathrattle = "亡计";
 
+    // ---------- S1 新增（老兵机制；标识字面＝对外数据契约基线） ----------
+
+    /// <summary>
+    /// 老兵（标记型）：单位当前形态内容为「老兵版本」的标记（单一真源——老兵读取面的唯一判据）。
+    /// 由数据映射 `VeteranOf:<基础卡id>`（老兵卡定义）随内容落地；升级动作经「全清→换新→授予老兵版本词条集」落地；
+    /// 老兵卡以任意途径在场的实例同样成立（内容即真源——不以「是否经历过升级动作」为判据）。
+    /// 无参值；不打对战词条标；行为面＝无（纯标记，消费方经 <see cref="VeteranRules.IsVeteran"/> 读取）。
+    /// </summary>
+    public const string Veteran = "老兵";
+
+    // ---------- S2 新增（隐蔽机制；标识字面＝对外数据契约基线） ----------
+
+    /// <summary>
+    /// 隐蔽（标记型）：单位数据声明 `covert` 映射的「隐蔽」标记（单一真源——隐蔽读取面的唯一判据）。
+    /// 语义＝单位「无法被卡牌效果影响」（指令效果索敌经判定器剔除／无头选靶候选剔除／光环受益剔除／钳击配对剔除；
+    /// 攻击路径不受限——可被攻击、会被揭示）；无参值；不打对战词条标；
+    /// 行为面＝无（纯标记，消费方经 <see cref="CovertRules.IsCovert"/> 读取）；揭示＝标记移除（<see cref="CovertRules.RevealAsync"/>）。
+    /// </summary>
+    public const string Covert = "隐蔽";
+
     /// <summary>生产内建词条标识清单（登记序；注册面静态装配依据与诊断用——合法集真源＝注册面内容）。</summary>
     public static IReadOnlyList<string> All { get; } = new[]
     {
@@ -86,6 +106,8 @@ public static class KeywordIds
         Suppressed, Inhibited, Mobilize, Pincer, Forecast, Immune, Armor, Intelligence,
         CannotBeSuppressed, CannotBeInhibited,
         Deathrattle,
+        Veteran,
+        Covert,
     };
 
     /// <summary>标识是否已注册（存在性判定，转发注册面——单源；null/空白＝false）。</summary>
@@ -99,7 +121,7 @@ public static class KeywordIds
 /// A2 服务面（均可缺省——独立构造/部分装配＝null，消费侧防御跳过）：
 /// 目标选择管理器（钳击同伴选择交互）、战场（钳击候选枚举——己方在场单位）、
 /// 钳击关系注册表（一对一占用查询/登记）、当前行动方提供器（压制施加时的「拥有者回合」判定）。
-/// K2 判定器通道（可缺省——缺省＝无判定器通道：伏击组件静默不注册〔与「无上下文」同构〕、不抛错、不回退直调）：
+/// K2 判定器通道（可缺省——缺省＝无判定器通道：伏击效果静默不注册〔与「无上下文」同构〕、不抛错、不回退直调）：
 /// 反击资格（combat.counter.eligibility——伏击资格判定取用）、伏击条件（combat.ambush.condition——伏击条件判定取用）。
 /// </summary>
 public sealed class KeywordLoadContext
@@ -127,7 +149,7 @@ public sealed class KeywordLoadContext
     /// <summary>对局引擎（发射更新 / 触发子触发器所需）。</summary>
     public LogicEngine Engine { get; }
 
-    /// <summary>「造成攻击伤害」共享流程触发器（伏击/免疫/重甲挂载点；引擎侧创建、与对局同生）。</summary>
+    /// <summary>「造成攻击伤害」共享流程触发器（伏击/免疫/重甲效果的改写注册口；引擎侧创建、与对局同生）。</summary>
     public Trigger<AttackDamageTriggerView> AttackDamageTrigger { get; }
 
     /// <summary>目标选择管理器（A2 加性；钳击同伴选择交互的承载——既有单选交互形态；可空＝无对局服务）。</summary>
@@ -143,11 +165,11 @@ public sealed class KeywordLoadContext
     public Func<Player?>? CurrentPlayerProvider { get; }
 
     /// <summary>反击资格判定通道（K2 加性；combat.counter.eligibility——伏击资格判定取用〔资格→C5〕；
-    /// 可空＝无判定器通道：伏击组件静默不注册、不抛错、不回退直调）。</summary>
+    /// 可空＝无判定器通道：伏击效果静默不注册、不抛错、不回退直调）。</summary>
     public Func<UnitCard, UnitCard, bool>? CounterEligibility { get; }
 
     /// <summary>伏击条件判定通道（K2 加性；combat.ambush.condition——伏击条件判定取用〔条件→C6〕；
-    /// 可空＝无判定器通道：伏击组件静默不注册、不抛错、不回退直调）。</summary>
+    /// 可空＝无判定器通道：伏击效果静默不注册、不抛错、不回退直调）。</summary>
     public Func<UnitCard, UnitCard, bool>? AmbushCondition { get; }
 }
 

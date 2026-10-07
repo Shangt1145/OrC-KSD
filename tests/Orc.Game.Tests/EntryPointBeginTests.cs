@@ -35,12 +35,12 @@ public class EntryPointBeginTests
 
         // 槽位＝场上单位指向（单选）；槽位参数＝被拖动单位（随请求描述交付前端）
         var slot = Assert.Single(description.Slots);
-        Assert.Equal(SelectorSlots.FieldUnit, slot.Name);
+        Assert.Equal(SelectorNames.FieldUnit, slot.Name);
         Assert.True(slot.HasParameter);
         Assert.Same(mover, slot.Parameter);
 
         Assert.True(responder.Complete(
-            description.RequestId, TargeterTestKit.Selection(SelectorSlots.FieldUnit, front[0].Ref)));
+            description.RequestId, TargeterTestKit.Selection(SelectorNames.FieldUnit, front[0].Ref)));
         var result = await task;
 
         Assert.Equal(CommandResultStatus.Success, result.Status);
@@ -108,9 +108,9 @@ public class EntryPointBeginTests
 
         var task = match.CommandManager.BeginAttackAsync(attacker);
         var (description, responder) = await bridge.WaitForNextBeginAsync();
-        Assert.Equal(SelectorSlots.FieldUnit, Assert.Single(description.Slots).Name);
+        Assert.Equal(SelectorNames.FieldUnit, Assert.Single(description.Slots).Name);
         Assert.True(responder.Complete(
-            description.RequestId, TargeterTestKit.Selection(SelectorSlots.FieldUnit, target.Ref)));
+            description.RequestId, TargeterTestKit.Selection(SelectorNames.FieldUnit, target.Ref)));
         var result = await task;
 
         Assert.Equal(CommandResultStatus.Success, result.Status);
@@ -147,7 +147,7 @@ public class EntryPointBeginTests
         var player = match.Players[0];
         var command = await PlayChainTestKit.InstantiateLoadedAsync<CommandCard>(
             match, player, PlayChainTestKit.CommandCheapId);
-        IReadOnlyList<TargetSlot>? observedSlots = null;
+        IReadOnlyList<Selector>? observedSlots = null;
         command.AddPrePlayHandler("观测槽位声明", (view, ctx, ct) =>
         {
             observedSlots = view.SelectorSlots;
@@ -164,7 +164,7 @@ public class EntryPointBeginTests
         Assert.DoesNotContain(command, player.Hand);
 
         // 预打出视图携带本卡声明的选择器槽位（手牌起始指向）
-        Assert.Equal(SelectorSlots.HandOrigin, Assert.Single(observedSlots!).Name);
+        Assert.Equal(SelectorNames.HandOrigin, Assert.Single(observedSlots!).Name);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public class EntryPointBeginTests
         var player = match.Players[0];
         var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player);
         bridge.CollectScript = PlayChainTestKit.AllSlotsCandidatesScript(match);
-        IReadOnlyList<TargetSlot>? observedSlots = null;
+        IReadOnlyList<Selector>? observedSlots = null;
         unit.PrePlayTrigger.Register("观测槽位声明", (view, ctx, ct) =>
         {
             observedSlots = view.SelectorSlots;
@@ -209,24 +209,23 @@ public class EntryPointBeginTests
         var result = await task;
 
         Assert.Equal(PlayResultStatus.Success, result.Status);
-        Assert.Equal(SelectorSlots.HandOrigin, Assert.Single(observedSlots!).Name);
+        Assert.Equal(SelectorNames.UnitHandDrag, Assert.Single(observedSlots!).Name); // 单位＝手牌拖出形态
     }
 
     [Fact]
-    public async Task SelectorSlots_Factories_Produce_Declared_Names()
+    public async Task Selector_Templates_Produce_Declared_Names()
     {
         var match = PlayChainTestKit.CreatePlayMatch();
         await match.Initialize();
-        var card = match.CardLibrary.Instantiate(PlayChainTestKit.CommandCheapId);
-        var unit = (UnitCard)match.CardLibrary.Instantiate(PlayChainTestKit.UnitCheapId);
 
-        Assert.Equal(SelectorSlots.HandOrigin, Assert.Single(SelectorSlots.ForHandOrigin(card).Slots).Name);
-        Assert.Equal(SelectorSlots.AfterPlacement, Assert.Single(SelectorSlots.ForAfterPlacement(unit).Slots).Name);
-        Assert.Equal(SelectorSlots.FieldUnit, Assert.Single(SelectorSlots.ForFieldUnit(unit).Slots).Name);
+        Assert.Equal(SelectorNames.HandOrigin, SelectorTemplates.HandOrigin.Name);
+        Assert.Equal(SelectorNames.UnitHandDrag, SelectorTemplates.UnitHandDrag.Name);
+        Assert.Equal(SelectorNames.AfterPlacement, SelectorTemplates.AfterPlacement.Name);
+        Assert.Equal(SelectorNames.FieldUnit, SelectorTemplates.FieldUnit.Name);
     }
 
     [Fact]
-    public async Task SelectorSlots_Deliver_Parameter_To_Bridge_By_Slot_Name()
+    public async Task Selector_Delivers_Parameter_To_Bridge()
     {
         var bridge = new MockTargeterBridge();
         var manager = new TargeterManager(bridge);
@@ -234,20 +233,24 @@ public class EntryPointBeginTests
         await match.Initialize();
         var card = match.CardLibrary.Instantiate(PlayChainTestKit.CommandCheapId);
         var candidate = new Entity("候选引用");
-        bridge.CollectScript = _ => Task.FromResult<IReadOnlyList<object?>>(new object?[] { candidate.Ref });
 
-        var set = SelectorSlots.ForHandOrigin(card);
-        var task = manager.CreateTargeter(slots: set.Slots, context: set.Context).Targeting();
+        var task = manager.RunAsync(async flow =>
+        {
+            var step = await flow.Step(
+                SelectorTemplates.HandOrigin,
+                new ReferenceSetParameter(new[] { candidate.Ref }, 1, 1, tag: card));
+            return step.IsOk ? TargeterResult.Ok() : TargeterResult.FromSelectorFailure(step.Failure);
+        });
+
         var (description, responder) = await bridge.WaitForNextBeginAsync();
 
         var slot = Assert.Single(description.Slots);
-        Assert.Equal(SelectorSlots.HandOrigin, slot.Name);
+        Assert.Equal(SelectorNames.HandOrigin, slot.Name);
         Assert.True(slot.HasParameter);
         Assert.Same(card, slot.Parameter);
 
         Assert.True(responder.Complete(
-            description.RequestId, TargeterTestKit.Selection(SelectorSlots.HandOrigin, candidate.Ref)));
-        var result = await task;
-        Assert.Equal(TargetingStatus.Success, result.Status);
+            description.RequestId, TargeterTestKit.Selection(SelectorNames.HandOrigin, candidate.Ref)));
+        Assert.True((await task).IsOk);
     }
 }

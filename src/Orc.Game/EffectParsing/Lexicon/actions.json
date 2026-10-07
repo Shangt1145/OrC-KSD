@@ -16,5 +16,7 @@
   "加入手中": { "key": "addToHand" },
   "加入手牌": { "key": "addToHand" },
   "放入手中": { "key": "addToHand" },
-  "洗入": { "key": "shuffleIn" }
+  "洗入": { "key": "shuffleIn" },
+  "升为老兵": { "key": "upgrade" },
+  "揭示": { "key": "reveal" }
 }

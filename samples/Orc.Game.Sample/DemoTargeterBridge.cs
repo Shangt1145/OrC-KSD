@@ -1,21 +1,13 @@
-using Orc.Cards;
 using Orc.Core;
-using Orc.Game;
-using Orc.Game.Board;
-using Orc.Game.Cards;
-using Orc.Game.Players;
 using Orc.Game.Targeting;
 
 namespace Orc.Game.Sample;
 
 /// <summary>
-/// 示例前端桥接（mock UI）：实现 <see cref="ITargeterBridge"/> 两个阶段入口——
-/// ①候选收集（<see cref="CollectCandidatesAsync"/>）：提交"前端当前可交互的完整引用列表"
-///   （示例＝全战场槽位引用 ＋ 全在场单位引用 ＋ 双方 HQ 实体引用；后端再做两级筛选收敛）；
-/// ②交互（<see cref="BeginInteraction"/>）：打印请求描述（槽位名／类别／数量／呈现标注／槽位参数／允许候选），
-///   **自动模式**＝按策略应答（mulligan 槽位＝按 <see cref="AutoReplaceCount"/> 选前 N 张；其余＝第一个允许候选），
-///   **交互模式**＝读控制台输入应答（序号多选／空＝空选／c＝取消）。
-/// 用途＝示例宿主（**非生产实现**；生产侧由真实前端实现本接口——桥接是后端↔前端的唯一通道）。
+/// 示例前端桥接（mock UI）：实现 <see cref="ITargeterBridge.BeginTargeting"/>——
+/// 拿到会话后按队列逐个取选择器（<see cref="ITargeterSession.NextAsync"/>）、"运行视觉"、提交语义事件。
+/// **自动模式**＝按策略应答；**交互模式**＝读控制台输入。
+/// 用途＝示例宿主（**非生产实现**；生产侧由真实前端实现本接口）。
 /// </summary>
 internal sealed class DemoTargeterBridge : ITargeterBridge
 {
@@ -25,190 +17,181 @@ internal sealed class DemoTargeterBridge : ITargeterBridge
     /// <param name="interactive">true＝读控制台输入应答；false＝自动应答（无人值守演示）。</param>
     public DemoTargeterBridge(bool interactive) => _interactive = interactive;
 
-    /// <summary>所服务的对局（构造 Match 后回填——收集与交互需读对局状态）。</summary>
+    /// <summary>所服务的对局（示例保留字段）。</summary>
     public Match? Match { get; set; }
 
     /// <summary>自动模式下 mulligan 换牌张数（示例用；0＝不换）。</summary>
     public int AutoReplaceCount { get; set; }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<object?>> CollectCandidatesAsync(TargetingCollectionContext context)
+    public void BeginTargeting(ITargeterSession session)
     {
-        var match = RequireMatch();
-        var references = new List<object?>();
-        foreach (var slot in AllSlotsOf(match))
-        {
-            references.Add(slot.Ref);
-        }
-
-        foreach (var unit in AllUnitsOf(match))
-        {
-            references.Add(unit.Ref);
-        }
-
-        foreach (var player in match.Players)
-        {
-            references.Add(player.Hq.Ref);
-        }
-
-        return Task.FromResult<IReadOnlyList<object?>>(references);
+        ArgumentNullException.ThrowIfNull(session);
+        _ = DriveAsync(session);
     }
 
-    /// <inheritdoc />
-    public void BeginInteraction(TargetingRequestDescription description, ITargetingResponder responder)
+    private async Task DriveAsync(ITargeterSession session)
     {
-        Console.WriteLine($"  [交互] 请求 {description.RequestId[..8]}…");
-        foreach (var slot in description.Slots)
+        try
         {
-            var parameter = slot.HasParameter ? $"、槽位参数={Describe(slot.Parameter)}" : string.Empty;
-            Console.WriteLine(
-                $"    槽位 '{slot.Name}'：类别={slot.Kind}、数量={slot.Min}..{slot.Max}、呈现={slot.Presentation}{parameter}");
+            while (true)
+            {
+                var selector = await session.NextAsync().ConfigureAwait(false);
+                if (selector is null)
+                {
+                    break;
+                }
+
+                Present(selector);
+
+                if (_interactive)
+                {
+                    InteractiveRespond(selector);
+                }
+                else
+                {
+                    AutoRespond(selector);
+                }
+            }
+
+            if (session.Result is { } result)
+            {
+                Console.WriteLine($"  [终局] {result.Status}");
+            }
         }
-
-        var primary = description.Slots[0];
-        var candidates = CandidatesOf(description, primary);
-
-        if (!_interactive)
+        catch (Exception ex)
         {
-            AutoRespond(description, primary, candidates, responder);
-            return;
+            Console.WriteLine($"  [桥接异常] {ex.Message}");
         }
-
-        InteractiveRespond(description, primary, candidates, responder);
     }
 
-    // ---------- 自动模式 ----------
-
-    private void AutoRespond(
-        TargetingRequestDescription description,
-        TargetSlotDescription slot,
-        IReadOnlyList<Ref<Entity>> candidates,
-        ITargetingResponder responder)
+    private static void Present(ISelectorInstance selector)
     {
-        var picks = slot.Kind == TargetSlotKind.MulliganSelect
-            ? candidates.Take(Math.Min(AutoReplaceCount, candidates.Count)).ToArray()
-            : candidates.Take(1).ToArray();
+        var p = selector.Presentation;
+        var parameter = p.HasParameter ? $"、参数={Describe(p.Parameter)}" : string.Empty;
+        Console.WriteLine($"  [交互] 选择器 '{p.SelectorName}'：模式={p.Mode}、数量={p.Min}..{p.Max}{parameter}");
 
-        var map = new Dictionary<string, IReadOnlyList<TargetSelection>>(StringComparer.Ordinal)
+        if (p.Identifiers is { Count: > 0 } identifiers)
         {
-            [slot.Name] = picks.Select(TargetSelection.FromReference).ToArray(),
-        };
-        var accepted = responder.Complete(description.RequestId, map);
-        Console.WriteLine(
-            $"    [自动应答] 选中 {picks.Length} 项 → Complete（{(accepted ? "接受" : "被拒")}；候选 {candidates.Count} 个）");
-    }
-
-    // ---------- 交互模式 ----------
-
-    private static void InteractiveRespond(
-        TargetingRequestDescription description,
-        TargetSlotDescription slot,
-        IReadOnlyList<Ref<Entity>> candidates,
-        ITargetingResponder responder)
-    {
-        Console.WriteLine("    允许候选：");
-        for (var i = 0; i < candidates.Count; i++)
-        {
-            Console.WriteLine($"      [{i + 1}] {Describe(candidates[i].Value)}");
+            foreach (var identifier in identifiers)
+            {
+                Console.WriteLine($"    选项：{identifier}");
+            }
         }
 
+        for (var i = 0; i < p.Candidates.Count; i++)
+        {
+            Console.WriteLine($"    [{i + 1}] {Describe(p.Candidates[i].Value)}");
+        }
+    }
+
+    private void AutoRespond(ISelectorInstance selector)
+    {
+        var p = selector.Presentation;
+        var isMulligan = selector.SelectorName == SelectorNames.Mulligan;
+        var want = isMulligan ? AutoReplaceCount : Math.Max(p.Min, 1);
+
+        bool accepted;
+        if (p.Identifiers is { Count: > 0 } identifiers)
+        {
+            accepted = selector.Submit(new PickEvent(identifiers: identifiers.Take(Math.Min(want, identifiers.Count)).ToArray()));
+        }
+        else if (isMulligan && want == 0)
+        {
+            accepted = selector.Submit(new PickEvent());
+        }
+        else if (selector.Mode == SelectorInteractionMode.Drag)
+        {
+            var picks = p.Candidates.Take(Math.Min(want, p.Candidates.Count)).ToArray();
+            accepted = picks.Length == 0
+                ? selector.Submit(new CancelEvent())
+                : selector.Submit(new PickEvent(references: picks));
+        }
+        else
+        {
+            var picks = p.Candidates.Take(Math.Min(want, p.Candidates.Count)).ToArray();
+            accepted = picks.Length == 0
+                ? selector.Submit(new CancelEvent())
+                : selector.Submit(new PickEvent(references: picks));
+        }
+
+        Console.WriteLine($"    [自动应答] 选中 {(accepted ? "已提交" : "被拒")}（候选 {p.Candidates.Count} 个）");
+    }
+
+    private static void InteractiveRespond(ISelectorInstance selector)
+    {
+        var p = selector.Presentation;
         while (true)
         {
             Console.Write("    输入序号（逗号分隔可多选；直接回车＝空选；c＝取消）> ");
             var line = Console.ReadLine();
             if (line is null)
             {
-                return; // 输入流结束：不构成终局（请求继续等待）
+                return; // 输入流结束：不构成终局
             }
 
             line = line.Trim();
             if (line.Equals("c", StringComparison.OrdinalIgnoreCase))
             {
-                var cancelled = responder.Cancel(description.RequestId);
-                Console.WriteLine($"    [取消] {(cancelled ? "接受" : "被拒")}");
+                selector.Submit(new CancelEvent());
                 return;
             }
 
             if (line.Length == 0)
             {
-                if (slot.Min <= 0 && responder.Complete(description.RequestId, EmptySelection(slot.Name)))
-                {
-                    Console.WriteLine("    [空选] 已确认");
-                    return;
-                }
-
-                Console.WriteLine($"    该槽位至少须选 {slot.Min} 项——请重新输入。");
-                continue;
-            }
-
-            if (!TryParsePicks(line, candidates, out var picks))
-            {
-                Console.WriteLine("    输入非法（须为范围内的序号）——请重新输入。");
-                continue;
-            }
-
-            var map = new Dictionary<string, IReadOnlyList<TargetSelection>>(StringComparer.Ordinal)
-            {
-                [slot.Name] = picks.Select(TargetSelection.FromReference).ToArray(),
-            };
-            if (responder.Complete(description.RequestId, map))
-            {
-                Console.WriteLine("    [确认] 已提交");
+                selector.Submit(new PickEvent());
                 return;
             }
 
-            Console.WriteLine("    内容不合规（被拒）——请重新输入。");
+            if (p.Identifiers is { Count: > 0 } identifiers)
+            {
+                if (!TryParseIndexes(line, identifiers.Count, out var indexes))
+                {
+                    Console.WriteLine("    输入非法（须为范围内的序号）。");
+                    continue;
+                }
+
+                selector.Submit(new PickEvent(identifiers: indexes.Select(i => identifiers[i - 1]).ToArray()));
+                return;
+            }
+
+            if (!TryParseIndexes(line, p.Candidates.Count, out var refIndexes))
+            {
+                Console.WriteLine("    输入非法（须为范围内的序号）。");
+                continue;
+            }
+
+            selector.Submit(new PickEvent(references: refIndexes.Select(i => p.Candidates[i - 1]).ToArray()));
+            return;
         }
     }
 
-    private static bool TryParsePicks(
-        string line, IReadOnlyList<Ref<Entity>> candidates, out IReadOnlyList<Ref<Entity>> picks)
+    private static bool TryParseIndexes(string line, int count, out IReadOnlyList<int> indexes)
     {
-        var result = new List<Ref<Entity>>();
+        var result = new List<int>();
         foreach (var part in line.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            if (!int.TryParse(part, out var number) || number < 1 || number > candidates.Count)
+            if (!int.TryParse(part, out var number) || number < 1 || number > count)
             {
-                picks = Array.Empty<Ref<Entity>>();
+                indexes = Array.Empty<int>();
                 return false;
             }
 
-            result.Add(candidates[number - 1]);
+            result.Add(number);
         }
 
-        picks = result;
+        indexes = result;
         return true;
     }
-
-    private static Dictionary<string, IReadOnlyList<TargetSelection>> EmptySelection(string slotName)
-        => new(StringComparer.Ordinal) { [slotName] = Array.Empty<TargetSelection>() };
-
-    // ---------- 读面辅助 ----------
-
-    /// <summary>槽位允许候选：新引用类＝槽位快照（手牌/换牌/卡牌选择器）；既有引用类＝请求级允许子集。</summary>
-    private static IReadOnlyList<Ref<Entity>> CandidatesOf(
-        TargetingRequestDescription description, TargetSlotDescription slot)
-        => slot.AllowedReferences ?? description.AllowedTargets;
-
-    private static IEnumerable<Slot> AllSlotsOf(Match match)
-        => match.Battlefield.PlayerASupportLine
-            .Concat(match.Battlefield.FrontLine)
-            .Concat(match.Battlefield.PlayerBSupportLine);
-
-    private static IEnumerable<UnitCard> AllUnitsOf(Match match)
-        => AllSlotsOf(match).Select(slot => slot.Occupant).OfType<UnitCard>();
-
-    private Match RequireMatch()
-        => Match ?? throw new InvalidOperationException("示例桥接未绑定对局（构造 Match 后须设置 Match 属性）。");
 
     private static string Describe(object? value) => value switch
     {
         null => "<空>",
         Ref<Entity> reference => Describe(reference.Value),
-        Hq hq => Describe(hq.Owner),
-        Player player => player.Index == 0 ? "玩家A" : "玩家B",
-        Card card => card.Name,
-        Slot slot => slot.IsEmpty ? "空槽" : $"槽（占：{Describe(slot.Occupant)}）",
+        Orc.Game.Players.Hq hq => Describe(hq.Owner),
+        Orc.Game.Players.Player player => player.Index == 0 ? "玩家A" : "玩家B",
+        Orc.Cards.Card card => card.Name,
+        Orc.Game.Board.Slot slot => slot.IsEmpty ? "空槽" : $"槽（占：{Describe(slot.Occupant)}）",
         _ => value.ToString() ?? value.GetType().Name,
     };
 }

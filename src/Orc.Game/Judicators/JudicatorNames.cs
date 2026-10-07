@@ -30,8 +30,9 @@ public static class JudicatorNames
     /// 卡组空＝不满足（false 降级）；恒真/恒假改写经 moding（全局生效）、注销回退。</summary>
     public const string DeckTopTag = "deck.top.tag";
 
-    /// <summary>目标候选合法性判定（示范②；签名＝（候选引用）→ bool）：默认规则＝在场单位可选；
-    /// 改写用例＝允许/禁止某类目标可选（经 moding 整体更换选择规则）。</summary>
+    /// <summary>目标候选合法性判定（示范②；签名＝（候选引用）→ bool）：默认规则＝在场单位可选**且隐蔽单位不可选**
+    /// （S2 加性——隐蔽机制·豁免剔除）；改写用例＝允许/禁止某类目标可选（经 moding 整体更换选择规则）。
+    /// 装配归属（S2 受控适配）＝**生产内置注册段**（<c>Match.Initialize</c> 固定注册——原「示范类经外部装配段」随 S2 提入生产装配）。</summary>
     public const string TargetCandidateEligibility = "targeting.candidate.eligibility";
 
     // ---------- K1（A 档 C1-C4：交战合法性判定族）：交战判定器（四条；内置注册段固定注册——无条件可用） ----------

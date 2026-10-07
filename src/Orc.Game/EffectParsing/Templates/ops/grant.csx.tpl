@@ -5,6 +5,6 @@ if (runtime is not null)
     var targets = await runtime.SelectAsync(self!, new Orc.Game.Effects.EffectSelector({{sel}}, {{side}}, {{selZone}}, {{filterUnitType}}, {{filterKeyword}}, null, {{selThreshold}}));
     foreach (var target in targets)
     {
-        await runtime.GrantAsync(target, {{keyword}}, ct);
+        await runtime.GrantAsync(target, {{keyword}}{{value}}, ct);
     }
 }

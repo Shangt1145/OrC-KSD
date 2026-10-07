@@ -149,21 +149,34 @@ public static class PincerRules
             return; // 无合法候选：不发起选择、不形成、部署正常完成
         }
 
-        var allowedSet = new HashSet<Ref<Entity>>(candidates.Select(unit => unit.Ref));
-        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
-        var targeter = targeterManager.CreateTargeter(filter, new TargetSlot[] { new SingleSelectSlot() });
-        var targeting = await targeter.Targeting();
+        UnitCard? resultPartner = null;
+        var result = await targeterManager.RunAsync(async flow =>
+        {
+            var step = await flow.Step(
+                SelectorTemplates.TargetPoint,
+                new ReferenceSetParameter(candidates.Select(unit => unit.Ref), 1, 1));
 
-        if (targeting.Status != TargetingStatus.Success)
+            // 非法选择＝同一选择器重入（Q8a）。
+            while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
+            {
+                step = await flow.Retry<Ref<Entity>>();
+            }
+
+            if (!step.IsOk)
+            {
+                return TargeterResult.Cancelled(); // 取消/失败：不形成
+            }
+
+            resultPartner = step.Value?.Value as UnitCard;
+            return TargeterResult.Ok();
+        });
+
+        if (!result.IsOk || resultPartner is null)
         {
             return; // 取消（放弃选择）/ 失败：不形成、部署照常完成
         }
 
-        var selected = targeting.Outcome?.Single;
-        if (selected is null || !selected.IsAlive || selected.Value is not UnitCard partner)
-        {
-            return; // 防御：无效产出（不应发生——终局已校验）
-        }
+        var partner = resultPartner;
 
         // 一对一占用复验（先到先得——形成时再查：交互期间另一方可能已被占用）＋自身/归属复验
         if (registry.IsPaired(self) || registry.IsPaired(partner) || ReferenceEquals(partner, self))
@@ -203,7 +216,8 @@ public static class PincerRules
         registry.Remove(pair);
     }
 
-    /// <summary>候选收集（己方战场上单位：己方支援线→前线、线内索引序稳定；不含自身/HQ/已配对）。</summary>
+    /// <summary>候选收集（己方战场上单位：己方支援线→前线、线内索引序稳定；不含自身/HQ/已配对/隐蔽〔S2：
+    /// 隐蔽单位不可被选为同伴——「被外部效果选择/收集」侧剔除；隐蔽单位自己部署钳击时作为来源不受限〕）。</summary>
     private static List<UnitCard> CollectCandidates(UnitCard self, Battlefield battlefield, PincerRegistry registry)
     {
         var result = new List<UnitCard>();
@@ -235,6 +249,7 @@ public static class PincerRules
     private static bool IsEligibleCandidate(UnitCard self, UnitCard candidate, PincerRegistry registry)
         => !ReferenceEquals(candidate, self)
             && ReferenceEquals(candidate.Owner, self.Owner)
+            && !CovertRules.IsCovert(candidate) // S2：隐蔽单位不可被选为同伴（被外部效果选择/收集侧剔除；来源侧〔self〕不受限）
             && candidate.TryGetData<UnitStateData>(out var state)
             && !state.IsDestroyed
             && !registry.IsPaired(candidate);

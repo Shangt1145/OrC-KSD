@@ -46,5 +46,5 @@ public class CardTriggerView
     /// </summary>
     [Optional]
     [Read]
-    public virtual IReadOnlyList<TargetSlot>? SelectorSlots { get; set; }
+    public virtual IReadOnlyList<Selector>? SelectorSlots { get; set; }
 }

@@ -86,9 +86,11 @@ public sealed class DslOp
         string? name = null,
         IReadOnlyList<DslEffectInstance>? nested = null,
         string? until = null,
-        string? field = null)
+        string? field = null,
+        int? value = null)
     {
         Field = field;
+        Value = value;
         ArgumentException.ThrowIfNullOrWhiteSpace(op);
 
         if (string.Equals(op, "csx", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(script))
@@ -159,6 +161,13 @@ public sealed class DslOp
 
     /// <summary>词条名。</summary>
     public string? Keyword { get; }
+
+    /// <summary>
+    /// **词条参值**（词条效果化·批 0）：授予类 op（<c>grant</c>）携带的参数值（如「重甲3」的 3）。
+    /// 可空——null＝**未提供参值**（与「显式 0」为两种不同形态，渲染与承接均区分）；
+    /// 通道层不做值域校验（非负/上限等语义域）——值域约束由词条组件既有机制承载（如重甲/情报 [0,3] 钳制）。
+    /// </summary>
+    public int? Value { get; }
 
     /// <summary>落点区域。</summary>
     public string? Zone { get; }
@@ -235,6 +244,12 @@ public sealed class DslCondition
     /// 渲染为真实 csx（EffectRuntime.EvaluateCondition）——**求值是纯函数**（可安全参与 &amp;&amp; 合取）。
     /// </summary>
     public const string Compare = "compare";
+
+    /// <summary>
+    /// **回合归属类条件**（S3）：<see cref="Raw"/> 承载 `friendly`／`enemy`——语义＝「该卡拥有者视角的
+    /// 回合归属判定」（owner == 当前行动方／≠ 当前行动方）；渲染为真实 csx（求值挂钩既有回合归属判定面）。
+    /// </summary>
+    public const string TurnOwner = "turn.owner";
 
     /// <summary>合取：<see cref="All"/> 中全部子条件为真才为真（渲染为 <c>(a &amp;&amp; b)</c>）。</summary>
     public const string AllKind = "all";

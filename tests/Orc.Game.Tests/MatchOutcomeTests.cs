@@ -232,8 +232,8 @@ public class MatchOutcomeTests
         var targeter = match.TargeterManager.CreateTargeter();
         var result = await targeter.Targeting();
 
-        Assert.Equal(TargetingStatus.Failed, result.Status);
-        Assert.Equal(TargetingEndReason.GameEnded, result.Reason);
+        Assert.Equal(TargeterStatus.Failed, result.Status);
+        Assert.Equal(TargeterFailureReason.GameEnded, result.Reason);
         Assert.Null(result.Outcome);
         Assert.Equal(beginsAtEnd, bridge.Begins.Count);
         Assert.Equal(collectsAtEnd, bridge.CollectCalls.Count);

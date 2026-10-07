@@ -5,8 +5,8 @@ namespace Orc.Game.Cards;
 /// <summary>
 /// 词条注册面（2C-A1；进程级全局）：登记「词条标识 → 组件工厂（卡实例＋参值 → 词条组件）」。
 /// 作用域与契约（实现 grill 第 2 批·场 1 第 5 轮裁定）：
-/// 【进程级全局】生产内建十五枚（闪击/奋战/烟幕/伏击＋被压制/被抑制/动员/钳击/预报/免疫/重甲/情报/
-/// 无法被压制/无法被抑制——A2 扩展；亡计——A4 扩展）经本面装配（取代硬编码工厂 switch）；开放扩展注册
+/// 【进程级全局】生产内建十七枚（闪击/奋战/烟幕/伏击＋被压制/被抑制/动员/钳击/预报/免疫/重甲/情报/
+/// 无法被压制/无法被抑制——A2 扩展；亡计——A4 扩展；老兵——S1 扩展；隐蔽——S2 扩展）经本面装配（取代硬编码工厂 switch）；开放扩展注册
 /// （测试/后续批次可注册自定义标识）。
 /// 【注册先于使用】为使用者义务：定义声明的合法性校验（<see cref="CardDefinition"/>）与加载期组件构造
 /// （<see cref="KeywordManager"/>）均以本面内容为唯一来源（单源）；注册须发生在定义构造/加载装配之前。
@@ -30,7 +30,7 @@ public static class KeywordRegistry
 
     static KeywordRegistry()
     {
-        // 生产内建十四枚（经注册面装配——合法标识集来源＝本面内容）。
+        // 生产内建十七枚（经注册面装配——合法标识集来源＝本面内容；S2 起含隐蔽——「十六枚」旧注释随注册面同步）。
         // 既有四枚（2C-A1 迁移）——均属对战词条（打标）。
         Register(KeywordIds.Blitz, (_, _) => new BlitzKeywordComponent(), isBattleKeyword: true);
         Register(KeywordIds.Fury, (_, _) => new FuryKeywordComponent(), isBattleKeyword: true);
@@ -51,6 +51,13 @@ public static class KeywordRegistry
 
         // A4 新增一枚——亡计（内容型；不打对战词条标——Q&A-6 第 4 点；内容经运行时授予通道的「内容装载点」注入）。
         Register(KeywordIds.Deathrattle, (_, _) => new DeathrattleKeywordComponent());
+
+        // S1 新增一枚——老兵（标记型；无行为面；不打对战词条标——纯内容标记，读取面经 VeteranRules.IsVeteran）。
+        Register(KeywordIds.Veteran, (_, _) => new PlainKeywordComponent(KeywordIds.Veteran));
+
+        // S2 新增一枚——隐蔽（标记型；无行为面；不打对战词条标——纯内容标记，读取面经 CovertRules.IsCovert；
+        // 豁免剔除经判定器默认规则/剔除点承载、揭示经 CovertRules.RevealAsync 承载）。
+        Register(KeywordIds.Covert, (_, _) => new PlainKeywordComponent(KeywordIds.Covert));
     }
 
     /// <summary>

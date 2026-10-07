@@ -96,7 +96,7 @@ public static class GameHooksJson
     private static readonly IReadOnlyList<string> CardPlayerPayload =
         [GameHooks.PayloadCard, GameHooks.PayloadPlayer];
 
-    /// <summary>26 条信号的权威描述表（与 03-hook定义 S2 对齐；E1-25 追加资源六项；E1-33 追加伤害/行动两项）。</summary>
+    /// <summary>31 条信号的权威描述表（与 03-hook定义 S2 对齐；E1-25 追加资源六项；E1-33 追加伤害/行动两项；S1 追加 unit.upgraded；S2 追加 unit.revealed）。</summary>
     private static IReadOnlyList<SignalEntry> SignalMetadata { get; } = new[]
     {
         new SignalEntry(GameHooks.TurnStartBefore, TurnPayload,
@@ -153,6 +153,12 @@ public static class GameHooksJson
             [GameHooks.PayloadUnit, GameHooks.PayloadOldPosition, GameHooks.PayloadNewPosition],
             ["Commanding/CommandManager.cs:1177·HandleUnitMoveAsync"],
             ["Commanding/CommandManager.cs·守护维护"]),
+        new SignalEntry(GameHooks.UnitUpgraded,
+            [GameHooks.PayloadUnit],
+            ["Cards/UnitCard.cs·PromoteToVeteranAsync（升级收尾——先落定后发射、恰一次）"], []),
+        new SignalEntry(GameHooks.UnitRevealed,
+            [GameHooks.PayloadUnit],
+            ["Cards/CovertSystem.cs·RevealAsync（揭示收尾——先落定后发射、恰一次）"], []),
         new SignalEntry(GameHooks.DeckShuffled,
             [GameHooks.PayloadPlayer, GameHooks.PayloadDeck],
             ["Match/Match.cs:348·ShuffleDeckAsync"], []),
@@ -188,7 +194,7 @@ public static class GameHooksJson
             ["Managers/ResourceManager.cs·ChangePointsAsync / GainPointsAsync / LosePointsAsync"], []),
     };
 
-    /// <summary>21 条判定器的权威描述表（与 03-hook定义 S3-3 对齐；E1-25 补齐 effect.target.resolve 缺口并追加资源五条）。</summary>
+    /// <summary>21 条判定器的权威描述表（与 03-hook定义 S3-3 对齐；E1-25 补齐 effect.target.resolve 缺口并追加资源五条；S2：目标候选合法性提入生产内置段）。</summary>
     private static IReadOnlyList<JudicatorEntry> JudicatorMetadata { get; } = new[]
     {
         new JudicatorEntry(GameHooks.JudicatorCostCheck,
@@ -232,6 +238,6 @@ public static class GameHooksJson
         new JudicatorEntry(GameHooks.JudicatorDeckTopTag,
             ["Judicators/DeckTopTagJudicator.cs"], false),
         new JudicatorEntry(GameHooks.JudicatorTargetCandidateEligibility,
-            ["Judicators/TargetEligibilityJudicator.cs"], false),
+            ["Judicators/TargetEligibilityJudicator.cs"], true),
     };
 }

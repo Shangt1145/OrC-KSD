@@ -66,7 +66,7 @@ public enum PlayFailureReason
 /// </summary>
 public sealed class PlayResult
 {
-    private PlayResult(PlayResultStatus status, PlayFailureReason? failureReason, TargetingResult? targeting)
+    private PlayResult(PlayResultStatus status, PlayFailureReason? failureReason, TargeterResult? targeting)
     {
         Status = status;
         FailureReason = failureReason;
@@ -80,7 +80,7 @@ public sealed class PlayResult
     public PlayFailureReason? FailureReason { get; }
 
     /// <summary>交互细节透传（可空；取消 / 交互失败 / 预打出确认场景携带）。</summary>
-    public TargetingResult? Targeting { get; }
+    public TargeterResult? Targeting { get; }
 
     /// <summary>是否成功（便捷读面）。</summary>
     public bool IsSuccess => Status == PlayResultStatus.Success;
@@ -89,11 +89,11 @@ public sealed class PlayResult
     internal static PlayResult Success() => new(PlayResultStatus.Success, failureReason: null, targeting: null);
 
     /// <summary>创建取消结果（框架内部）。</summary>
-    internal static PlayResult Cancelled(TargetingResult? targeting = null)
+    internal static PlayResult Cancelled(TargeterResult? targeting = null)
         => new(PlayResultStatus.Cancelled, failureReason: null, targeting);
 
     /// <summary>创建失败结果（框架内部）。</summary>
-    internal static PlayResult Failure(PlayFailureReason reason, TargetingResult? targeting = null)
+    internal static PlayResult Failure(PlayFailureReason reason, TargeterResult? targeting = null)
         => new(PlayResultStatus.Failed, reason, targeting);
 }
 

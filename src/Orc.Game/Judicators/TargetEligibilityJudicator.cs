@@ -8,12 +8,16 @@ namespace Orc.Game.Judicators;
 /// 形态＝「持有转发」：判定器内部持有默认选择规则（<see cref="TargetCandidateRule"/> 逻辑单元——
 /// 一次选择所用的候选/合法性判定逻辑，与筛选链细筛谓词同域），调用时转发执行；moding 替换后该规则整体更换（纯替换）。
 /// 签名（强类型面）＝（候选引用）→ bool（该候选是否可选）。
-/// 默认规则＝在场（存活）单位可选：存活引用且解引用为单位卡 <see cref="UnitCard"/>——HQ/槽位等非单位候选不可选；
+/// 默认规则＝在场（存活）**且非隐蔽**单位可选（S2 加性：隐蔽剔除）：存活引用且解引用为单位卡
+/// <see cref="UnitCard"/> 且不含「隐蔽」标记——HQ/槽位等非单位候选不可选、隐蔽单位不可选；
 /// 失效引用＝false（不可选——有效性判定归筛选域）。
 /// 输入契约：候选为 null＝fail-fast（参数契约错误）。
 /// 改写＝moding（允许/禁止某类目标可选——经规则整体更换实现；全局生效）；注销回退。
 /// 无状态：不持有对局状态，全部经候选引用只读读取。
-/// 注册途径＝既有装配期注册面（外部装配段/测试装配注册）；名称＝<see cref="JudicatorNames.TargetCandidateEligibility"/>（冻结契约）。
+/// 注册途径＝**生产内置注册段**（S2 起——<c>Match.Initialize</c> 固定注册、默认名恒可解析；原「示范类经外部装配段」归属
+/// 随本单提入生产装配）＋既有装配期注册面（追加/定制通道）；名称＝<see cref="JudicatorNames.TargetCandidateEligibility"/>（冻结契约）。
+/// 消费面（S2 接线）：指令效果索敌统一经本判定器获取「可被指令指向/影响」的单位——调用方经
+/// <see cref="JudicatorSelectionRule"/> 包装（<c>AsFilter</c> 接入筛选链；请求级覆盖＝<c>includeCovert</c>）。
 /// </summary>
 public sealed class TargetEligibilityJudicator : Judicator<TargetEligibilityJudicator.TargetCandidateRule>
 {
@@ -38,12 +42,12 @@ public sealed class TargetEligibilityJudicator : Judicator<TargetEligibilityJudi
     public override object[]? Invoke(object[]? args) => Adapt(_rule)(args);
 
     /// <summary>
-    /// 默认选择规则：在场（存活）单位可选（失效引用＝不可选）。
+    /// 默认选择规则：在场（存活）且非隐蔽单位可选（失效引用＝不可选）。
     /// </summary>
     /// <exception cref="ArgumentNullException">candidate 为 null（参数契约错误——fail-fast）。</exception>
     private static bool DefaultRule(Ref<Entity> candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        return candidate.IsAlive && candidate.Value is UnitCard;
+        return candidate.IsAlive && candidate.Value is UnitCard unit && !CovertRules.IsCovert(unit);
     }
 }

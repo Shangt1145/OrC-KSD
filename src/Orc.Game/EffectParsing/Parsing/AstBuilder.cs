@@ -51,6 +51,23 @@ public sealed class AstBuilder
 
     // ---------- 触发识别 ----------
 
+    /// <summary>
+    /// **事件型前缀白名单**（S3·方案 B）：动作字面 ＋ <c>：</c>（冒号）＝具名事件前缀
+    /// （语义与「部署：」「亡计：」同族），当前仅『揭示』一词；白名单外（如「获得：」）**保持既有语义路径**
+    /// （引号内嵌效果——不得改判为具名事件）。白名单机制可复用，未来扩充需另行裁定。
+    /// </summary>
+    private static readonly HashSet<string> EventPrefixWhitelist = new(StringComparer.Ordinal)
+    {
+        "揭示",
+    };
+
+    /// <summary>句首是否为白名单内"动作词＋冒号"事件前缀（S3；「揭示：X」形态）。</summary>
+    private static bool IsEventPrefixAction(IReadOnlyList<Token> tokens) =>
+        tokens.Count > 1
+        && tokens[0].Type == TokenType.Action
+        && EventPrefixWhitelist.Contains(tokens[0].Lexeme)
+        && tokens[1].IsPunct(PunctKinds.Colon);
+
     private static (TriggerNode? Trigger, int BodyStart) DetectTrigger(IReadOnlyList<Token> tokens)
     {
         if (tokens.Count == 0)
@@ -59,7 +76,8 @@ public sealed class AstBuilder
         }
 
         var first = tokens[0];
-        if (first.Type == TokenType.Trigger && first.Get("role") == TriggerRoles.Named)
+        if ((first.Type == TokenType.Trigger && first.Get("role") == TriggerRoles.Named)
+            || IsEventPrefixAction(tokens))
         {
             var end = FindPhraseEnd(tokens);
             var phrase = tokens.Take(end + 1).ToList();
@@ -228,7 +246,6 @@ public sealed class AstBuilder
         string? comparisonOp = null;
         var comparisonSpan = default(TextSpan);
         int? comparisonRight = null;
-        var comparisonRightIsCount = false;
         string? comparisonRightSide = null;
         string? comparisonRightZone = null;
         var leftIsCount = false;

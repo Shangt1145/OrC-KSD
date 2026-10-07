@@ -202,12 +202,13 @@ public class CommandFrontLineTests
         Assert.Contains(hqRef, description.AllowedTargets);
         Assert.DoesNotContain(frontInfantry.Ref, description.AllowedTargets);
 
-        // 确认面全程受同一筛选约束：提交被拦截目标＝拒绝（不构成确认）；提交战斗机＝确认。
+        // 确认面全程受同一筛选约束：提交被拦截目标＝Failed → 内部重入（同一选择器）；提交战斗机＝确认。
         var rejected = responder.Complete(
             description.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, frontInfantry.Ref));
-        Assert.False(rejected);
-        var accepted = responder.Complete(
-            description.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, enemyFighter.Ref));
+        Assert.True(rejected);
+        var (reentryDescription, reentryResponder) = await bridge.WaitForNextBeginAsync();
+        var accepted = reentryResponder.Complete(
+            reentryDescription.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, enemyFighter.Ref));
         Assert.True(accepted);
 
         var result = await task;

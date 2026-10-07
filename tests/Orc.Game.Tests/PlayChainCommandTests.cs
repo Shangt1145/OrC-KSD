@@ -112,22 +112,33 @@ public class PlayChainCommandTests
         bridge.CollectScript = _ => Task.FromResult(TargeterTestKit.Candidates(payload.Ref));
         bridge.InteractionScript = TargeterTestKit.AutoCompleteWithFirstAllowed();
 
-        // 预打出阶段捕获「targeter 请求对象」本体（延迟选择；经捕获箱提交）；打出阶段识别并执行（最小闭环：执行产出引用并可被消费）。
-        var targeter = match.TargeterManager.CreateTargeter();
+        // 预打出阶段捕获「targeter 流程函数」本体（延迟选择；经捕获箱提交）；打出阶段识别并执行（最小闭环：执行产出引用并可被消费）。
+        Ref<Entity>? consumed = null;
+        var request = new Func<ITargeterFlow, Task<TargeterResult>>(async f =>
+        {
+            var step = await f.Step(
+                SelectorTemplates.TargetPoint,
+                new ReferenceSetParameter(new[] { payload.Ref }, 1, 1));
+            if (step.IsOk)
+            {
+                consumed = step.Value;
+            }
+
+            return step.IsOk ? TargeterResult.Ok() : TargeterResult.FromSelectorFailure(step.Failure);
+        });
+
         command.AddPrePlayHandler("捕获请求", (view, ctx, ct) =>
         {
-            view.CaptureBox!.Capture(targeter);
+            view.CaptureBox!.Capture(request);
             return Task.CompletedTask;
         });
         var identifiedAsTargeter = false;
-        Ref<Entity>? consumed = null;
         command.AddActiveHandler("执行请求", async (view, ctx, ct) =>
         {
-            if (view.Argument is Targeter request)
+            if (view.Argument is Func<ITargeterFlow, Task<TargeterResult>> captured)
             {
                 identifiedAsTargeter = true;
-                var targeting = await request.Targeting();
-                consumed = targeting.Outcome?.Single;
+                await match.TargeterManager.RunAsync(captured);
             }
         });
 
@@ -231,7 +242,7 @@ public class PlayChainCommandTests
         command.AddPrePlayHandler("交互取消即中止", async (view, ctx, ct) =>
         {
             var targeting = await targeter.Targeting();
-            if (targeting.Status == TargetingStatus.Cancelled)
+            if (targeting.Status == TargeterStatus.Cancelled)
             {
                 view.CaptureBox!.CancelPrePlay();
             }

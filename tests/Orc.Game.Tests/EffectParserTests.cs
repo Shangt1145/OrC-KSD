@@ -45,6 +45,8 @@ public class EffectParserTests
         {
             "damage", "attack", "destroy", "draw", "gain", "lose", "move", "pin", "silence", "addToHand", "shuffleIn",
             "state", // E1-41：`具有`（状态/属性描述）
+            "upgrade", // S3：`升为老兵`
+            "reveal", // S3：`揭示`（事件前缀「揭示：」同字面——动作类别唯一）
         };
         _ = known;
         var lexicons = LexiconLoader.LoadDirectory(LexiconLoader.DefaultDirectory, out var failures);
@@ -397,6 +399,16 @@ public class EffectParserTests
             "友方使用情报牌时，获得 +1+1。",
             "使用情报牌时，抽 1 张牌。",
             "敌方使用情报牌时，抽 1 张牌。",
+            // S3（老兵与隐蔽·模板效果补全）：代表文本全量实编译——upgrade/reveal op 与条件渲染
+            // 所引一切 API（含在场回合数/回合归属读取面）自然纳入编译检查（编译错误＝测试失败＝强制存在）。
+            "在场上的第三回合开始时，升为老兵。",                        // V1（part-13:29）
+            "本单位对敌方总部造成伤害时，升为老兵。",                    // V2a（part-03:61）
+            "升为老兵时，将 1 张“一号坦克 B 型”加入手牌。",              // V2b（part-03:62）
+            "友方单位升为老兵时，本单位获得 +2+2。",                    // V3（part-07:35）
+            "使 1 个老兵单位获得奋战和冲击。",                          // V4（part-02:23）
+            "揭示：若是友方回合，获得 +2 攻击力。",                      // C5（part-11:48）
+            "部署：揭示 1 个隐蔽单位。",                                // C6（part-11:60）
+            "友方隐蔽单位被揭示时，使所有友方单位获得 +1+1。",            // C7（part-05:10）
         };
 
         var templates = EffectTemplateLoader.LoadDirectory(EffectTemplateLoader.DefaultDirectory);
@@ -788,6 +800,240 @@ public class EffectParserTests
         Assert.Contains(
             result.Unresolved,
             record => record.Reason.Contains("未产出任何可执行效果", StringComparison.Ordinal));
+    }
+
+    // ---------- S3（老兵与隐蔽·模板效果补全）：词法/解析/编译断言 ----------
+
+    private static string CompileSingleEventCsx(DslEffectInstance dsl, string effectId)
+    {
+        var templates = EffectTemplateLoader.LoadDirectory(EffectTemplateLoader.DefaultDirectory);
+        Assert.Empty(templates.Failures);
+        var compiler = new EffectCompiler(templates.Templates, Ops);
+        var snapshot = compiler.Compile(dsl, effectId);
+        return Assert.Single(snapshot.Root.MainTrigger.Events).CsxSource!;
+    }
+
+    [Fact]
+    public void Segmenter_Drops_Keyword_Only_Lines_With_New_Words()
+    {
+        // S3（Q&A-2c）：新词条词（老兵/隐蔽/奋战）行仍按"整行只有词条/数值"丢弃；含动作/触发的行不误丢。
+        const string text = "老兵\n隐蔽\n奋战\n部署：对一个敌方单位造成2点伤害。";
+        var asts = Parser.ParseAst(text);
+        var ast = Assert.Single(asts);
+        Assert.Equal(BoundaryKind.Hard, ast.Boundary);
+
+        // 「揭示：」开头行含动作词 ⇒ 不丢（单行自成效果）。
+        var revealLine = Parser.ParseAst("揭示：若是友方回合，获得 +2 攻击力。");
+        Assert.Single(revealLine);
+        Assert.Equal(TriggerSyntaxKind.Named, revealLine[0].Trigger!.Kind);
+    }
+
+    [Fact]
+    public void Ast_Detects_Reveal_Colon_Prefix_As_Named_Trigger()
+    {
+        // S3（方案 B）：「揭示：」＝事件前缀（白名单）——句首动作词＋冒号 ⇒ 具名事件「揭示」。
+        var ast = Parser.ParseAst("揭示：若是友方回合，获得 +2 攻击力。")[0];
+        Assert.Equal(TriggerSyntaxKind.Named, ast.Trigger!.Kind);
+        var ev = Assert.Single(ast.Trigger.Events);
+        Assert.Equal("揭示", ev.RawText);
+
+        // 防回归（Q&A-4）：白名单外（「获得：」）**保持既有语义路径**（无触发前缀、默认骨架＋嵌套效果）——
+        // 不得改判为具名事件「获得」。
+        var gainPrefix = Parser.ParseAst("使 1 个友方单位获得：“友方回合开始时，获得 +2+2。”")[0];
+        Assert.Null(gainPrefix.Trigger);
+    }
+
+    [Fact]
+    public void Parse_Maps_InPlay_Third_Turn_Upgrade_With_Turns_Condition()
+    {
+        // V1（part-13:29）：「在场上的第三回合开始时，升为老兵。」——turn_start_basic ＋ turns 度量条件。
+        var dsl = Assert.Single(Parser.Parse("在场上的第三回合开始时，升为老兵。").Effects);
+        Assert.Equal("turn_start_basic", dsl.Template);
+
+        var op = Assert.Single(dsl.Fills["on_event"].Ops);
+        Assert.Equal("upgrade", op.Op);
+        Assert.Equal(DslCondition.Compare, op.Condition!.Kind);
+        Assert.Equal("turns=s=self:gte:#3", op.Condition.Raw);
+
+        // 编译：条件渲染为真实 csx（求值挂钩既有读取面 UnitCard.TurnsInPlay）。
+        var csx = CompileSingleEventCsx(dsl, "effect.veteran.v1");
+        Assert.Contains("TurnsInPlay", csx, StringComparison.Ordinal);
+        Assert.Contains(">= 3", csx, StringComparison.Ordinal);
+        Assert.Contains("UpgradeAsync", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Damage_Dealt_Upgrade_And_Upgrade_Listener()
+    {
+        // V2a（part-03:61）：「本单位对敌方总部造成伤害时，升为老兵。」——damage_dealt_basic（自指＋总部受方）。
+        var dealt = Assert.Single(Parser.Parse("本单位对敌方总部造成伤害时，升为老兵。").Effects);
+        Assert.Equal("damage_dealt_basic", dealt.Template);
+        var dealtOp = Assert.Single(dealt.Fills["on_event"].Ops);
+        Assert.Equal("upgrade", dealtOp.Op);
+        var conjunction = dealtOp.Condition!;
+        Assert.Equal(DslCondition.AllKind, conjunction.Kind);
+        Assert.Equal(DslCondition.PayloadSelf, conjunction.All![0].Kind);
+        Assert.Equal("Unit", conjunction.All![0].Raw);
+        Assert.Equal(DslCondition.PayloadIsHq, conjunction.All![1].Kind);
+
+        // V2b（part-03:62）：「升为老兵时，将 1 张“一号坦克 B 型”加入手牌。」——veteran_basic（无归属词＝无守卫）。
+        var upgraded = Assert.Single(Parser.Parse("升为老兵时，将 1 张“一号坦克 B 型”加入手牌。").Effects);
+        Assert.Equal("veteran_basic", upgraded.Template);
+        var addOp = Assert.Single(upgraded.Fills["on_event"].Ops);
+        Assert.Equal("addToHand", addOp.Op);
+        Assert.Equal("一号坦克 B 型", addOp.Name);
+        Assert.Equal(1, addOp.Count);
+        // 裸短语「升为老兵时」＝**隐式自指**（本单位升级时——不泛触发于其它单位）。
+        Assert.Equal(DslCondition.PayloadSelf, addOp.Condition!.Kind);
+        Assert.Equal("Unit", addOp.Condition.Raw);
+    }
+
+    [Fact]
+    public void Parse_Maps_Friendly_Veteran_Listener_With_Owner_Guard()
+    {
+        // V3（part-07:35）：「友方单位升为老兵时，本单位获得 +2+2。」——归属守卫（卡面）＋buff。
+        var friendly = Assert.Single(Parser.Parse("友方单位升为老兵时，本单位获得 +2+2。").Effects);
+        Assert.Equal("veteran_basic", friendly.Template);
+        var friendlyOp = Assert.Single(friendly.Fills["on_event"].Ops);
+        Assert.Equal("buff", friendlyOp.Op);
+        Assert.Equal(2, friendlyOp.Attack);
+        Assert.Equal(2, friendlyOp.Defense);
+        Assert.Equal(DslCondition.OwnerSame, friendlyOp.Condition!.Kind);
+
+        // 敌方形态（自然收益——同一归属守卫机制）：owner.different。
+        var enemy = Assert.Single(Parser.Parse("敌方单位升为老兵时，对其造成 2 点伤害。").Effects);
+        Assert.Equal("veteran_basic", enemy.Template);
+        Assert.Equal(
+            DslCondition.OwnerDifferent,
+            Assert.Single(enemy.Fills["on_event"].Ops).Condition!.Kind);
+
+        // 编译：归属守卫渲染为真实 csx（unit.* 载荷——view.Unit 面）。
+        var csx = CompileSingleEventCsx(friendly, "effect.veteran.v3");
+        Assert.Contains("(view.Card ?? view.Unit) is Orc.Game.Cards.CardBase actorEvent", csx, StringComparison.Ordinal);
+        Assert.Contains("object.ReferenceEquals(actorSelf.Owner, actorEvent.Owner)", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Veteran_Unit_Gain_Fury_With_Impact_Trace()
+    {
+        // V4（part-02:23）：「使 1 个老兵单位获得奋战和冲击。」——
+        // 「老兵单位」筛选＋「获得奋战」完整授予链；「冲击」（词条未实现）**显式留痕**（needsCsx 原文保留）。
+        var dsl = Assert.Single(Parser.Parse("使 1 个老兵单位获得奋战和冲击。").Effects);
+        Assert.Equal("deploy_basic", dsl.Template);
+
+        var ops = dsl.Fills["on_deploy"].Ops;
+        Assert.Equal(2, ops.Count);
+
+        var grant = ops[0];
+        Assert.Equal("grant", grant.Op);
+        Assert.Equal("奋战", grant.Keyword);
+        Assert.Equal("one", grant.Target!.Sel);
+        Assert.Equal("老兵", grant.Target.Filter!.Keyword);
+
+        var trace = ops[1];
+        Assert.Equal(DslOpRegistry.NeedsCsxOpName, trace.Op);
+        Assert.Equal("冲击", trace.Script);
+
+        // 编译：授予链真实渲染；留痕以 TODO 注释承载（不静默、不误跑）。
+        var csx = CompileSingleEventCsx(dsl, "effect.veteran.v4");
+        Assert.Contains("\"奋战\"", csx, StringComparison.Ordinal);
+        Assert.Contains("TODO", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Reveal_Prefix_As_Event_Listener()
+    {
+        // C5（part-11:48）：「揭示：若是友方回合，获得 +2 攻击力。」——reveal_basic（**不再**静默误归 deploy_basic）。
+        var dsl = Assert.Single(Parser.Parse("揭示：若是友方回合，获得 +2 攻击力。").Effects);
+        Assert.Equal("reveal_basic", dsl.Template);
+
+        var op = Assert.Single(dsl.Fills["on_event"].Ops);
+        Assert.Equal("buff", op.Op);
+        Assert.Equal(2, op.Attack);
+
+        // 条件＝**自指守卫**（被揭示者==宿主——「揭示：X」不泛触发） ∧ **回合归属条件**（合取）。
+        var condition = op.Condition!;
+        Assert.Equal(DslCondition.AllKind, condition.Kind);
+        Assert.Equal(DslCondition.PayloadSelf, condition.All![0].Kind);
+        Assert.Equal("Unit", condition.All![0].Raw);
+        Assert.Equal(DslCondition.TurnOwner, condition.All![1].Kind);
+        Assert.Equal("friendly", condition.All![1].Raw);
+
+        // 编译：回合归属条件渲染为真实 csx（求值挂钩既有回合归属判定面）。
+        var csx = CompileSingleEventCsx(dsl, "effect.covert.c5");
+        Assert.Contains("TurnRules.IsOwnerTurn", csx, StringComparison.Ordinal);
+        Assert.Contains("object.ReferenceEquals(view.Unit, self)", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Enemy_Turn_Condition_As_Natural_Benefit()
+    {
+        // 自然收益：「亡计：若是敌方回合，将 1 张“一号坦克 B 型”加入手牌。」→ enemy 方向（IsOpponentTurn）。
+        var dsl = Assert.Single(Parser.Parse("亡计：若是敌方回合，将 1 张“一号坦克 B 型”加入手牌。").Effects);
+        Assert.Equal("death_basic", dsl.Template);
+        var op = Assert.Single(dsl.Fills["on_event"].Ops);
+        Assert.Equal(DslCondition.TurnOwner, op.Condition!.Kind);
+        Assert.Equal("enemy", op.Condition.Raw);
+
+        var csx = CompileSingleEventCsx(dsl, "effect.veteran.enemy_turn");
+        Assert.Contains("TurnRules.IsOpponentTurn", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Covert_Reveal_Action()
+    {
+        // C6（part-11:60）：「部署：揭示 1 个隐蔽单位。」——deploy_basic ＋ reveal op（管理动作域编排）。
+        var dsl = Assert.Single(Parser.Parse("部署：揭示 1 个隐蔽单位。").Effects);
+        Assert.Equal("deploy_basic", dsl.Template);
+
+        var op = Assert.Single(dsl.Fills["on_deploy"].Ops);
+        Assert.Equal("reveal", op.Op);
+        Assert.Equal(1, op.Count);
+        Assert.Equal("one", op.Target!.Sel);
+        Assert.Equal("隐蔽", op.Target.Filter!.Keyword);
+
+        // 编译：候选来源＝隐蔽单位读口（RevealRules.CollectCovertUnits——转发 CovertRules 读口、不经豁免剔除；
+        // csx 沙箱屏蔽 "Environment" 片段的解析层包装）；执行＝EffectRuntime.RevealAsync 唯一标准口。
+        var csx = CompileSingleEventCsx(dsl, "effect.covert.c6");
+        Assert.Contains("Orc.Game.EffectParsing.RevealRules.CollectCovertUnits", csx, StringComparison.Ordinal);
+        Assert.Contains("runtime.RevealAsync", csx, StringComparison.Ordinal);
+        Assert.DoesNotContain("GameEnvironment", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Maps_Covert_Revealed_Listener()
+    {
+        // C7（part-05:10）：「友方隐蔽单位被揭示时，使所有友方单位获得 +1+1。」——reveal_basic ＋ 归属守卫 ＋ all 选靶。
+        var dsl = Assert.Single(Parser.Parse("友方隐蔽单位被揭示时，使所有友方单位获得 +1+1。").Effects);
+        Assert.Equal("reveal_basic", dsl.Template);
+
+        var op = Assert.Single(dsl.Fills["on_event"].Ops);
+        Assert.Equal("buff", op.Op);
+        Assert.Equal(1, op.Attack);
+        Assert.Equal(1, op.Defense);
+        Assert.Equal("all", op.Target!.Sel);
+        Assert.Equal("friendly", op.Target.Side);
+        Assert.Equal(DslCondition.OwnerSame, op.Condition!.Kind);
+
+        var csx = CompileSingleEventCsx(dsl, "effect.covert.c7");
+        Assert.Contains("object.ReferenceEquals(actorSelf.Owner, actorEvent.Owner)", csx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_Keeps_Nested_Effect_Path_For_Gain_Prefix()
+    {
+        // 防回归（Q&A-4）：白名单外「获得：」引号嵌套效果保持原路径——nested op ＋ 内层效果。
+        var dsl = Assert.Single(Parser.Parse("使 1 个友方单位获得：“友方回合开始时，获得 +2+2。”").Effects);
+        Assert.Equal("deploy_basic", dsl.Template);
+
+        var op = Assert.Single(dsl.Fills["on_deploy"].Ops);
+        Assert.Equal(DslOpRegistry.NestedOpName, op.Op);
+        var nested = Assert.Single(op.Nested!);
+        Assert.Equal("turn_start_basic", nested.Template);
+        var nestedOp = Assert.Single(nested.Fills["on_event"].Ops);
+        Assert.Equal("buff", nestedOp.Op);
+        Assert.Equal(2, nestedOp.Attack);
+        Assert.Equal(2, nestedOp.Defense);
     }
 
     [Fact]

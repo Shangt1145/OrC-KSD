@@ -82,10 +82,10 @@ public class MatchEndToEndTests
         CommandTestKit.Activate(infantry, canMove: true, canAttack: false);
         var moveTask = match.CommandManager.BeginMoveAsync(infantry);
         var (moveRequest, moveResponder) = await bridge.WaitForNextBeginAsync();
-        Assert.Equal(SelectorSlots.FieldUnit, Assert.Single(moveRequest.Slots).Name);
+        Assert.Equal(SelectorNames.FieldUnit, Assert.Single(moveRequest.Slots).Name);
         Assert.True(moveResponder.Complete(
             moveRequest.RequestId,
-            TargeterTestKit.Selection(SelectorSlots.FieldUnit, moveRequest.AllowedTargets[0])));
+            TargeterTestKit.Selection(SelectorNames.FieldUnit, moveRequest.AllowedTargets[0])));
         Assert.Equal(CommandResultStatus.Success, (await moveTask).Status);
         Assert.Contains(GameUpdates.UnitPositionChanged, recorder.Types);
 
@@ -93,7 +93,7 @@ public class MatchEndToEndTests
         var (strikeRequest, strikeResponder) = await bridge.WaitForNextBeginAsync();
         Assert.True(strikeResponder.Complete(
             strikeRequest.RequestId,
-            TargeterTestKit.Selection(SelectorSlots.FieldUnit, playerB.Hq.Ref)));
+            TargeterTestKit.Selection(SelectorNames.FieldUnit, playerB.Hq.Ref)));
         Assert.Equal(CommandResultStatus.Success, (await strikeTask).Status);
 
         // ⑥ 终局：状态／相位／胜者／原因（HQ 归零＝与认输共用"置结束"单源路径）＋终局冻结

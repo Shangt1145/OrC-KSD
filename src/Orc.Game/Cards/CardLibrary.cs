@@ -138,6 +138,17 @@ public sealed class CardLibrary
         card.EffectLoadContextProvider = _effectLoadContextProvider is null
             ? null
             : () => _effectLoadContextProvider(id);
+
+        if (card is UnitCard unitCard)
+        {
+            // S1（老兵机制）：老兵版本解析提供器注入（升级执行「查找老兵版本定义」＋「来源指向当前卡」校验的读取来源；
+            // 独立构造不经本库＝不注入＝null——升级归拒绝路径）。
+            unitCard.VeteranDefinitionLookup = veteranId =>
+                _definitions.TryGetValue(veteranId, out var veteranDefinition) ? veteranDefinition : null;
+            unitCard.DefinitionRegisteredIdLookup = definition =>
+                TryGetRegisteredId(definition, out var registeredId) ? registeredId : null;
+        }
+
         return card;
     }
 }

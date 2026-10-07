@@ -148,7 +148,7 @@ public class CommandSystemTests
         Assert.True(unit.GetData<CommandData>().CanAttack);
         Assert.Empty(recorder.Updates);
         Assert.Single(bridge.Begins); // 一次拖拽＝一次请求、一次终局
-        Assert.Single(bridge.CollectCalls);
+        // 新契约无候选收集（Q19＝a）：收集记录恒空。
     }
 
     [Fact]
@@ -413,15 +413,16 @@ public class CommandSystemTests
         Assert.DoesNotContain(playerB.Hq.Ref, description.AllowedTargets); // W3-3：HQ 目标＝实体引用（步兵不可达）
         Assert.DoesNotContain(front[0].Ref, description.AllowedTargets); // 移动剔除（前线空槽不作为移动候选）
 
-        // 无效目标点击不构成确认（交互请求继续等待）——提交候选面之外引用被拒绝。
+        // 无效目标点击＝选择器终局 Failed → targeter 内部重入（同一选择器）。
         var rejected = responder.Complete(
             description.RequestId,
             TargeterTestKit.Selection(TargetSlot.DefaultName, enemyOnSupport.Ref));
-        Assert.False(rejected);
+        Assert.True(rejected);
 
-        // 纠正后提交合法目标（敌方前线单位）→ 确认 → 攻击链执行。
-        var accepted = responder.Complete(
-            description.RequestId,
+        // 纠正后提交合法目标（敌方前线单位）→ 确认 → 攻击链执行（非法后异步重入）。
+        var (reentryDescription, reentryResponder) = await bridge.WaitForNextBeginAsync();
+        var accepted = reentryResponder.Complete(
+            reentryDescription.RequestId,
             TargeterTestKit.Selection(TargetSlot.DefaultName, enemyOnFront.Ref));
         Assert.True(accepted);
         var result = await task;

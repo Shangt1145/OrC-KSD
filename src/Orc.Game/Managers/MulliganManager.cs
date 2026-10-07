@@ -43,7 +43,7 @@ public enum MulliganFailureReason
 /// </summary>
 public sealed class MulliganResult
 {
-    private MulliganResult(MulliganResultStatus status, MulliganFailureReason? failureReason, TargetingResult? targeting)
+    private MulliganResult(MulliganResultStatus status, MulliganFailureReason? failureReason, TargeterResult? targeting)
     {
         Status = status;
         FailureReason = failureReason;
@@ -57,17 +57,17 @@ public sealed class MulliganResult
     public MulliganFailureReason? FailureReason { get; }
 
     /// <summary>交互细节透传（可空；取消／交互失败场景携带）。</summary>
-    public TargetingResult? Targeting { get; }
+    public TargeterResult? Targeting { get; }
 
     /// <summary>是否成功（便捷读面）。</summary>
     public bool IsSuccess => Status == MulliganResultStatus.Success;
 
     internal static MulliganResult Success() => new(MulliganResultStatus.Success, failureReason: null, targeting: null);
 
-    internal static MulliganResult Cancelled(TargetingResult? targeting = null)
+    internal static MulliganResult Cancelled(TargeterResult? targeting = null)
         => new(MulliganResultStatus.Cancelled, failureReason: null, targeting);
 
-    internal static MulliganResult Failure(MulliganFailureReason reason, TargetingResult? targeting = null)
+    internal static MulliganResult Failure(MulliganFailureReason reason, TargeterResult? targeting = null)
         => new(MulliganResultStatus.Failed, reason, targeting);
 }
 
@@ -163,26 +163,49 @@ public sealed class MulliganManager
             return await ConfirmCoreAsync(player, ct); // 空手牌：零交互直接确认（避免死锁）
         }
 
-        var slot = new MulliganSelectSlot(min: 0, max: hand.Length, name: SlotName);
-        var context = new TargetingRequestContext()
-            .WithSlotReferences(SlotName, hand.Select(card => card.Ref))
-            .WithSlotDomainValidator(SlotName, reference => player.Hand.Any(card => ReferenceEquals(card, reference.Value)))
-            .WithSlotParameter(SlotName, player);
-        var targeter = _targeterManager.CreateTargeter(
-            filter: null, slots: new TargetSlot[] { slot }, context: context);
-        var targeting = await targeter.Targeting();
-
-        if (targeting.Status == TargetingStatus.Cancelled)
+        IReadOnlyList<Ref<Entity>> selected = Array.Empty<Ref<Entity>>();
+        var result = await _targeterManager.RunAsync(async flow =>
         {
-            return MulliganResult.Cancelled(targeting); // 取消＝零副作用（不换、不确认）
+            var step = await flow.Step(
+                SelectorTemplates.Mulligan,
+                new ReferenceSetParameter(
+                    hand.Select(card => card.Ref),
+                    min: 0,
+                    max: hand.Length,
+                    domainValidator: reference => player.Hand.Any(card => ReferenceEquals(card, reference.Value)),
+                    tag: player));
+
+            // 非法选择＝同一选择器重入（Q8a）。
+            while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
+            {
+                step = await flow.Retry<IReadOnlyList<Ref<Entity>>>();
+            }
+
+            if (step.IsCancelled)
+            {
+                return TargeterResult.Cancelled();
+            }
+
+            if (step.IsFailed)
+            {
+                return TargeterResult.FromSelectorFailure(step.Failure);
+            }
+
+            selected = step.Value ?? Array.Empty<Ref<Entity>>();
+            return TargeterResult.Ok();
+        });
+
+        if (result.IsCancelled)
+        {
+            return MulliganResult.Cancelled(result); // 取消＝零副作用（不换、不确认）
         }
 
-        if (targeting.Status != TargetingStatus.Success)
+        if (!result.IsOk)
         {
-            return MulliganResult.Failure(MulliganFailureReason.TargetingFailed, targeting);
+            return MulliganResult.Failure(MulliganFailureReason.TargetingFailed, result);
         }
 
-        await ReplaceAsync(player, targeting.Outcome!.List, ct);
+        await ReplaceAsync(player, selected, ct);
         return await ConfirmCoreAsync(player, ct); // 确认＝换牌后自动确认该方
     }
 

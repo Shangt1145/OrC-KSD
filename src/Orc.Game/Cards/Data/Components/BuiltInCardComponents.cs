@@ -190,6 +190,10 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
 /// 词条组件定义（数据体组件名 <c>keywords</c>；相位＝加载期）：
 /// <c>attributes</c> 为**英文标识**数组（官方语义）；经映射表转项目标识（P9a）——命中＝进 <see cref="Keywords"/>，
 /// 未命中（含官方未实现项）＝进 <see cref="UnmappedAttributes"/> 留痕（不 fail-fast、不写日志——P9b＝b1）。
+/// S1 加性（老兵数据映射转正式承载）：`BecomesVeteran:&lt;老兵卡id&gt;` → <see cref="BecomesVeteran"/> 端口；
+/// `VeteranOf:&lt;基础卡id&gt;` → <see cref="VeteranOf"/> 端口＋「老兵」标记进 <see cref="Keywords"/>
+/// （随加载/授予落地到实例——内容即真源）。承载判定＝**唯一合法条**：该前缀恰一条且后缀非空白＝正式承载；
+/// 畸形（空 id）与多重声明＝按既有「留痕」口径归 <see cref="UnmappedAttributes"/>（不 fail-fast、不阻断加载）。
 /// </summary>
 public sealed class KeywordsDefinition : ICardDataComponentDefinition
 {
@@ -199,20 +203,37 @@ public sealed class KeywordsDefinition : ICardDataComponentDefinition
     /// <summary>数据体原始标识（保真保留）。</summary>
     public IReadOnlyList<string> Attributes { get; }
 
-    /// <summary>映射成功且已注册的词条声明（登记序）。</summary>
+    /// <summary>映射成功且已注册的词条声明（登记序；含由 <c>VeteranOf:</c> 正式承载产出的「老兵」标记）。</summary>
     public IReadOnlyList<KeywordDeclaration> Keywords { get; }
 
-    /// <summary>未映射/未实现项（只读留痕面）。</summary>
+    /// <summary>未映射/未实现项（只读留痕面；含畸形/多重老兵声明）。</summary>
     public IReadOnlyList<string> UnmappedAttributes { get; }
+
+    /// <summary>
+    /// 升级链信息（S1 正式承载；基础卡声明 <c>BecomesVeteran:&lt;老兵卡id&gt;</c>——唯一合法条承载，
+    /// 畸形/多重＝留痕不进本面；未声明＝null）。供升级执行查找老兵版本定义（**不作**「是否老兵」判据）。
+    /// </summary>
+    public string? BecomesVeteran { get; }
+
+    /// <summary>
+    /// 老兵来源（S1 正式承载；老兵卡声明 <c>VeteranOf:&lt;基础卡id&gt;</c>——唯一合法条承载，
+    /// 畸形/多重＝留痕不进本面；未声明＝null）。与「老兵」标记（<see cref="KeywordIds.Veteran"/>——随本映射
+    /// 一并产出、随内容落地）为同一承载体的两侧：实例读面以标记为准、本端口供升级链校验（防双真源）。
+    /// </summary>
+    public string? VeteranOf { get; }
 
     internal KeywordsDefinition(
         IReadOnlyList<string> attributes,
         IReadOnlyList<KeywordDeclaration> keywords,
-        IReadOnlyList<string> unmapped)
+        IReadOnlyList<string> unmapped,
+        string? becomesVeteran = null,
+        string? veteranOf = null)
     {
         Attributes = attributes;
         Keywords = keywords;
         UnmappedAttributes = unmapped;
+        BecomesVeteran = becomesVeteran;
+        VeteranOf = veteranOf;
     }
 
     /// <inheritdoc />
@@ -222,11 +243,76 @@ public sealed class KeywordsDefinition : ICardDataComponentDefinition
     public static KeywordsDefinition Read(JsonElement element)
     {
         var attributes = ComponentText.GetStringArray(element, "attributes");
+
+        // 预扫描（S1）：老兵数据映射条数与候选值——承载判定＝「该前缀恰一条且后缀非空白」（唯一合法条）。
+        var becomesTotal = 0;
+        string? becomesCandidate = null;
+        var veteranTotal = 0;
+        string? veteranCandidate = null;
+        foreach (var attribute in attributes)
+        {
+            if (!CardAttributeMap.TryMapVeteran(attribute, out var isBecomesVeteran, out var cardId))
+            {
+                continue;
+            }
+
+            if (isBecomesVeteran)
+            {
+                becomesTotal++;
+                if (becomesTotal == 1)
+                {
+                    becomesCandidate = cardId;
+                }
+            }
+            else
+            {
+                veteranTotal++;
+                if (veteranTotal == 1)
+                {
+                    veteranCandidate = cardId;
+                }
+            }
+        }
+
+        var becomesVeteran = becomesTotal == 1 && !string.IsNullOrWhiteSpace(becomesCandidate)
+            ? becomesCandidate
+            : null;
+        var veteranOf = veteranTotal == 1 && !string.IsNullOrWhiteSpace(veteranCandidate)
+            ? veteranCandidate
+            : null;
+
         var keywords = new List<KeywordDeclaration>();
         var unmapped = new List<string>();
 
         foreach (var attribute in attributes)
         {
+            if (CardAttributeMap.TryMapVeteran(attribute, out var isBecomesVeteran, out var cardId))
+            {
+                // S1 分流：唯一合法条＝正式承载；畸形/多重＝留痕（不 fail-fast）。
+                var formallyCarried = isBecomesVeteran
+                    ? becomesVeteran is not null && string.Equals(cardId, becomesVeteran, StringComparison.Ordinal)
+                    : veteranOf is not null && string.Equals(cardId, veteranOf, StringComparison.Ordinal);
+                if (!formallyCarried)
+                {
+                    unmapped.Add(attribute);
+                    continue;
+                }
+
+                if (!isBecomesVeteran)
+                {
+                    // VeteranOf 正式承载：产出「老兵」标记（随内容落地——单一真源）。
+                    if (keywords.Any(item => string.Equals(item.Id, KeywordIds.Veteran, StringComparison.Ordinal)))
+                    {
+                        unmapped.Add(attribute); // 同标识重复：留痕（与常规词条映射同口径）
+                        continue;
+                    }
+
+                    keywords.Add(new KeywordDeclaration(KeywordIds.Veteran));
+                }
+
+                continue; // BecomesVeteran：升级链信息（静态端口），不进词条声明
+            }
+
             if (!CardAttributeMap.TryMap(attribute, out var declaration)
                 || !KeywordRegistry.IsDefined(declaration.Id)
                 || keywords.Any(item => string.Equals(item.Id, declaration.Id, StringComparison.Ordinal)))
@@ -238,7 +324,7 @@ public sealed class KeywordsDefinition : ICardDataComponentDefinition
             keywords.Add(declaration);
         }
 
-        return new KeywordsDefinition(attributes, keywords, unmapped);
+        return new KeywordsDefinition(attributes, keywords, unmapped, becomesVeteran, veteranOf);
     }
 }
 

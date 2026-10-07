@@ -62,6 +62,9 @@ public static class DslOpRegistry
         new DslOpSpec(NestedOpName, Required: new[] { "nested" }),
         // E1-56：光环（持续态的正确机制——受益随进出/位置实时重算）。
         new DslOpSpec("aura", Required: new[] { "field", "amount" }),
+        // S3：升为老兵 / 揭示（csx 对接 EffectRuntime.UpgradeAsync / RevealAsync——S1/S2 冻结入口）。
+        new DslOpSpec("upgrade"),
+        new DslOpSpec("reveal"),
     };
 
     private static readonly Dictionary<string, DslOpSpec> ByName =
@@ -123,6 +126,13 @@ public static class DslOpRegistry
             {
                 errors.Add($"原语 '{op.Op}' 不支持期限（until 仅 buff / costMod 可用——忽略期限会产生永久增益）。");
             }
+        }
+
+        // 词条效果化·批 0：参值（value）＝**授予类 op 的参值形态**（「重甲3」的 3）；
+        // 其它 op 携带 value 会被其模板静默忽略（模板无 {{value}} 占位符）——按"不支持参值"明确拒绝，防静默忽略。
+        if (op.Value is not null && op.Op != "grant")
+        {
+            errors.Add($"原语 '{op.Op}' 不支持参值（value 仅 grant 可用；通道层不校验值域——值域由词条组件钳制）。");
         }
 
         return errors;

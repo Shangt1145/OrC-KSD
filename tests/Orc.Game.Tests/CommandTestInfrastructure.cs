@@ -192,7 +192,7 @@ internal static class CommandTestKit
     // ---------- 候选脚本（前端提交超集：全槽位＋全单位引用） ----------
 
     /// <summary>候选收集脚本（提交全战场槽位引用＋全在场单位引用——超集；后端粗筛收敛到候选面）。</summary>
-    public static Func<TargetingCollectionContext, Task<IReadOnlyList<object?>>> AllRefsScript(Match match)
+    public static Func<object, Task<IReadOnlyList<object?>>> AllRefsScript(Match match)
         => _ => Task.FromResult<IReadOnlyList<object?>>(AllRefsOf(match));
 
     /// <summary>全引用（槽位引用＋单位引用＋双方 HQ 实体引用）。

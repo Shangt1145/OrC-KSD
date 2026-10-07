@@ -52,7 +52,7 @@ public class JudicatorTargetSelectionTests
             description.RequestId,
             TargeterTestKit.Selection(TargeterTestKit.PrimarySlot(description), infantryA.Ref)));
         var result = await task;
-        Assert.Equal(TargetingStatus.Success, result.Status);
+        Assert.Equal(TargeterStatus.Ok, result.Status);
         Assert.Same(infantryA.Ref, result.Outcome!.Single);
     }
 
@@ -82,7 +82,7 @@ public class JudicatorTargetSelectionTests
         var (d1, r1) = await bridge.WaitForNextBeginAsync();
         Assert.Equal(new[] { infantryA.Ref, tankA.Ref, infantryB.Ref }, d1.AllowedTargets.ToArray());
         Assert.True(r1.Cancel(d1.RequestId));
-        Assert.Equal(TargetingStatus.Cancelled, (await task1).Status);
+        Assert.Equal(TargeterStatus.Cancelled, (await task1).Status);
 
         // 态 2（改写：禁止步兵类可选——经强类型面注入、规则整体更换）
         var moding = match.Judicators.RegisterModing<TargetEligibilityJudicator.TargetCandidateRule>(
@@ -95,18 +95,19 @@ public class JudicatorTargetSelectionTests
         var (d2, r2) = await bridge.WaitForNextBeginAsync();
         Assert.Equal(new[] { tankA.Ref }, d2.AllowedTargets.ToArray()); // 步兵类从允许集消失
 
-        // 提交该类＝被拒（不在允许集；不构成终局、请求继续等待）
-        Assert.False(r2.Complete(
+        // 提交该类＝被拒（不在允许集）＝选择器终局 Failed → 内部重入（同一选择器）
+        Assert.True(r2.Complete(
             d2.RequestId,
             TargeterTestKit.Selection(TargeterTestKit.PrimarySlot(d2), infantryA.Ref)));
         Assert.False(task2.IsCompleted);
 
-        // 允许项提交成功（终局）
-        Assert.True(r2.Complete(
-            d2.RequestId,
-            TargeterTestKit.Selection(TargeterTestKit.PrimarySlot(d2), tankA.Ref)));
+        // 允许项提交成功（终局）——非法提交后异步重入（同一选择器实例）
+        var (reentry, reentryResponder) = await bridge.WaitForNextBeginAsync();
+        Assert.True(reentryResponder.Complete(
+            reentry.RequestId,
+            TargeterTestKit.Selection(TargeterTestKit.PrimarySlot(reentry), tankA.Ref)));
         var result2 = await task2;
-        Assert.Equal(TargetingStatus.Success, result2.Status);
+        Assert.Equal(TargeterStatus.Ok, result2.Status);
         Assert.Same(tankA.Ref, result2.Outcome!.Single);
 
         // 态 3（注销回退）：经同一路径恢复默认允许集
@@ -115,7 +116,7 @@ public class JudicatorTargetSelectionTests
         var (d3, r3) = await bridge.WaitForNextBeginAsync();
         Assert.Equal(new[] { infantryA.Ref, tankA.Ref, infantryB.Ref }, d3.AllowedTargets.ToArray());
         Assert.True(r3.Cancel(d3.RequestId));
-        Assert.Equal(TargetingStatus.Cancelled, (await task3).Status);
+        Assert.Equal(TargeterStatus.Cancelled, (await task3).Status);
     }
 
     // ---------- ③ 改写（允许通常不可选〔HQ〕）＋注销回退 ----------
@@ -163,7 +164,7 @@ public class JudicatorTargetSelectionTests
             d2.RequestId,
             TargeterTestKit.Selection(TargeterTestKit.PrimarySlot(d2), playerA.Hq.Ref)));
         var result2 = await task2;
-        Assert.Equal(TargetingStatus.Success, result2.Status);
+        Assert.Equal(TargeterStatus.Ok, result2.Status);
         Assert.Same(playerA.Hq.Ref, result2.Outcome!.Single);
 
         // 态 3（注销回退）：HQ 恢复不可选
@@ -178,7 +179,9 @@ public class JudicatorTargetSelectionTests
 
     // ---------- 测试辅助 ----------
 
-    /// <summary>创建示范②对局（标准指挥测试定义集；装配期注册目标合法性判定器——经既有装配期注册面）。</summary>
+    /// <summary>创建示范②对局（标准指挥测试定义集；目标合法性判定器经**生产内置注册段**——S2 受控适配：
+    /// 原「示范类经外部装配段」归属随 S2 提入生产装配〔内置段注册〕，测试不再自装、经生产默认链直接使用；
+    /// 重复注册同名条目会被「注册即配置」口径拒绝，故本辅助不再传 judicatorAssembly）。</summary>
     private static Match CreateTargetingMatch(MockTargeterBridge bridge)
         => new(
             new CardList(Enumerable.Repeat(CommandTestKit.InfantryId, 10)),
@@ -186,8 +189,5 @@ public class JudicatorTargetSelectionTests
             CommandTestKit.CreateDefinitions(),
             seed: 42,
             options: new MatchOptions { SkipMulligan = true },
-            targeterBridge: bridge,
-            judicatorAssembly: registry => registry.Register(
-                JudicatorNames.TargetCandidateEligibility,
-                new TargetEligibilityJudicator()));
+            targeterBridge: bridge);
 }

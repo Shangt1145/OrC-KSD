@@ -11,7 +11,9 @@ namespace Orc.Game;
 /// 第二批 hooks 六项（<c>card.load</c> / <c>card.hand.add</c> / <c>card.died</c> / <c>unit.joined</c> / <c>unit.deployed</c> / <c>unit.position.changed</c>）
 /// 与 W4-1（G14 收尾）洗切一项（<c>deck.shuffled</c>）、G7 弃置一项（<c>card.discarded</c>）、
 /// S9 类型变更一项（<c>unit.types.changed</c>）、Kb 爆牌一项（<c>card.burned</c>）、
-/// E1-25 资源六项（<c>slot.gained</c> / <c>slot.lost</c> / <c>slot.changed</c> ＋ <c>point.gained</c> / <c>point.lost</c> / <c>point.changed</c>）——合计 24 条。
+/// E1-25 资源六项（<c>slot.gained</c> / <c>slot.lost</c> / <c>slot.changed</c> ＋ <c>point.gained</c> / <c>point.lost</c> / <c>point.changed</c>）、
+/// E1-33 两项（<c>card.damaged</c> / <c>unit.acted</c>）、E1-39 一项（<c>unit.combat.survived</c>）、E1-47 一项（<c>unit.damage.dealt</c>）、
+/// E1-53 一项（<c>counter.triggered</c>）、S1 一项（<c>unit.upgraded</c>）、S2 一项（<c>unit.revealed</c>）——合计 31 条。
 /// 全部为新定义、与 Orc 既有常量集无重叠；字面值为对外订阅契约，一经定稿即冻结（引擎总线同一性＝ordinal 序数、大小写敏感）。
 /// 发射统一经引擎总线 <see cref="LogicEngine.Emit"/>（本类提供可选静态发射助手，内部即走该通路）。
 /// 实际发射（2B 后）：turn 五连、card.drawn 与 card.drawn→card.hand.add 连发（抽牌链路；粒度不同、并存）、card.load（初始化逐张加载）
@@ -111,6 +113,28 @@ public static class GameUpdates
 
     /// <summary>单位位置变化（"unit.position.changed"；载荷＝{ Unit, OldPosition, NewPosition }——均为槽位引用）。2C 起调用点＝移动执行段（槽位变更后、收尾段之前）；守护维护由本更新驱动。</summary>
     public const string UnitPositionChanged = "unit.position.changed";
+
+    /// <summary>
+    /// 单位升级为老兵（"unit.upgraded"；S1 新增——合计第 30 条；载荷＝{ Unit }——升级完成单位〔复用
+    /// <see cref="PayloadUnit"/> 键、不新设键；监听者从单位自读归属/数值/词条——「读取现势」惯例〕）。
+    /// 语义＝「某单位完成了一次真实形态切换（升为老兵）」——**先落定后发射、恰一次**：全部结果（数值/词条/标记）
+    /// 落定后统一发射；顺序＝先数值结果（<see cref="CardStatChanged"/>，如有变更）、后机制宣告（本信号）——
+    /// 观察者所见即终态（形态＋数值均就绪）。调用点＝升级执行收尾（<c>UnitCard</c> 升级门户）；
+    /// 幂等（已是老兵形态）/拒绝＝零发射（「未落定＝不发射」）。
+    /// 消费用途＝「升为老兵时」「友方（敌方）单位升为老兵时」监听（跨卡监听判定＝监听者从单位自读归属）。
+    /// </summary>
+    public const string UnitUpgraded = "unit.upgraded";
+
+    /// <summary>
+    /// 单位被揭示（"unit.revealed"；S2 新增——合计第 31 条；载荷＝{ Unit }——被揭示单位〔复用
+    /// <see cref="PayloadUnit"/> 键；不携归属——监听者读取现势自判，对齐 <see cref="UnitUpgraded"/> 惯例〕）。
+    /// 语义＝「某单位完成了一次真实揭示（移除「隐蔽」标记）」——**先落定后发射、恰一次**：标记移除＋
+    /// 本人揭示内容（「揭示触发器」）均生效后统一发射——观察者所见即终态（揭示全链含本人内容）。
+    /// 调用点＝揭示服务收尾（<c>CovertRules.RevealAsync</c>——攻击执行段入口/主动揭示动作）；
+    /// 幂等（已揭示/非隐蔽/未在场上/已死亡）＝零发射（「未落定＝不发射」）。「机制性清理」（死亡注销等）
+    /// 不属揭示、不发本信号。消费用途＝「被揭示时」「友方（敌方）单位被揭示时」监听。
+    /// </summary>
+    public const string UnitRevealed = "unit.revealed";
 
     // ---------- E1-33（监听类补信号） ----------
 
@@ -588,6 +612,30 @@ public static class GameUpdates
                 [PayloadOldPosition] = oldPosition,
                 [PayloadNewPosition] = newPosition,
             },
+            ct);
+    }
+
+    /// <summary>发射 unit.upgraded（S1；载荷＝{ Unit }——升级完成单位；升级落定后调用、恰一次——先数值结果、后机制宣告）。</summary>
+    /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
+    public static Task EmitUnitUpgraded(LogicEngine engine, Card unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        return engine.Emit(
+            UnitUpgraded,
+            new Dictionary<string, object?> { [PayloadUnit] = unit },
+            ct);
+    }
+
+    /// <summary>发射 unit.revealed（S2；载荷＝{ Unit }——被揭示单位；揭示落定后调用、恰一次——先落定、后发射）。</summary>
+    /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
+    public static Task EmitUnitRevealed(LogicEngine engine, Card unit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(unit);
+        return engine.Emit(
+            UnitRevealed,
+            new Dictionary<string, object?> { [PayloadUnit] = unit },
             ct);
     }
 

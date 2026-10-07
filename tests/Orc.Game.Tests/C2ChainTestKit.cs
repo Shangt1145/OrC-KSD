@@ -146,10 +146,10 @@ internal sealed class C2DevelopEffect : ActiveEffect<C2CastView>
     public bool PoolEmptyTerminated { get; private set; }
 
     /// <summary>本轮 targeting 终局状态（未发起＝null）。</summary>
-    public TargetingStatus? LastTargetingStatus { get; private set; }
+    public TargeterStatus? LastTargetingStatus { get; private set; }
 
     /// <summary>本轮 targeting 终局原因（成功＝null；取消/失败＝类别）。</summary>
-    public TargetingEndReason? LastTargetingReason { get; private set; }
+    public TargeterFailureReason? LastTargetingReason { get; private set; }
 
     /// <summary>选中项定义标识（成功终局后读出；未到达＝null）。</summary>
     public string? LastSelectedId { get; private set; }
@@ -220,7 +220,7 @@ internal sealed class C2DevelopEffect : ActiveEffect<C2CastView>
             LastTargetingReason = targeting.Reason;
 
             // ⑤ 取消/失败＝链终止（零副作用——不生成、不落位）
-            if (targeting.Status != TargetingStatus.Success)
+            if (targeting.Status != TargeterStatus.Ok)
             {
                 return;
             }

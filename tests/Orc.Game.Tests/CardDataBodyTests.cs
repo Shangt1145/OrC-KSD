@@ -141,12 +141,28 @@ public class CardDataBodyTests
     }
 
     [Fact]
+    public void Keywords_Maps_Covert_To_Covert_Marker_Without_Tracing()
+    {
+        // S2 受控适配（隐蔽数据映射转正式承载）：官方标识 `covert` → 「隐蔽」标记（词条标记方案）——
+        // 不再归未实现留痕面；其它未实现项照常留痕（原语义保持）。
+        var definition = KeywordsDefinition.Read(ParseAttributes("""["covert","guard"]"""));
+
+        Assert.Contains(definition.Keywords, item => item.Id == KeywordIds.Covert);
+        Assert.Equal(new[] { "guard" }, definition.UnmappedAttributes);
+        Assert.Equal(new[] { "covert", "guard" }, definition.Attributes);
+    }
+
+    [Fact]
     public void Keywords_Traces_Unmapped_Without_Failing()
     {
         var definition = KeywordsDefinition.Read(ParseAttributes("""["shock","BecomesVeteran:102_grenadier"]"""));
 
+        // S1 受控适配（机制扩展）：`BecomesVeteran:` 转正式承载（端口可读、不再留痕）；
+        // 未映射项（shock）照常留痕、不 fail-fast（原验收语义保持）。
         Assert.Empty(definition.Keywords);
-        Assert.Equal(2, definition.UnmappedAttributes.Count);
+        Assert.Equal(new[] { "shock" }, definition.UnmappedAttributes);
+        Assert.Equal("102_grenadier", definition.BecomesVeteran);
+        Assert.Null(definition.VeteranOf);
     }
 
     [Fact]

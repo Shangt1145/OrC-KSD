@@ -18,6 +18,7 @@ public sealed record OpTemplateLoadFailure(string File, string Error);
 /// <para>占位符契约：</para>
 /// <list type="bullet">
 ///   <item><c>{{amount}}</c>/<c>{{count}}</c>/<c>{{attack}}</c>/<c>{{defense}}</c> → 整数字面量。</item>
+///   <item><c>{{value}}</c> → **参值实参后缀**（词条效果化·批 0；仅 <c>grant</c>）：提供 n（含 0/负数）→ <c>", n"</c>（逗号＋空格＋整数字面量）；未提供 → 空串（调用不携带参值——逐字节保持既有调用形态）。</item>
 ///   <item><c>{{op}}</c>/<c>{{keyword}}</c>/<c>{{zone}}</c> → C# 字符串字面量（含引号、已转义）。</item>
 ///   <item><c>{{script}}</c> → 原样注入的 csx 源码（逃生舱）。</item>
 ///   <item><c>{{target}}</c>/<c>{{filter}}</c> → DSL 片段的紧凑 JSON（供注释/诊断，非可执行表达式）。</item>
@@ -37,7 +38,7 @@ public sealed class OpTemplateCatalog
     {
         "op", "amount", "count", "attack", "defense", "keyword", "zone", "script", "target", "filter",
         "sel", "side", "filterUnitType", "filterKeyword", "name", "rawText", "until",
-        "selZone", "field", "auraFilter", "selThreshold",
+        "selZone", "field", "auraFilter", "selThreshold", "value",
     };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -161,6 +162,9 @@ public sealed class OpTemplateCatalog
         // buff 类原语允许只给其一：缺省按 0（增减量）渲染，而非报错。
         "attack" => (op.Attack ?? 0).ToString(CultureInfo.InvariantCulture),
         "defense" => (op.Defense ?? 0).ToString(CultureInfo.InvariantCulture),
+        // 词条效果化·批 0：参值（可空整数）＝**实参后缀**——提供 n → ", n"（逗号＋整数字面量）；
+        // 未提供 → 空串（**不携带**——既有调用形态逐字节保持）。"未提供 vs 显式 0"经此区分（空 vs ", 0"）。
+        "value" => op.Value is { } value ? ", " + value.ToString(CultureInfo.InvariantCulture) : string.Empty,
         // 字符串参数缺省一律渲染为 C# null（不是参数错误——由原语注册表决定必填性）。
         "keyword" => op.Keyword is null ? "null" : StringLiteral(op.Keyword),
         "name" => op.Name is null ? "null" : StringLiteral(op.Name),

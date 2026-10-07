@@ -39,7 +39,7 @@ public class EffectParsingTests
         var result = EffectTemplateLoader.LoadDirectory(EffectTemplateLoader.DefaultDirectory);
 
         Assert.Empty(result.Failures);
-        Assert.Equal(29, result.Templates.Count);
+        Assert.Equal(31, result.Templates.Count);
 
         var template = Assert.Single(result.Templates, item => item.Id == "deploy_basic");
         Assert.Equal(TriggerKind.Passive, template.Root.MainTrigger.Kind);
@@ -53,6 +53,17 @@ public class EffectParsingTests
         Assert.Equal(ActorFrom.EffectHost, death.ActorFrom);
         Assert.Contains("card.died", death.Root.MainTrigger.Hooks);
         Assert.Equal("on_event", death.Slots[0].Name);
+
+        // S3（29→31）：老兵/隐蔽模板——hook 与 S1/S2 冻结信号名一致、stableKey 按既有惯例。
+        var veteran = Assert.Single(result.Templates, item => item.Id == "veteran_basic");
+        Assert.Contains("unit.upgraded", veteran.Root.MainTrigger.Hooks);
+        Assert.Equal("tpl.veteran_basic.main", veteran.Root.MainTrigger.StableKey);
+        Assert.Equal("on_event", veteran.Slots[0].Name);
+
+        var reveal = Assert.Single(result.Templates, item => item.Id == "reveal_basic");
+        Assert.Contains("unit.revealed", reveal.Root.MainTrigger.Hooks);
+        Assert.Equal("tpl.reveal_basic.main", reveal.Root.MainTrigger.StableKey);
+        Assert.Equal("on_event", reveal.Slots[0].Name);
     }
 
     [Fact]
@@ -63,7 +74,8 @@ public class EffectParsingTests
                  {
                      "damage", "draw", "buff", "grant", "move", "destroy", "pin", "silence",
                      "addToHand", "shuffleIn", "costMod", "gainSlot", "loseSlot",
-                     "gainPoint", "losePoint", "csx", "needsCsx", "nested",
+                     "gainPoint", "losePoint", "csx", "needsCsx", "nested", "aura",
+                     "upgrade", "reveal",
                  })
         {
             Assert.True(Ops.Has(op), $"缺少 op 模板：{op}");

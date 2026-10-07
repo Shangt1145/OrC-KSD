@@ -57,9 +57,8 @@ public class C2DevelopChainTests
         Assert.Null(slot.AllowedReferences);
         Assert.Null(slot.Options);
         Assert.Equal(drawn.ToArray(), slot.CardListings!.Select(l => l.Id).ToArray()); // 请求登场名单＝取样结果（逐项含条目数）
-        Assert.Equal(
-            drawn.Select(id => match.CardLibrary.Definitions[id].Name).ToArray(),
-            slot.CardListings!.Select(l => l.Name).ToArray()); // 可读名称级呈现要素
+        // 仿真层不还原卡名（新契约非引用候选只带标识）——按标识断言。
+        Assert.Equal(drawn.ToArray(), slot.CardListings!.Select(l => l.Name).ToArray());
 
         // —— 交互两端②：提交与产出读取（按槽位名读出选中标识） ——
         var chosen = drawn[1]; // 固定选择（不消费随机——锚点稳定性）
@@ -68,7 +67,7 @@ public class C2DevelopChainTests
         await castTask;
 
         Assert.Null(effect.LastError);
-        Assert.Equal(TargetingStatus.Success, effect.LastTargetingStatus);
+        Assert.Equal(TargeterStatus.Ok, effect.LastTargetingStatus);
         Assert.Equal(chosen, effect.LastSelectedId);
 
         // —— 生成实例（真经创建面——构筑外 ID 行为锚点） ——
@@ -152,8 +151,8 @@ public class C2DevelopChainTests
 
         // 终局＝取消（三态之一、不抛）＋链侧零副作用（不生成/不落位/无信号）
         Assert.Null(effect.LastError);
-        Assert.Equal(TargetingStatus.Cancelled, effect.LastTargetingStatus);
-        Assert.Equal(TargetingEndReason.PlayerCancelled, effect.LastTargetingReason);
+        Assert.Equal(TargeterStatus.Cancelled, effect.LastTargetingStatus);
+        Assert.Null(effect.LastTargetingReason); // 取消为一等状态（不再以 reason 表达）
         Assert.Null(effect.LastSelectedId);
         Assert.Null(effect.LastPlaceResult);
         Assert.Equal(handBefore, playerA.Hand.Count);
@@ -169,7 +168,7 @@ public class C2DevelopChainTests
         await castTask2;
 
         Assert.Null(effect.LastError);
-        Assert.Equal(TargetingStatus.Success, effect.LastTargetingStatus);
+        Assert.Equal(TargeterStatus.Ok, effect.LastTargetingStatus);
         Assert.Equal(chosen2, effect.LastSelectedId);
         var result = effect.LastPlaceResult!;
         Assert.Equal(CardPlaceStatus.Placed, result.Status);
@@ -236,7 +235,7 @@ public class C2DevelopChainTests
         await castTask;
 
         Assert.Null(effect.LastError);
-        Assert.Equal(TargetingStatus.Success, effect.LastTargetingStatus);
+        Assert.Equal(TargeterStatus.Ok, effect.LastTargetingStatus);
         Assert.Equal(CardPlaceStatus.Placed, effect.LastPlaceResult!.Status);
         Assert.Equal(handBefore + 1, playerA.Hand.Count);
     }
@@ -264,7 +263,7 @@ public class C2DevelopChainTests
         await castTask;
 
         Assert.Null(effect.LastError);
-        Assert.Equal(TargetingStatus.Success, effect.LastTargetingStatus);
+        Assert.Equal(TargeterStatus.Ok, effect.LastTargetingStatus);
         var result = effect.LastPlaceResult!;
         Assert.Equal(CardPlaceStatus.Placed, result.Status);
         return new ChainRun(

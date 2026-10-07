@@ -70,7 +70,9 @@ public class KeywordBatch2Tests
         Assert.True(KeywordRegistry.IsDefined(KeywordIds.CannotBeSuppressed));
         Assert.True(KeywordRegistry.IsDefined(KeywordIds.CannotBeInhibited));
         // A4 受控变更（旧→新：14 → 15）：注册清单新增一枚「亡计」（A4；注册清单＝对外契约基线）。
-        Assert.Equal(15, KeywordIds.All.Count); // 4 既有 + 10 新增（A2）+ 1 新增（A4 亡计）
+        // S1 受控变更（旧→新：15 → 16）：注册清单新增一枚「老兵」（S1；标记型——老兵读取面承载）。
+        // S2 受控变更（旧→新：16 → 17）：注册清单新增一枚「隐蔽」（S2；标记型——隐蔽读取面/豁免/揭示承载）。
+        Assert.Equal(17, KeywordIds.All.Count); // 4 既有 + 10 新增（A2）+ 1 新增（A4 亡计）+ 1 新增（S1 老兵）+ 1 新增（S2 隐蔽）
     }
 
     [Fact]

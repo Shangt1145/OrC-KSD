@@ -50,6 +50,13 @@ internal static class ComparisonSpec
             return side is null || Sides.Contains(side);
         }
 
+        // S3：在场回合数（主体恒为宿主自身——`s=self`；缺省同义）。
+        if (measure.StartsWith("turns=", StringComparison.Ordinal))
+        {
+            var side = Attribute(measure, "s");
+            return side is null || string.Equals(side, "self", StringComparison.Ordinal);
+        }
+
         if (measure.StartsWith("stat=", StringComparison.Ordinal))
         {
             var field = Attribute(measure, "f");

@@ -5,14 +5,16 @@ namespace Orc.Game.Cards;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 第 2 批·A2 新增词条的服务面（施加入口 / 读取面 / 待办环节——口径依据《需求文档（A2）》）：
-// 压制（施加/延长/查询）、抑制（清空处置）、动员（受伤害失去）、重甲（增改/读点）、
-// 对战词条（筛选/计数/集合读取）、情报（待办环节）。钳击关系体系见 PincerSystem.cs。
+// 压制（施加/延长/查询）、抑制（清空处置）、动员（批 1 效果化：直调成员退役——保留 public 面壳）、
+// 重甲（批 2 效果化：减伤本体迁效果承载——保留增改/读点面）、对战词条（筛选/计数/集合读取）、
+// 情报（待办环节）。钳击关系体系见 PincerSystem.cs。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// 压制服务（「压制动作」的机制入口面；Q&A-5/Q&A-10）：施加＝对位防护判定（「无法被压制」→ 拒绝、无副作用）
 /// → 授予「被压制」（参值＝剩余拥有者回合数、默认 1）。延长＝「额外压制一回」＝剩余回合数 +1（承载面）。
-/// 行为消费（不能移动或攻击）在指挥可用性/复验侧读标记；解除时点由被压制组件自驱动（拥有者回合结束）。
+/// 行为消费（不能移动或攻击）在指挥可用性/复验侧读标记；解除时点由被压制效果自驱动（拥有者回合结束；
+/// 批 1 效果化——状态管理由 <see cref="SuppressionLifecycleEffect"/> 承载）。
 /// </summary>
 public static class SuppressRules
 {
@@ -123,27 +125,20 @@ public static class InhibitRules
 }
 
 /// <summary>
-/// 动员服务（Q&A-6）：「受到伤害」（净伤害＞0——伤害被完全吸收/归零不算）后失去动员（词条移除链——
-/// 走移除链、OnRevoke 触发；既得 +1/+1 保留、不撤销）。由受伤害门户（单位侧
-/// <see cref="UnitCard.ApplyDefenseDamageAsync"/>）调用。
+/// 动员服务（Q&A-6；批 1 效果化后的保留壳）：原「受伤害直调」成员（<c>OnUnitDamagedAsync</c>）已退役——
+/// 「受到实际伤害（净伤害＞0）后失去动员」由动员效果（<see cref="MobilizeLossEffect"/>）监听
+/// <see cref="GameUpdates.CardDamaged"/> 信号自我撤销承载（受伤害门户不再感知动员——直调路径删除，
+/// 均为本批迁移范围内的内部专用面处置）；其余读取能力经既有词条读取面（<see cref="KeywordRules"/>）承担。
+/// 类保留为 public 面无成员壳（本批不做公共面删除、不夹带替代成员）。
 /// </summary>
 public static class MobilizeRules
 {
-    /// <summary>受伤害处理（门户调用；净伤害＞0 时）：失去动员（词条移除）。</summary>
-    internal static Task OnUnitDamagedAsync(UnitCard unit)
-    {
-        if (!unit.Keywords.Has(KeywordIds.Mobilize))
-        {
-            return Task.CompletedTask;
-        }
-
-        return unit.Keywords.RevokeAsync(KeywordIds.Mobilize); // 失去＝词条移除（走移除链）
-    }
 }
 
 /// <summary>
 /// 重甲服务（Q&A-7）：值读取 / 「+1 重甲」增改面 / 「无视重甲」判定读点（承载面）。
-/// 减伤本体在重甲组件（「造成攻击伤害」handler 链介入）；本面为调用方便利入口。
+/// 减伤本体在重甲效果（<see cref="ArmorReductionEffect"/>——「造成攻击伤害」handler 链介入、参值运行期读取）；
+/// 本面为调用方便利入口。
 /// </summary>
 public static class ArmorRules
 {
@@ -226,7 +221,7 @@ public static class IntelligenceRules
     public static Func<Card, int, LogicEngine?, CancellationToken, Task> PendingRevealHandler { get; set; }
         = WritePendingRevealLog;
 
-    /// <summary>触发点调用（情报组件在 card.played 命中本卡时）。</summary>
+    /// <summary>触发点调用（情报效果在 card.played 命中本卡时——批 1 效果化后由 <see cref="IntelligenceTriggerEffect"/> 驱动）。</summary>
     internal static Task InvokePendingRevealAsync(Card card, int amount, LogicEngine? engine, CancellationToken ct)
         => PendingRevealHandler(card, amount, engine, ct);
 

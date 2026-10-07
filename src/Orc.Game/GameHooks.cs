@@ -93,7 +93,7 @@ public sealed record GameHookPendingTrigger(
 /// </summary>
 public static class GameHooks
 {
-    // ---------- 对外信号（24 条；转发引用 GameUpdates） ----------
+    // ---------- 对外信号（31 条；转发引用 GameUpdates） ----------
 
     /// <summary>回合开始前（<c>turn.start.before</c>）。</summary>
     public const string TurnStartBefore = GameUpdates.TurnStartBefore;
@@ -143,6 +143,12 @@ public static class GameHooks
     /// <summary>单位位置变化（<c>unit.position.changed</c>）。</summary>
     public const string UnitPositionChanged = GameUpdates.UnitPositionChanged;
 
+    /// <summary>单位升级为老兵（<c>unit.upgraded</c>；S1）。</summary>
+    public const string UnitUpgraded = GameUpdates.UnitUpgraded;
+
+    /// <summary>单位被揭示（<c>unit.revealed</c>；S2）。</summary>
+    public const string UnitRevealed = GameUpdates.UnitRevealed;
+
     /// <summary>卡组洗切（<c>deck.shuffled</c>）。</summary>
     public const string DeckShuffled = GameUpdates.DeckShuffled;
 
@@ -182,13 +188,13 @@ public static class GameHooks
     /// <summary>反制触发（<c>counter.triggered</c>；E1-53）。</summary>
     public const string CounterTriggered = GameUpdates.CounterTriggered;
 
-    /// <summary>对外信号全量（29 条；稳定序＝定义序）。</summary>
+    /// <summary>对外信号全量（31 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> Signals { get; } = new[]
     {
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
         CardPlayed, CardDrawn, CardStatChanged,
         CardLoad, CardHandAdd, CardDiscarded, CardBurned,
-        CardDied, UnitJoined, UnitDeployed, UnitPositionChanged,
+        CardDied, UnitJoined, UnitDeployed, UnitPositionChanged, UnitUpgraded, UnitRevealed,
         DeckShuffled, UnitTypesChanged,
         SlotGained, SlotLost, SlotChanged,
         PointGained, PointLost, PointChanged,
@@ -271,7 +277,7 @@ public static class GameHooks
     /// <summary>判定器名：卡组顶特点判定（<c>deck.top.tag</c>；示范①）。</summary>
     public const string JudicatorDeckTopTag = JudicatorNames.DeckTopTag;
 
-    /// <summary>判定器名：目标候选合法性判定（<c>targeting.candidate.eligibility</c>；示范②）。</summary>
+    /// <summary>判定器名：目标候选合法性判定（<c>targeting.candidate.eligibility</c>；示范②——S2 起经生产内置段注册）。</summary>
     public const string JudicatorTargetCandidateEligibility = JudicatorNames.TargetCandidateEligibility;
 
     /// <summary>判定器名：目标合法性判定（<c>combat.target.legal</c>；K1 组合判定器）。</summary>
@@ -332,7 +338,8 @@ public static class GameHooks
         JudicatorPointGain, JudicatorPointLose,
     };
 
-    /// <summary>判定器名装配面：19 条内置（4 条验证类＋6 条交战类＋3 条动作资格类＋1 条效果选靶类＋5 条资源类）由 <c>Match.Initialize</c> 固定注册段注册；2 条示范类经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
+    /// <summary>判定器名装配面：20 条内置（4 条验证类＋6 条交战类＋3 条动作资格类＋1 条效果选靶类＋5 条资源类
+    /// ＋1 条目标候选合法性〔S2 提入生产装配〕）由 <c>Match.Initialize</c> 固定注册段注册；1 条示范类（DeckTopTag）经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
     public static IReadOnlyList<string> BuiltInJudicatorNames { get; } = new[]
     {
         JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
@@ -342,12 +349,13 @@ public static class GameHooks
         JudicatorEffectTargetResolve,
         JudicatorPointSlotIncrement, JudicatorPointSlotGain, JudicatorPointSlotLose,
         JudicatorPointGain, JudicatorPointLose,
+        JudicatorTargetCandidateEligibility,
     };
 
     /// <summary>判定器名装配面：示范类（经 <c>judicatorAssembly</c> 外部装配段注入）。</summary>
     public static IReadOnlyList<string> ExternalJudicatorNames { get; } = new[]
     {
-        JudicatorDeckTopTag, JudicatorTargetCandidateEligibility,
+        JudicatorDeckTopTag,
     };
 
     // ---------- 触发器分层（转发引用 TriggerLayer 成员） ----------

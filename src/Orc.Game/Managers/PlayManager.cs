@@ -120,30 +120,53 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.PrePlayNoAvailableSlots);
         }
 
-        // ② 交互：targeter 请求（候选＝空槽位引用；前端提交集合经粗筛收敛到候选面）。
-        var allowedSet = new HashSet<Ref<Entity>>(candidates.Select(slot => slot.Ref));
-        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
-        var targeter = _targeterManager.CreateTargeter(filter, new TargetSlot[] { new SingleSelectSlot() });
-        var targeting = await targeter.Targeting();
-
-        if (targeting.Status == TargetingStatus.Cancelled)
+        // ② 交互：targeter 请求（候选＝空槽位引用；候选由后端给出——Q19＝a）。
+        Slot? selectedSlot = null;
+        var result = await _targeterManager.RunAsync(async flow =>
         {
-            return PlayResult.Cancelled(targeting);
+            var step = await flow.Step(
+                SelectorTemplates.Slot,
+                new ReferenceSetParameter(candidates.Select(slot => slot.Ref), 1, 1));
+
+            // 非法选择＝同一选择器重入（Q8a）。
+            while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
+            {
+                step = await flow.Retry<Ref<Entity>>();
+            }
+
+            if (step.IsCancelled)
+            {
+                return TargeterResult.Cancelled();
+            }
+
+            if (step.IsFailed)
+            {
+                return TargeterResult.FromSelectorFailure(step.Failure);
+            }
+
+            selectedSlot = step.Value?.Value as Slot;
+            return selectedSlot is null
+                ? TargeterResult.Failed(TargeterFailureReason.InvalidSelection)
+                : TargeterResult.Ok();
+        });
+
+        if (result.IsCancelled)
+        {
+            return PlayResult.Cancelled(result);
         }
 
-        if (targeting.Status != TargetingStatus.Success)
+        if (!result.IsOk)
         {
-            return PlayResult.Failure(PlayFailureReason.TargetingFailed, targeting);
+            return PlayResult.Failure(PlayFailureReason.TargetingFailed, result);
         }
 
         // ③ 确认：选中空槽位（身份可判）→ 自动衔接打出链。
-        var selected = targeting.Outcome!.Single;
-        if (selected?.Value is not Slot slot)
+        if (selectedSlot is null)
         {
-            return PlayResult.Failure(PlayFailureReason.TargetingFailed, targeting);
+            return PlayResult.Failure(PlayFailureReason.TargetingFailed, result);
         }
 
-        return await PlayUnitAsync(card, slot, ct);
+        return await PlayUnitAsync(card, selectedSlot, ct);
     }
 
     // ---------- ② 单位打出链（直接驱动；部署路径） ----------

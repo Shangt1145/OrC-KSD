@@ -59,7 +59,7 @@ public class C2ReferenceAndFailureTests
         var result = await task;
 
         // 交互两端②：产出读取（按槽位名读出卡引用）
-        Assert.Equal(TargetingStatus.Success, result.Status);
+        Assert.Equal(TargeterStatus.Ok, result.Status);
         var selected = Assert.Single(result.Outcome!.GetSelection(C2Kit.SlotName));
         var selectedCard = Assert.IsAssignableFrom<CardBase>(selected.Value);
 
@@ -149,8 +149,8 @@ public class C2ReferenceAndFailureTests
         var result = await targeter.Targeting(); // 不抛断链
 
         // 四件套（与定义级 M=0 同构口径）：不抛断链＋链终止＋零副作用＋结局可观察
-        Assert.Equal(TargetingStatus.Failed, result.Status);
-        Assert.Equal(TargetingEndReason.NoAvailableCandidates, result.Reason);
+        Assert.Equal(TargeterStatus.Failed, result.Status);
+        Assert.Equal(TargeterFailureReason.NoAvailableCandidates, result.Reason);
         Assert.Empty(bridge.Begins); // 不进交互（targeting 发起、无 Begin）
         Assert.Equal(0, recorder.TotalCount());
         Assert.Equal(handBefore, playerA.Hand.Count);

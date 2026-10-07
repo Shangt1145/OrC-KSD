@@ -68,8 +68,8 @@ public enum EffectDuration
 }
 
 /// <summary>
-/// 效果运行时门面（csx handler 的**唯一游戏层受控入口**）：把「消灭（死亡链）／伤害／属性修饰／词条授予／
-/// 抽牌／无头选靶／指挥点槽加·减／指挥点加·减（E1-25）」收敛到一处集中暴露——不给各服务零散加 public 面（便于审计与替换）。
+/// 效果运行时门面（csx handler 的**唯一游戏层受控入口**）：把「消灭（死亡链）／伤害／属性修饰／词条授予（含参值）／
+/// 词条撤销／词条参值改写／内容型词条授予／抽牌／无头选靶／指挥点槽加·减／指挥点加·减（E1-25）」收敛到一处集中暴露——不给各服务零散加 public 面（便于审计与替换）。
 /// <para>解析路径与既有服务同构：<see cref="ResolveFor"/>（卡 → 玩家 → 服务）。</para>
 /// <para>服务不可达（未装配/脱局）＝**降级不抛错**：返回 false／空集（沿用「功能不可用＝不失败」口径）。</para>
 /// </summary>
@@ -187,18 +187,83 @@ public sealed class EffectRuntime
         return true;
     }
 
-    /// <summary>词条授予。</summary>
+    /// <summary>
+    /// 词条授予（无参值形态）：词条面**统一判定**（CardBase＋Hq 同族——经统一读口；其余实体＝降级 false）。
+    /// 语义完全沿用既有词条组件（幂等＝已存在时无操作 false；终态拒绝/装载失败＝异常透传、不吞不降级）。
+    /// </summary>
     /// <exception cref="ArgumentNullException">target 为 null。</exception>
     public Task<bool> GrantAsync(Card target, string keyword, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
-        if (target is not CardBase cardBase)
+        return KeywordRules.TryGetKeywordManager(target) is { } manager
+            ? manager.GrantAsync(keyword)
+            : Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// 词条授予（**带参值形态**；词条效果化·批 0）：<paramref name="value"/>＝词条参值（「重甲3」的 3）；
+    /// null＝**未提供参值**（与显式 0 为两种不同形态——0 为合法参值）；通道层不校验值域（非负/上限——
+    /// 值域由词条组件既有机制钳制，如重甲/情报 [0,3]）。可达域与语义/降级同无参值形态（同族统一判定）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<bool> GrantAsync(Card target, string keyword, int? value, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        return KeywordRules.TryGetKeywordManager(target) is { } manager
+            ? manager.GrantAsync(keyword, value)
+            : Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// 词条撤销（词条效果化·批 0）：词条面统一判定（CardBase＋Hq 同族）；完整卸载（行为面先撤 →
+    /// 运行逻辑注销＋内嵌效果卸载 → 存在性清除、参值不可读）。幂等（不存在＝无操作 false、不报错）；
+    /// 对已死亡卡＝拒绝（明确异常透传）；不可达（无词条面）＝false 降级。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<bool> RevokeAsync(Card target, string keyword, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        return KeywordRules.TryGetKeywordManager(target) is { } manager
+            ? manager.RevokeAsync(keyword)
+            : Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// 词条参值改写（词条效果化·批 0）：词条面统一判定（CardBase＋Hq 同族）；纯存储改写（不重载行为面）、
+    /// 允许置空参值（<paramref name="value"/>＝null 合法——「参值位可空」语义经本口保持）；前提＝词条存在
+    /// （不存在＝明确异常透传）。不可达（无词条面）＝false（可判别「未执行」）；可达＝已改写 true（置空成功也为 true）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<bool> SetKeywordValueAsync(Card target, string keyword, int? value, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        if (KeywordRules.TryGetKeywordManager(target) is not { } manager)
         {
             return Task.FromResult(false);
         }
 
-        return cardBase.Keywords.GrantAsync(keyword);
+        manager.SetValue(keyword, value); // 语义沿用既有：改写前提＝词条存在（不存在＝异常透传）；置空合法
+        return Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// 内容型词条授予（词条效果化·批 0）：词条面统一判定（CardBase＋Hq 同族）；沿用既有内容签名
+    /// （<c>keyword ＋ 内容对象</c>——如「获得亡计」的 <see cref="Effect"/> 载荷）；内容生命周期随词条组件生灭
+    /// （授予＝内容装载；撤销/死亡注销＝内容卸载；授予失败回滚＝无残留）；空内容（null）＝合法静默；
+    /// 幂等/终态/异常语义完全沿用既有标识授予。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<bool> GrantWithContentAsync(Card target, string keyword, Effect? content, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        return KeywordRules.TryGetKeywordManager(target) is { } manager
+            ? manager.GrantWithContentAsync(keyword, content)
+            : Task.FromResult(false);
     }
 
     /// <summary>抽牌（走玩家管理器——含满手爆牌裁决）；返回请求的抽牌次数（服务不可达＝0）。</summary>
@@ -317,6 +382,35 @@ public sealed class EffectRuntime
     {
         ArgumentNullException.ThrowIfNull(target);
         return target is UnitCard unit ? InhibitRules.ApplyAsync(unit, ct) : Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// 升为老兵（S1；**经「老兵触发器」**——升级动作唯一标准发动入口的公共路径；csx handler 的受控接入面）：
+    /// 返回三态结果（成功升级/幂等无操作/拒绝——可程序化区分）；执行段失败＝回滚＋异常上抛（原异常、可辨识）。
+    /// 非单位（指令/反制/HQ 等）＝拒绝结果（「在场且存活」谓词不满足——降级不抛错，对齐本门面惯例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<VeteranPromotionResult> UpgradeAsync(Card target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return target is UnitCard unit
+            ? unit.InvokeVeteranTriggerAsync(ct)
+            : Task.FromResult(VeteranPromotionResult.Rejected(VeteranPromotionRejectionReason.NotOnField));
+    }
+
+    /// <summary>
+    /// 揭示（S2；**经 RevealAsync 型服务**——揭示动作唯一标准发动入口的公共路径；csx handler 的受控接入面）：
+    /// 先移除「隐蔽」标记 → 调揭示逻辑（卡侧「揭示触发器」）→ 广播 <c>unit.revealed</c>（恰一次）；
+    /// 返回二态结果（揭示发生/无操作——可程序化区分）。
+    /// 非单位（指令/反制/HQ 等）＝无操作结果（幂等语义——降级不抛错，对齐本门面惯例）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null。</exception>
+    public Task<RevealOutcome> RevealAsync(Card target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return target is UnitCard unit
+            ? CovertRules.RevealAsync(unit, ct)
+            : Task.FromResult(RevealOutcome.NoOp);
     }
 
     /// <summary>移动（无头；zone＝<c>frontline</c>／<c>support</c>；不可用＝false）。</summary>

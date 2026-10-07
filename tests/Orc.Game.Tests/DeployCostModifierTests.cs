@@ -296,21 +296,21 @@ public class DeployCostModifierTests
 
         // 初始：4 被排除（超一排除；1/3 入选——3 恰等入选）
         var first = await manager.CreateTargeter(filter).Targeting();
-        Assert.Equal(TargetingStatus.Success, first.Status);
+        Assert.Equal(TargeterStatus.Ok, first.Status);
         Assert.Equal(new Ref<Entity>[] { cardCost1.Ref, cardCost3.Ref }, seen!.AllowedTargets.ToArray());
 
         // 随动：4 → 3（修饰）→ 同一流程内筛选即时入选；撤销 → 回弹排除
         var source = new object();
         await cardCost4.Modifiers.AddModifierAsync(new AddModifier(CardStatFields.DeployCost, -1, source));
         var second = await manager.CreateTargeter(filter).Targeting();
-        Assert.Equal(TargetingStatus.Success, second.Status);
+        Assert.Equal(TargeterStatus.Ok, second.Status);
         Assert.Equal(
             new Ref<Entity>[] { cardCost1.Ref, cardCost3.Ref, cardCost4.Ref },
             seen!.AllowedTargets.ToArray());
 
         await cardCost4.Modifiers.RemoveBySourceAsync(source);
         var third = await manager.CreateTargeter(filter).Targeting();
-        Assert.Equal(TargetingStatus.Success, third.Status);
+        Assert.Equal(TargeterStatus.Ok, third.Status);
         Assert.Equal(new Ref<Entity>[] { cardCost1.Ref, cardCost3.Ref }, seen!.AllowedTargets.ToArray());
     }
 }

@@ -6,8 +6,12 @@ namespace Orc.Game.Cards;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 生产内建四词条的组件实现（2C-A1 迁移；行为与迁移前逐条保真——见验收汇报「随改清单」）：
-// 闪击/伏击/奋战＝能力型（运行逻辑组件的自含行为）；烟幕＝标记型（轻量组件 PlainKeywordComponent——
-// 仅数据、无主动逻辑，消费方经词条管理组件查询）。四者均走同一组件基类与同一挂载/卸载机制。
+// 闪击/伏击/奋战＝能力型；烟幕＝标记型（轻量组件 PlainKeywordComponent——
+// 仅数据、无主动逻辑，消费方经词条管理组件查询）。四者均走同一组件基类与同一挂载/卸载机制
+// （闪击/奋战＝运行逻辑组件的自含行为；伏击经批 2 效果化收薄为壳——见下）。
+// 批 2 词条效果化（B 档扩展）：伏击（伤害改写族）行为迁效果承载（组件收薄为壳——标识／授予-移除／读取面；
+// 「造成攻击伤害」改写注册/撤销与判定链由内嵌效果 AmbushRewriteEffect 承载）；效果制品与装配
+// （构造期 EmbedEffect＋装载/卸载/死亡注销/回滚/复装随词条生灭）见 KeywordEffects.cs。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -61,108 +65,17 @@ public sealed class FuryKeywordComponent : KeywordComponent
 }
 
 /// <summary>
-/// 伏击（能力型）词条组件：装载时向「造成攻击伤害」触发器注册改写逻辑；卸载（移除/死亡注销）时注销。
-/// 改写判定（先资格、后条件）：被攻击单位（目标侧，＝本卡）含伏击 ∧ 目标方按反击豁免判定表具有反击资格
-/// （K2：经 <c>combat.counter.eligibility</c> 判定器通道——豁免约束改写，无资格＝不发生反击、改写不成立、按表单方结算）
-/// ∧ 条件命中（K2：经 <c>combat.ambush.condition</c> 判定器通道——被攻击单位攻击力有效值 ＞ 攻击者防御力有效值，互扣前）
-/// → 置改写标志（攻击者死亡、被攻击者不受伤）；资格通过但条件不成立＝正常基础互伤。
-/// 判定器通道经装载上下文取用（<see cref="KeywordLoadContext.CounterEligibility"/>／<see cref="KeywordLoadContext.AmbushCondition"/>）；
-/// 无装载上下文或通道缺失＝不注册（防御、不抛错、不回退直调——单源约束）。不区分攻击者类型；HQ 攻击不走该流程。
+/// 伏击（能力型）词条组件（批 2 效果化：收薄为壳——标识／授予-移除／读取面）：
+/// 「造成攻击伤害」改写逻辑（先资格、后条件的判定链与置改写标志）由内嵌效果
+/// <see cref="AmbushRewriteEffect"/> 承载（注册/撤销随效果生命周期；判定器通道经同一装载上下文取用；
+/// 无装载上下文或通道缺失＝不注册——防御、不抛错、不回退直调；单源约束保持）。不区分攻击者类型；HQ 攻击不走该流程。
 /// </summary>
 public sealed class AmbushKeywordComponent : KeywordComponent
 {
-    private Trigger<AttackDamageTriggerView>? _trigger;
-    private TriggerRegistration? _registration;
-    private Card? _card;
-    private Func<UnitCard, UnitCard, bool>? _counterEligibility; // K2：反击资格判定通道（combat.counter.eligibility——资格→C5）
-    private Func<UnitCard, UnitCard, bool>? _ambushCondition; // K2：伏击条件判定通道（combat.ambush.condition——条件→C6）
-
     /// <summary>创建伏击词条组件。</summary>
     public AmbushKeywordComponent()
         : base(KeywordIds.Ambush)
     {
-    }
-
-    /// <inheritdoc />
-    internal override void Mount(Card card, KeywordLoadContext? context)
-    {
-        _card = card;
-        if (context is null)
-        {
-            return; // 无装载上下文（独立构造场景）：不注册（防御、不抛错）
-        }
-
-        if (context.CounterEligibility is null || context.AmbushCondition is null)
-        {
-            return; // K2：判定器通道缺失：不注册（防御、不抛错、不回退直调——与「无装载上下文」同构）
-        }
-
-        _counterEligibility = context.CounterEligibility;
-        _ambushCondition = context.AmbushCondition;
-        _trigger = context.AttackDamageTrigger;
-        _registration = _trigger.Register("伏击改写", HandleAttackDamageAsync);
-    }
-
-    /// <inheritdoc />
-    internal override void Unmount()
-    {
-        var trigger = _trigger;
-        var registration = _registration;
-        _trigger = null;
-        _registration = null;
-        _counterEligibility = null; // K2：通道引用清位（与注册状态一致；重复卸载幂等）
-        _ambushCondition = null;
-        if (trigger is not null && registration is not null)
-        {
-            trigger.Unregister(registration); // 幂等（重复注销＝无操作、不抛错）
-        }
-    }
-
-    /// <summary>伏击改写判定（「造成攻击伤害」内、默认互伤之前执行——由注册优先级与改写标志保证顺序）。</summary>
-    private Task HandleAttackDamageAsync(AttackDamageTriggerView view, Context ctx, CancellationToken ct)
-    {
-        if (_card is not UnitCard self || !self.TryGetData<UnitStateData>(out var selfState) || selfState.IsDestroyed)
-        {
-            return Task.CompletedTask; // 死亡后不再改写（双保险：装载已注销 + 存活判定）
-        }
-
-        if (view.Target is not { IsAlive: true } targetRef
-            || targetRef.Value is not UnitCard target
-            || !ReferenceEquals(target, self))
-        {
-            return Task.CompletedTask; // 仅处理「本卡被攻击」的目标侧
-        }
-
-        if (view.Attacker is not { IsAlive: true } attackerRef || attackerRef.Value is not UnitCard attacker
-            || !attacker.TryGetData<UnitStateData>(out _)) // 攻击者须已单位化（未单位化＝不改写、不抛错）
-        {
-            return Task.CompletedTask;
-        }
-
-        if (view.Resolution is not AttackDamageResolution resolution || resolution.IsRewritten)
-        {
-            return Task.CompletedTask; // 目标侧单命中（多源不叠加；已改写＝跳过）
-        }
-
-        var counterEligibility = _counterEligibility;
-        var ambushCondition = _ambushCondition;
-        if (counterEligibility is null || ambushCondition is null)
-        {
-            return Task.CompletedTask; // K2：判定器通道缺失（防御：装载时已不注册——双保险；不回退直调）
-        }
-
-        // 先资格（K2：经 combat.counter.eligibility 判定器通道——豁免约束改写）：目标方（本卡）具有反击资格。
-        if (!counterEligibility(attacker, self))
-        {
-            return Task.CompletedTask;
-        }
-
-        // 后条件（K2：经 combat.ambush.condition 判定器通道——单源）：伏击条件命中＝改写成立。
-        if (ambushCondition(self, attacker))
-        {
-            resolution.MarkRewritten();
-        }
-
-        return Task.CompletedTask;
+        EmbedEffect(new AmbushRewriteEffect()); // 批 2：伤害改写行为（注册/撤销与判定链）迁效果承载
     }
 }

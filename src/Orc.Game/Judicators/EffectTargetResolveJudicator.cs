@@ -14,6 +14,9 @@ namespace Orc.Game.Judicators;
 /// <para>无状态：只读枚举战场；不持有对局状态。名称＝<see cref="JudicatorNames.EffectTargetResolve"/>。</para>
 /// <para>默认规则范围：side（friendly/enemy/both，按相对视角）＋ zone（frontline/support）＋ <b>unitType 过滤</b>
 /// ＋ keyword 过滤 ＋ sel/count；<c>random</c> 经对局随机服务<b>真随机</b>取样（不可用＝确定性取首个）。</para>
+/// <para>S2 加性（隐蔽机制·豁免剔除）：候选基底统一剔除「隐蔽」单位（R2——隐蔽单位无法被卡牌效果影响）；
+/// 剔除在候选收集层（all 结果集与 random 取样池同为剔除后集合——random 在剔除后池取样）；
+/// <c>self</c> 分支（视角卡自身/自指效果）不受剔除影响（既有语义保持）；本判定器不设请求级覆盖。</para>
 /// </summary>
 public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolveJudicator.ResolveRule>
 {
@@ -73,7 +76,8 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
                     || !MatchesSide(unit, selector.Side, viewerOwner)
                     || !MatchesUnitType(unit, selector.UnitType)
                     || !MatchesKeyword(unit, selector.Keyword)
-                    || !MatchesThreshold(unit, selector.Threshold))
+                    || !MatchesThreshold(unit, selector.Threshold)
+                    || CovertRules.IsCovert(unit)) // S2：隐蔽剔除（全模式候选基底统一——all 结果集与 random 取样池；self 分支不受影响）
                 {
                     continue;
                 }

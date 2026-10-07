@@ -529,33 +529,52 @@ public sealed class CommandManager
     /// 限定候选交互（独立入口共用；场景＝场上单位指向）：单选槽（槽位参数＝被拖动单位）＋候选集合粗筛；
     /// 一次 Begin 一次 Complete 按槽位名回填（沿用既有桥接契约）。取消/失败经三态类别表达。
     /// </summary>
-    private async Task<(SelectorOutcomeKind Kind, Ref<Entity>? Selected, TargetingResult? Result)> RunSelectorAsync(
+    private async Task<(SelectorOutcomeKind Kind, Ref<Entity>? Selected, TargeterResult? Result)> RunSelectorAsync(
         UnitCard unit, IReadOnlyList<Ref<Entity>> candidates, CancellationToken ct)
     {
-        var allowedSet = new HashSet<Ref<Entity>>(candidates);
-        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
-        var slot = new SingleSelectSlot(SelectorSlots.FieldUnit);
-        var context = new TargetingRequestContext().WithSlotParameter(SelectorSlots.FieldUnit, unit);
-        var targeter = _targeterManager.CreateTargeter(filter, new TargetSlot[] { slot }, context);
-        var targeting = await targeter.Targeting();
-
-        if (targeting.Status == TargetingStatus.Cancelled)
+        Ref<Entity>? selected = null;
+        var result = await _targeterManager.RunAsync(async flow =>
         {
-            return (SelectorOutcomeKind.Cancelled, null, targeting);
+            var step = await flow.Step(
+                SelectorTemplates.FieldUnit,
+                new ReferenceSetParameter(candidates, 1, 1, tag: unit));
+
+            // 非法选择＝同一选择器重入（Q8a：内部处理、支持重试）。
+            while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
+            {
+                step = await flow.Retry<Ref<Entity>>();
+            }
+
+            if (step.IsCancelled)
+            {
+                return TargeterResult.Cancelled();
+            }
+
+            if (step.IsFailed)
+            {
+                return TargeterResult.FromSelectorFailure(step.Failure);
+            }
+
+            selected = step.Value;
+            return TargeterResult.Ok();
+        });
+
+        if (result.IsCancelled)
+        {
+            return (SelectorOutcomeKind.Cancelled, null, result);
         }
 
-        if (targeting.Status != TargetingStatus.Success)
+        if (!result.IsOk)
         {
-            return (SelectorOutcomeKind.Failed, null, targeting);
+            return (SelectorOutcomeKind.Failed, null, result);
         }
 
-        var selected = targeting.Outcome!.Single;
         if (selected is null || !selected.IsAlive)
         {
-            return (SelectorOutcomeKind.Failed, null, targeting);
+            return (SelectorOutcomeKind.Failed, null, result);
         }
 
-        return (SelectorOutcomeKind.Confirmed, selected, targeting);
+        return (SelectorOutcomeKind.Confirmed, selected, result);
     }
 
     /// <summary>独立入口选择结局（内部；三态）。</summary>
@@ -891,28 +910,50 @@ public sealed class CommandManager
             return;
         }
 
-        // 交互：一次拖拽＝一次请求；候选＝可用动作的候选并集（候选面之外＝后端筛除、不构成确认）
+        // 交互：一次拖拽＝一次请求；候选＝可用动作的候选并集（候选由后端给出——Q19＝a）
         var candidates = new List<Ref<Entity>>(availability.Move.Candidates.Count + availability.Attack.Candidates.Count);
         candidates.AddRange(availability.Move.Candidates);
         candidates.AddRange(availability.Attack.Candidates);
-        var allowedSet = new HashSet<Ref<Entity>>(candidates);
-        var filter = new TargetFilter(coarseFilter: refs => refs.Where(allowedSet.Contains).ToList());
-        var targeter = _targeterManager.CreateTargeter(filter, new TargetSlot[] { new SingleSelectSlot() });
-        var targeting = await targeter.Targeting();
 
-        if (targeting.Status == TargetingStatus.Cancelled)
+        Ref<Entity>? selected = null;
+        var targeting = await _targeterManager.RunAsync(async flow =>
+        {
+            var step = await flow.Step(
+                SelectorTemplates.FieldUnit,
+                new ReferenceSetParameter(candidates, 1, 1, tag: unit));
+
+            // 非法选择＝同一选择器重入（Q8a：内部处理、支持重试）。
+            while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
+            {
+                step = await flow.Retry<Ref<Entity>>();
+            }
+
+            if (step.IsCancelled)
+            {
+                return TargeterResult.Cancelled();
+            }
+
+            if (step.IsFailed)
+            {
+                return TargeterResult.FromSelectorFailure(step.Failure);
+            }
+
+            selected = step.Value;
+            return TargeterResult.Ok();
+        });
+
+        if (targeting.IsCancelled)
         {
             box.Result = CommandResult.Cancelled(targeting); // 取消＝零副作用
             return;
         }
 
-        if (targeting.Status != TargetingStatus.Success)
+        if (!targeting.IsOk)
         {
             box.Result = CommandResult.Failure(CommandFailureReason.TargetingFailed, targeting);
             return;
         }
 
-        var selected = targeting.Outcome!.Single;
         if (selected is null || !selected.IsAlive)
         {
             box.Result = CommandResult.Failure(CommandFailureReason.TargetingFailed);
@@ -920,7 +961,7 @@ public sealed class CommandManager
         }
 
         // 分派：选中空槽 → 移动触发器；选中敌方单位 / 敌方 HQ → 攻击触发器（X1：触发者随指挥链透传）
-        await DispatchSelectedAsync(unit, selected, box, ctx, ct, view.TriggerCard);
+        await DispatchSelectedAsync(unit, selected!, box, ctx, ct, view.TriggerCard);
     }
 
     private async Task DispatchSelectedAsync(
@@ -1095,6 +1136,16 @@ public sealed class CommandManager
         }
 
         var targetEntity = targetRef.Value;
+
+        // S2（隐蔽机制·揭示触发点）：攻击执行段入口（复验后、伤害结算前——E2-Q3a 裁定）——
+        // 参与攻击的隐蔽单位各自揭示：先攻击者（动作发起方）、后被攻击者（受动作方——单位目标）；
+        // HQ 不作被揭示方（攻击 HQ 时仅攻击者揭示）；载荷缺失/结构性中断＝未进入本段、不揭示。
+        await CovertRules.RevealAsync(attacker, ct);
+        if (targetEntity is UnitCard targetUnit)
+        {
+            await CovertRules.RevealAsync(targetUnit, ct);
+        }
+
         if (targetEntity is Hq hq && !ReferenceEquals(hq.Owner, attacker.Owner))
         {
             // HQ 简路（W3-3 实体化）：伤害＝攻击者攻击力有效值；HQ 不反击；不走「造成攻击伤害」（无单位互伤链）；

@@ -139,15 +139,15 @@ public class MatchOpeningConfigTests
         await match.Initialize();
 
         // 空起手（0 合法）：双方手牌 0；回合 1 正常执行（先手、不抽）
-        Assert.Equal(0, match.Players[0].Hand.Count);
-        Assert.Equal(0, match.Players[1].Hand.Count);
+        Assert.Empty(match.Players[0].Hand);
+        Assert.Empty(match.Players[1].Hand);
         Assert.Equal(1, match.TurnNumber);
         Assert.Same(match.Players[0], match.CurrentPlayer);
         Assert.DoesNotContain(GameUpdates.CardDrawn, recorder.Types);
 
         // 正常流程继续：回合 2 后手照抽 1（0＋1＝1）
         await match.EndTurn();
-        Assert.Equal(1, match.Players[1].Hand.Count);
+        Assert.Single(match.Players[1].Hand);
     }
 
     // ---------- ④ mulligan 交互：显式起手配置不改变 SkipMulligan 序列 ----------

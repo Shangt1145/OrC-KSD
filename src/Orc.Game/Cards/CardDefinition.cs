@@ -85,12 +85,18 @@ public sealed class CardDefinition
         Attributes = keywords?.Attributes ?? Array.Empty<string>();
         Keywords = keywords?.Keywords ?? Array.Empty<KeywordDeclaration>();
         UnmappedAttributes = keywords?.UnmappedAttributes ?? Array.Empty<string>();
+
+        // S1（老兵数据映射正式承载）：两端口的派生读面——数据体路径经 keywords 组件分流承载；代码注册路径经兼容构造参数。
+        BecomesVeteran = keywords?.BecomesVeteran;
+        VeteranOf = keywords?.VeteranOf;
     }
 
     /// <summary>
     /// 创建定义（兼容构造：既有 12 参数；内部转换为组件定义集——校验与既有行为一致、fail-fast 保留）。
+    /// S1 加性：末两参数＝老兵数据映射的代码注册路径声明面（`BecomesVeteran:<老兵卡id>` / `VeteranOf:<基础卡id>`）；
+    /// 未声明＝null（缺省）。
     /// </summary>
-    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失；词条清单含空白/未注册/重复标识；单位类型或开放 tag 含重复项。</exception>
+    /// <exception cref="ArgumentException">name 为 null/空白；国籍或稀有度缺失；词条清单含空白/未注册/重复标识；单位类型或开放 tag 含重复项；老兵声明为空白或与显式「老兵」词条声明重复。</exception>
     /// <exception cref="ArgumentOutOfRangeException">category 为未定义值；国籍/稀有度/单位类型为未定义枚举值。</exception>
     public CardDefinition(
         string name,
@@ -104,10 +110,12 @@ public sealed class CardDefinition
         bool isGuard = false,
         Faction? faction = null,
         Rarity? rarity = null,
-        IEnumerable<string>? tags = null)
+        IEnumerable<string>? tags = null,
+        string? becomesVeteran = null,
+        string? veteranOf = null)
         : this(
             name,
-            BuildComponents(category, deployCost, operateCost, attack, defense, keywords, unitTypes, faction, rarity, tags),
+            BuildComponents(category, deployCost, operateCost, attack, defense, keywords, unitTypes, faction, rarity, tags, becomesVeteran, veteranOf),
             isGuard)
     {
     }
@@ -123,7 +131,9 @@ public sealed class CardDefinition
         IEnumerable<UnitType>? unitTypes,
         Faction? faction,
         Rarity? rarity,
-        IEnumerable<string>? tags)
+        IEnumerable<string>? tags,
+        string? becomesVeteran,
+        string? veteranOf)
     {
         if (!Enum.IsDefined(category))
         {
@@ -156,6 +166,25 @@ public sealed class CardDefinition
         var resolvedUnitTypes = ResolveUnitTypes(unitTypes);
         var resolvedTags = ResolveTags(tags);
 
+        // S1（老兵数据映射——代码注册路径加性面）：声明校验先于构造。
+        // ①空白声明＝配置错误（fail-fast——对齐本路径一贯口径；数据体路径的畸形按留痕承载）；
+        // ②显式「老兵」词条声明与 veteranOf 参数双声明＝拒绝（「老兵」标记由来源映射单一产出——防双真源）。
+        if (becomesVeteran is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(becomesVeteran);
+        }
+
+        if (veteranOf is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(veteranOf);
+            if (resolvedKeywords.Any(item => string.Equals(item.Id, KeywordIds.Veteran, StringComparison.Ordinal)))
+            {
+                throw new ArgumentException(
+                    "词条声明清单含「老兵」而 veteranOf 参数另行声明（双声明被拒绝——「老兵」标记由来源映射单一产出）。",
+                    nameof(veteranOf));
+            }
+        }
+
         var list = new List<ICardDataComponentDefinition>
         {
             new TypeCategoryDefinition(category, resolvedUnitTypes),
@@ -169,9 +198,15 @@ public sealed class CardDefinition
 
         list.Add(new TagDataDefinition(rarity.Value, resolvedTags));
 
-        if (resolvedKeywords.Count > 0)
+        // S1：VeteranOf 正式承载同样产出「老兵」标记（单一真源——与数据体路径一致：随内容成立）。
+        var assembledKeywords = veteranOf is null
+            ? resolvedKeywords
+            : resolvedKeywords.Append(new KeywordDeclaration(KeywordIds.Veteran)).ToArray();
+
+        if (assembledKeywords.Count > 0 || becomesVeteran is not null || veteranOf is not null)
         {
-            list.Add(new KeywordsDefinition(Array.Empty<string>(), resolvedKeywords, Array.Empty<string>()));
+            list.Add(new KeywordsDefinition(
+                Array.Empty<string>(), assembledKeywords, Array.Empty<string>(), becomesVeteran, veteranOf));
         }
 
         return list;
@@ -315,6 +350,20 @@ public sealed class CardDefinition
 
     /// <summary>未映射/未实现词条标识（只读留痕面；不参与机制、不写日志）。</summary>
     public IReadOnlyList<string> UnmappedAttributes { get; }
+
+    /// <summary>
+    /// 升级链信息（S1 加性正式承载；派生自 <c>keywords</c> 组件——数据体 `BecomesVeteran:&lt;老兵卡id&gt;`
+    /// 或代码注册参数）：本形态升级后对应的老兵版本定义 id（供升级执行查找老兵版本定义——**不作**「是否老兵」判据）；
+    /// 未声明＝null。畸形/多重声明＝留痕不进本面（数据体路径）。
+    /// </summary>
+    public string? BecomesVeteran { get; }
+
+    /// <summary>
+    /// 老兵来源（S1 加性正式承载；派生自 <c>keywords</c> 组件——数据体 `VeteranOf:&lt;基础卡id&gt;`
+    /// 或代码注册参数）：本形态为老兵版本时指向的基础卡 id（升级链「来源指向当前卡」校验的判据）；
+    /// 未声明＝null。畸形/多重声明＝留痕不进本面（数据体路径）。实例读面以「老兵」标记为准（同一承载体）。
+    /// </summary>
+    public string? VeteranOf { get; }
 
     /// <summary>单位类型清单（派生自 <c>typeCategory</c> 组件；登记序；空＝零类型）。</summary>
     public IReadOnlyList<UnitType> UnitTypes { get; }

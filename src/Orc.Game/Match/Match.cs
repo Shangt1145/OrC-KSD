@@ -582,6 +582,11 @@ public sealed class Match
         // 内核零依赖口径不变（接口倒置），实现由 satellite（Orc.Script）提供；宿主已装配＝不覆盖。
         Engine.ScriptEvaluator ??= new Orc.Script.CSharpScriptEvaluator();
 
+        // S2 加性（隐蔽机制·判定器接线）：目标候选合法性判定（J3 示范②）**提入生产内置段**——
+        // 「默认名恒可解析、默认判定器无条件可用」；默认规则＝在场单位可选且**隐蔽单位不可选**
+        // （指令效果索敌统一经本判定器获取「可被指令指向/影响」的单位；原「示范类经外部装配段」归属随 S2 提入生产装配）。
+        _judicators.Register(JudicatorNames.TargetCandidateEligibility, new TargetEligibilityJudicator());
+
         // E1 加性（效果运行期）：无头选靶判定器（csx handler 的选择面——无头、不排队、不等 UI 桥）。
         _judicators.Register(
             JudicatorNames.EffectTargetResolve,

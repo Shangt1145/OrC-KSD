@@ -29,6 +29,8 @@ public sealed class SemanticMapper
         ["亡计"] = "death_basic",
         // 动员 = 「本单位移至前线时」→ 复用位置变化骨架。
         ["动员"] = "position_basic",
+        // S3：「揭示：X」＝事件前缀（「…被揭示时」同族）→ 揭示骨架（hook unit.revealed——S2 信号）。
+        ["揭示"] = "reveal_basic",
     };
 
     /// <summary>映射。</summary>
@@ -79,6 +81,13 @@ public sealed class SemanticMapper
                 guards.Add(new DslCondition(guardKind));
             }
 
+            // S3：监听短语内的「在场上的第 N 回合」限定（E1-56 口径的 V1 构成）→ **真实条件**
+            // （turns 度量——求值挂钩既有读取面 UnitCard.TurnsInPlay；"达到 N"＝gte 读法）。
+            if (InPlayTurnSpecOf(listen.RawText) is { } turnsSpec)
+            {
+                guards.Add(new DslCondition(DslCondition.Compare, turnsSpec));
+            }
+
             // 事件卡属性过滤（可多维——**扁平**合取，避免嵌套 all）。
             foreach (var filter in eventCardFilters)
             {
@@ -104,6 +113,7 @@ public sealed class SemanticMapper
         }
 
         var templates = new List<(string Template, TextSpan Span)>();
+        DslCondition? namedGuard = null;
         if (ast.Trigger is { Kind: TriggerSyntaxKind.Named } named)
         {
             foreach (var ev in named.Events)
@@ -111,6 +121,13 @@ public sealed class SemanticMapper
                 if (EventTemplates.TryGetValue(ev.RawText, out var template))
                 {
                     templates.Add((template, ev.Span));
+
+                    // S3：「揭示：X」＝该卡被揭示时——**自指守卫**（被揭示者==宿主；不泛触发于同场
+                    // 其它单位的揭示——unit.revealed 载荷 {Unit} 与 damage_dealt 同构）。
+                    if (string.Equals(template, "reveal_basic", StringComparison.Ordinal))
+                    {
+                        namedGuard = new DslCondition(DslCondition.PayloadSelf, "Unit");
+                    }
                 }
                 else
                 {
@@ -129,7 +146,7 @@ public sealed class SemanticMapper
             return;
         }
 
-        if (!TryBuildOps(original, ast, out var ops, out var failures))
+        if (!TryBuildOps(original, ast, out var ops, out var failures, namedGuard))
         {
             unresolved.AddRange(failures);
             return;
@@ -247,8 +264,10 @@ public sealed class SemanticMapper
         var excludeSelf = effectText.Contains("其他", StringComparison.Ordinal)
                           || effectText.Contains("其它", StringComparison.Ordinal);
 
-        // 前置扫：**纯条件子句**（无动作）＝整效果的条件——
+        // 前置扫：**纯条件子句**（无动作）＝整效果的条件——与既有条件（监听守卫等）**合取**累积
+        // （任何一环都不丢失：`guard && 条件`；单条件时＝原样）——
         // E1-57：可识别的**数值比较**（`若友方单位数不小于 3`）⇒ **真实条件**（求值是纯函数）；
+        // S3：「若是友方回合／敌方回合」⇒ **回合归属类真实条件**（求值挂钩既有回合归属判定面）；
         // 其余（`若有友方动员单位`／`若上回合没有被攻击`…）⇒ `raw` 占位（`if (false)`）。
         var defaultCondition = effectCondition;
         foreach (var clause in ast.Clauses)
@@ -260,11 +279,16 @@ public sealed class SemanticMapper
 
             if (ComparisonSpecOf(clause.Comparison) is { } spec)
             {
-                defaultCondition = new DslCondition(DslCondition.Compare, spec);
+                defaultCondition = CombineGuards(defaultCondition, new DslCondition(DslCondition.Compare, spec));
+            }
+            else if (TurnOwnershipOf(RawOf(original, clause.Span)) is { } turnOwner)
+            {
+                defaultCondition = CombineGuards(defaultCondition, new DslCondition(DslCondition.TurnOwner, turnOwner));
             }
             else if (clause.Condition is not null)
             {
-                defaultCondition = new DslCondition(DslCondition.RawKind, clause.Condition.RawText);
+                defaultCondition = CombineGuards(
+                    defaultCondition, new DslCondition(DslCondition.RawKind, clause.Condition.RawText));
             }
         }
 
@@ -332,6 +356,17 @@ public sealed class SemanticMapper
                     }
 
                     ops.Add(WithCondition(WithUntil(op, until), condition));
+
+                    // S3：`获得`类动作的**已识别部分完整落地**后，宾语区仍有未识别词（如「使 1 个老兵单位
+                    // 获得奋战和冲击」的「冲击」——词条未实现）⇒ **局部显式留痕**（needsCsx 原文保留——
+                    // 不静默、不误跑；随词条效果化批次回补）。范围限 `gain`（其余动作的动词后词法不在此口径）。
+                    if (string.Equals(action.VerbKey, "gain", StringComparison.Ordinal)
+                        && !string.IsNullOrWhiteSpace(action.ObjectRaw))
+                    {
+                        ops.Add(WithCondition(
+                            new DslOp(DslOpRegistry.NeedsCsxOpName, script: action.ObjectRaw), condition));
+                    }
+
                     continue;
                 }
 
@@ -486,9 +521,12 @@ public sealed class SemanticMapper
                     return true;
                 }
 
-                var keyword = FindFilter(target, FilterKind.Keyword);
+                var keyword = FindFilter(ObjectFilters(target, action), FilterKind.Keyword)
+                    ?? FindFilter(target, FilterKind.Keyword);
                 if (keyword is not null)
                 {
+                    // S3：宾语（**动词之后**）词条优先——如「使 1 个老兵单位获得奋战和冲击」的「老兵」是
+                    // 目标限定、「奋战」是宾语；宾语区无词条时才回退全量过滤短语（既有形态兼容）。
                     op = new DslOp("grant", selector, keyword: keyword);
                     return true;
                 }
@@ -560,6 +598,19 @@ public sealed class SemanticMapper
                 // 消灭＝**游戏层死亡链**（亡计/词条注销/修饰清理/card.died）；
                 // 与总线 card.destroyed（内存销毁，可能只是弃牌）语义不同——不容混用。
                 op = new DslOp("destroy", selector);
+                return true;
+
+            case "upgrade":
+                // S3：升为老兵（csx 对接 EffectRuntime.UpgradeAsync——S1 冻结的升级发动公共路径）。
+                op = new DslOp("upgrade", selector);
+                return true;
+
+            case "reveal":
+                // S3：揭示（管理动作域——csx 候选来源经 CovertRules.CollectCovertUnits、执行经
+                // EffectRuntime.RevealAsync 唯一标准口）。「揭示 1 个隐蔽单位」的限定词位于动词**之后**
+                // ⇒ 以**全量过滤短语**为限定面（动词后限定词＝该动作的目标——与「获得…」的动词后宾语区分）。
+                var revealSelector = BuildSelector(target, action: null, threshold: threshold);
+                op = new DslOp("reveal", revealSelector, count: action.Payload?.Int ?? 1);
                 return true;
 
             default:
@@ -735,6 +786,63 @@ public sealed class SemanticMapper
         return null;
     }
 
+    /// <summary>
+    /// 监听短语中的「在场上的第 N 回合」限定（S3；V1 完整档构成）→ **turns 度量条件规范串**
+    /// （`turns=s=self:gte:#N`；"第三回合开始时"＝在场回合数**达到** 3——gte 读法，升级幂等使超限重复检查无害）。
+    /// 未命中＝null（保持既有路径）。
+    /// </summary>
+    private static string? InPlayTurnSpecOf(string rawText)
+    {
+        const string prefix = "在场上的第";
+        var start = rawText.IndexOf(prefix, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var rest = rawText[(start + prefix.Length)..];
+        var end = rest.IndexOf("回合", StringComparison.Ordinal);
+        if (end <= 0)
+        {
+            return null;
+        }
+
+        return TryChineseNumber(rest[..end], out var turnNumber)
+            ? $"turns=s=self:gte:#{turnNumber}"
+            : null;
+    }
+
+    /// <summary>中文数词（一~十，含"两"）或阿拉伯数字 → 整数；其余＝false。</summary>
+    private static bool TryChineseNumber(string text, out int value)
+    {
+        var map = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["一"] = 1, ["二"] = 2, ["两"] = 2, ["三"] = 3, ["四"] = 4, ["五"] = 5,
+            ["六"] = 6, ["七"] = 7, ["八"] = 8, ["九"] = 9, ["十"] = 10,
+        };
+
+        var trimmed = text.Trim();
+        return map.TryGetValue(trimmed, out value) || int.TryParse(trimmed, out value);
+    }
+
+    /// <summary>
+    /// 「若是友方回合／敌方回合」子句（S3）→ **回合归属类条件**取值（`friendly`／`enemy`）。未命中＝null。
+    /// </summary>
+    private static string? TurnOwnershipOf(string clauseText)
+    {
+        if (clauseText.Contains("若是友方回合", StringComparison.Ordinal))
+        {
+            return "friendly";
+        }
+
+        if (clauseText.Contains("若是敌方回合", StringComparison.Ordinal))
+        {
+            return "enemy";
+        }
+
+        return null;
+    }
+
     /// <summary>补写期限（其它字段原样保留）。</summary>
     private static DslOp WithUntil(DslOp op, string? until) =>
         until is null
@@ -874,6 +982,19 @@ public sealed class SemanticMapper
     private static string? ResolveListenTemplate(string rawText, string rawOriginal, out IReadOnlyList<string> eventCardFilters)
     {
         eventCardFilters = FindEventCardFilters(rawText, rawOriginal);
+
+        // S3：升为老兵（`…升为老兵时`——hook <c>unit.upgraded</c>；S1 冻结信号名）。置于最前——
+        // 更具体者优先（「升为老兵」短语与其它分支关键词均不共现）。
+        if (rawText.Contains("升为老兵", StringComparison.Ordinal))
+        {
+            return "veteran_basic";
+        }
+
+        // S3：被揭示（`…被揭示时`——hook <c>unit.revealed</c>；S2 冻结信号名）。「时/后」后缀经既有机制自然吸收。
+        if (rawText.Contains("被揭示", StringComparison.Ordinal))
+        {
+            return "reveal_basic";
+        }
 
         if (rawText.Contains("被消灭", StringComparison.Ordinal)
             || rawText.Contains("阵亡", StringComparison.Ordinal)
@@ -1149,6 +1270,17 @@ public sealed class SemanticMapper
                 : SubjectOwnerGuard(rawText, "Killer");
         }
 
+        // S3：`unit.upgraded`／`unit.revealed` 载荷 {Unit}——与 damage_dealt 同构的自指面：
+        // 裸短语（「升为老兵时」「被揭示时」）＝**隐式自指**（本单位）；「本单位/该单位」＝显式自指；
+        // 「友方/敌方单位…」的归属面由 OwnerGuardKind 承载（见 OwnerFilterableTemplates 白名单）。
+        if (string.Equals(template, "veteran_basic", StringComparison.Ordinal)
+            || string.Equals(template, "reveal_basic", StringComparison.Ordinal))
+        {
+            return selfSubject || IsBareSelfSubjectPhrase(rawText)
+                ? new DslCondition(DslCondition.PayloadSelf, "Unit")
+                : null;
+        }
+
         return null;
     }
 
@@ -1174,6 +1306,14 @@ public sealed class SemanticMapper
     /// <summary>短语主体是否＝**本单位**（自指；`本单位`／`该单位`）。</summary>
     private static bool ContainsSelfSubject(string rawText) =>
         rawText.Contains("本单位", StringComparison.Ordinal) || rawText.Contains("该单位", StringComparison.Ordinal);
+
+    /// <summary>
+    /// S3：**裸自指监听短语**（无主体词缀——「升为老兵时」「被揭示时」）＝隐式"本单位"
+    /// （该卡自己的升级/揭示事件；不泛触发于同场其它单位）。
+    /// </summary>
+    private static bool IsBareSelfSubjectPhrase(string rawText) =>
+        rawText.StartsWith("升为老兵", StringComparison.Ordinal)
+        || rawText.StartsWith("被揭示", StringComparison.Ordinal);
 
     /// <summary>
     /// 该监听模板是否**必须**有"本单位"主体（E1-47）：`damage_dealt_basic`／`killed_basic` 的归属面
@@ -1205,6 +1345,8 @@ public sealed class SemanticMapper
         "damaged_basic",    // card.damaged     载荷 {Card, Amount}（E1-33）
         "combat_survived_basic", // unit.combat.survived 载荷 {Unit}（E1-39）
         "counter_basic",    // counter.triggered 载荷 {Card, Player}（E1-53）
+        "veteran_basic",    // unit.upgraded    载荷 {Unit}（S3——「友方/敌方单位升为老兵时」归属守卫）
+        "reveal_basic",     // unit.revealed    载荷 {Unit}（S3——「友方隐蔽单位被揭示时」归属守卫）
     };
 
     /// <summary>

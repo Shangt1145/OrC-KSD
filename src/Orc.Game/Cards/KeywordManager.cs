@@ -202,6 +202,22 @@ public sealed class KeywordManager
     public Task<int> ClearAllExceptAsync(string preserveKeyword, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(preserveKeyword);
+        return ClearCoreAsync(preserveKeyword, ct);
+    }
+
+    /// <summary>
+    /// 清空全部词条（S1 加性——「无保留位」全清；升级动作「词条集全清（含运行时授予）」的承载）：
+    /// 对全部登记词条逐一走移除路径（完整卸载：OnRevoke → 运行逻辑注销＋内嵌效果卸载 → 存在性清除）；
+    /// 与 <see cref="ClearAllExceptAsync"/> 同核心（差异＝保留位：本面无保留）。
+    /// 逐条异常隔离（记录、继续完成——「卸载力求完成」先例）；返回实际清除数。
+    /// 对已死亡卡＝拒绝（终态；死亡注销已完成行为撤销）。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">对已死亡卡清空（终态拒绝）。</exception>
+    public Task<int> ClearAllAsync(CancellationToken ct = default) => ClearCoreAsync(preserveKeyword: null, ct);
+
+    /// <summary>清空核心（preserveKeyword 为 null＝无保留位全清；逐条异常隔离——「卸载力求完成」）。</summary>
+    private Task<int> ClearCoreAsync(string? preserveKeyword, CancellationToken ct)
+    {
         if (IsDead())
         {
             throw new InvalidOperationException(
@@ -211,7 +227,7 @@ public sealed class KeywordManager
         var toRevoke = new List<string>();
         foreach (var keyword in _components.Keys)
         {
-            if (!string.Equals(keyword, preserveKeyword, StringComparison.Ordinal))
+            if (preserveKeyword is null || !string.Equals(keyword, preserveKeyword, StringComparison.Ordinal))
             {
                 toRevoke.Add(keyword);
             }

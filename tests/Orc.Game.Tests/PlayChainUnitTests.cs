@@ -81,7 +81,7 @@ public class PlayChainUnitTests
 
         // 候选＝己方支援线空槽位（邻位规则计算；初始＝HQ 邻位槽 1）；单选槽。
         Assert.Equal(new[] { line[1].Ref }, description.AllowedTargets);
-        Assert.Equal(TargetSlot.DefaultName, description.Slots[0].Name);
+        Assert.Equal(SelectorNames.Slot, description.Slots[0].Name);
         Assert.Equal(1, description.Slots[0].Min);
         Assert.Equal(1, description.Slots[0].Max);
 

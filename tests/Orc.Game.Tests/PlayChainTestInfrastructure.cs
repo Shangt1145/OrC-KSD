@@ -69,7 +69,7 @@ internal static class PlayChainTestKit
     }
 
     /// <summary>候选收集脚本（提交全战场槽位引用——超集；后端粗筛收敛到候选面）。</summary>
-    public static Func<TargetingCollectionContext, Task<IReadOnlyList<object?>>> AllSlotsCandidatesScript(Match match)
+    public static Func<object, Task<IReadOnlyList<object?>>> AllSlotsCandidatesScript(Match match)
         => _ => Task.FromResult<IReadOnlyList<object?>>(AllSlotsOf(match).Select(slot => (object?)slot.Ref).ToArray());
 
     /// <summary>全战场槽位（三线顺序枚举）。</summary>

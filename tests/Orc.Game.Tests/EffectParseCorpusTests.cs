@@ -1,6 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Orc.Game.EffectParsing.Compilation;
+using Orc.Game.EffectParsing.Dsl;
 using Orc.Game.EffectParsing.Parsing;
+using Orc.Game.EffectParsing.Templates;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -117,6 +120,11 @@ public class EffectParseCorpusTests
         var report = BuildReport(
             corpusPath, texts.Count, withEffects, totalEffects, totalUnresolved, silent, silentSamples, reasons, samples,
             semanticsComplete, withPlaceholderCondition, withNeedsCsx);
+
+        // S3：覆盖率报告**新增「本机制样本（老兵／隐蔽）」独立节**（逐例：文本／来源／结果类别／完整性／产物要点；
+        // 全量对拍语料与总体数据口径**保持不变**——样本性质不同〔机制专项 vs 全量对拍〕，不并入对拍循环）。
+        report += Environment.NewLine + BuildMechanismSamplesSection();
+
         var directory = Path.Combine(AppContext.BaseDirectory, "EffectParsing", "report");
         Directory.CreateDirectory(directory);
         var reportPath = Path.Combine(directory, "corpus-coverage.md");
@@ -208,6 +216,135 @@ public class EffectParseCorpusTests
         }
 
         return builder.ToString();
+    }
+
+    // ---------- S3：本机制样本（老兵／隐蔽）——独立手工样本集＋覆盖率报告独立节 ----------
+
+    /// <summary>
+    /// S3 机制样本（老兵／隐蔽）：**卡池原文逐字**（含弯引号/空格）＋来源标注（分卷/行号——供后续漂移核对）
+    /// ＋完整性档位（Q&A-1c 分层规则：V4「冲击」为唯一留痕豁免，其余完整档）。
+    /// <para>样本纪律（Q&A-6）：逐例＝卡池对应场景的连续句组；不并入全量对拍语料（总体数据口径保持不变）。</para>
+    /// </summary>
+    private static readonly (string Id, string Text, string Source, string Completeness)[] MechanismSamples =
+    {
+        ("V1", "在场上的第三回合开始时，升为老兵。", "part-13.txt:29", "完整档（无占位、无 needsCsx）"),
+        ("V2", "本单位对敌方总部造成伤害时，升为老兵。升为老兵时，将 1 张“一号坦克 B 型”加入手牌。", "part-03.txt:61-62", "完整档（无占位、无 needsCsx）"),
+        ("V3", "友方单位升为老兵时，本单位获得 +2+2。", "part-07.txt:35", "完整档（无占位、无 needsCsx）"),
+        ("V4", "使 1 个老兵单位获得奋战和冲击。", "part-02.txt:23", "留痕豁免（「冲击」needsCsx 显式标注）"),
+        ("C5", "揭示：若是友方回合，获得 +2 攻击力。", "part-11.txt:48", "完整档（无占位、无 needsCsx）"),
+        ("C6", "部署：揭示 1 个隐蔽单位。", "part-11.txt:60", "完整档（无占位、无 needsCsx）"),
+        ("C7", "友方隐蔽单位被揭示时，使所有友方单位获得 +1+1。", "part-05.txt:10", "完整档（无占位、无 needsCsx）"),
+    };
+
+    /// <summary>
+    /// 生成「本机制样本（老兵／隐蔽）」节（逐例：文本／来源／结果类别／完整性／产物要点）——
+    /// 逐例断言随行（解析无未解析记录、编译产物非空、完整性档位与产物一致——不静默降级）。
+    /// </summary>
+    private static string BuildMechanismSamplesSection()
+    {
+        var parser = EffectParser.CreateDefault(out var lexiconFailures);
+        Assert.Empty(lexiconFailures);
+        var templates = EffectTemplateLoader.LoadDirectory(EffectTemplateLoader.DefaultDirectory);
+        Assert.Empty(templates.Failures);
+        var ops = OpTemplateCatalog.LoadDirectory(OpTemplateCatalog.DefaultDirectory, out var opFailures);
+        Assert.Empty(opFailures);
+        var compiler = new EffectCompiler(templates.Templates, ops);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("## 本机制样本（老兵／隐蔽）").AppendLine();
+        builder.AppendLine("> S3 机制专项样本（**独立于**全量对拍语料——总体数据口径不变）；逐字入断言，来源供漂移核对；");
+        builder.AppendLine("> 完整性档位分层规则见需求 Q&A-1c（V4「冲击」为唯一留痕豁免）。").AppendLine();
+        builder.AppendLine("| 样本 | 原文 | 来源 | 结果类别 | 完整性档位 | 产物要点 |").AppendLine("|---|---|---|---|---|---|");
+
+        var index = 0;
+        foreach (var (id, text, source, completeness) in MechanismSamples)
+        {
+            var result = parser.Parse(text);
+            Assert.Empty(result.Unresolved);
+            Assert.NotEmpty(result.Effects);
+
+            var templatesUsed = new List<string>();
+            var details = new List<string>();
+            var hasTrace = false;
+            foreach (var effect in result.Effects)
+            {
+                templatesUsed.Add(effect.Template);
+                foreach (var fill in effect.Fills.Values)
+                {
+                    foreach (var op in fill.Ops)
+                    {
+                        if (op.Op is "needsCsx" or "csx")
+                        {
+                            hasTrace = true;
+                        }
+
+                        var detail = op.Op;
+                        if (op.Condition is { } condition)
+                        {
+                            detail += " [条件:" + DescribeCondition(condition) + "]";
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(op.Keyword))
+                        {
+                            detail += " [keyword:" + op.Keyword + "]";
+                        }
+
+                        details.Add(detail);
+                    }
+                }
+
+                var snapshot = compiler.Compile(effect, $"effect.mechanism.sample.{index}");
+                foreach (var ev in snapshot.Root.MainTrigger.Events)
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(ev.CsxSource), $"样本 {id} 的编译产物为空。");
+                }
+            }
+
+            // 完整性档位与产物一致（不静默降级）：完整档＝无 needsCsx/csx；留痕豁免＝含显式留痕。
+            if (completeness.StartsWith("完整档", StringComparison.Ordinal))
+            {
+                Assert.False(hasTrace, $"样本 {id} 标注完整档，但含 needsCsx/csx 产痕。");
+            }
+            else
+            {
+                Assert.True(hasTrace, $"样本 {id} 标注留痕豁免，但无 needsCsx/csx 产痕。");
+            }
+
+            index++;
+            builder.Append("| ").Append(id)
+                .Append(" | ").Append(text.Replace("|", "\\|", StringComparison.Ordinal))
+                .Append(" | ").Append(source)
+                .Append(" | ").Append(string.Join(" + ", templatesUsed))
+                .Append(" | ").Append(completeness)
+                .Append(" | ").Append(string.Join("；", details).Replace("|", "\\|", StringComparison.Ordinal))
+                .AppendLine(" |");
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>条件摘要（合取展开为 `a+b`；其余＝`Kind` 或 `Kind=Raw`）——供报告"产物要点"列。</summary>
+    private static string DescribeCondition(DslCondition condition) =>
+        condition.Kind == DslCondition.AllKind && condition.All is { Count: > 0 }
+            ? string.Join("+", condition.All.Select(DescribeCondition))
+            : condition.Kind + (condition.Raw is null ? string.Empty : "=" + condition.Raw);
+
+    [Fact]
+    public void Mechanism_Samples_Report()
+    {
+        // S3：独立手工样本集（不依赖全量语料文件）——生成独立报告（独立节口径与语料报告并入节同源）。
+        var section = BuildMechanismSamplesSection();
+        var directory = Path.Combine(AppContext.BaseDirectory, "EffectParsing", "report");
+        Directory.CreateDirectory(directory);
+        var reportPath = Path.Combine(directory, "mechanism-samples.md");
+        File.WriteAllText(reportPath, "# 效果解析器·本机制样本报告（老兵／隐蔽）" + Environment.NewLine + Environment.NewLine + section);
+
+        Assert.True(File.Exists(reportPath));
+        var content = File.ReadAllText(reportPath);
+        Assert.Contains("本机制样本（老兵／隐蔽）", content, StringComparison.Ordinal);
+        Assert.Contains("V1", content, StringComparison.Ordinal);
+        Assert.Contains("V4", content, StringComparison.Ordinal);
+        Assert.Contains("C7", content, StringComparison.Ordinal);
     }
 
     /// <summary>把原因里的原文片段抹掉，便于聚合计数。</summary>

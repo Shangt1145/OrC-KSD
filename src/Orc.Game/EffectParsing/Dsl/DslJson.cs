@@ -135,6 +135,7 @@ public static class DslJson
         Name = op.Name,
         Nested = op.Nested?.Select(ToDto).ToList(),
         Until = op.Until,
+        Value = op.Value,
     };
 
     private static FilterDto? ToDto(DslFilter? filter) =>
@@ -178,7 +179,8 @@ public static class DslJson
                 dto.Condition is null ? null : FromDto(dto.Condition),
                 dto.Name,
                 dto.Nested?.Select(FromDto).ToList(),
-                dto.Until);
+                dto.Until,
+                value: dto.Value);
 
             var errors = DslOpRegistry.Validate(op);
             if (errors.Count > 0)
@@ -255,6 +257,9 @@ public static class DslJson
 
         /// <summary>目标字段（E1-56；仅 <c>aura</c>）。</summary>
         public string? Field { get; set; }
+
+        /// <summary>词条参值（词条效果化·批 0；仅 <c>grant</c>；null＝未提供参值——与显式 0 区分）。</summary>
+        public int? Value { get; set; }
 
         /// <summary>内嵌效果（递归 DSL）。</summary>
         public List<InstanceDto>? Nested { get; set; }

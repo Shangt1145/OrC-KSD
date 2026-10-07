@@ -95,7 +95,7 @@ public enum CommandBlockReason
 /// </summary>
 public sealed class CommandResult
 {
-    private CommandResult(CommandResultStatus status, CommandFailureReason? failureReason, TargetingResult? targeting)
+    private CommandResult(CommandResultStatus status, CommandFailureReason? failureReason, TargeterResult? targeting)
     {
         Status = status;
         FailureReason = failureReason;
@@ -109,7 +109,7 @@ public sealed class CommandResult
     public CommandFailureReason? FailureReason { get; }
 
     /// <summary>交互细节透传（可空；取消 / 交互失败场景携带）。</summary>
-    public TargetingResult? Targeting { get; }
+    public TargeterResult? Targeting { get; }
 
     /// <summary>是否成功（便捷读面）。</summary>
     public bool IsSuccess => Status == CommandResultStatus.Success;
@@ -118,11 +118,11 @@ public sealed class CommandResult
     internal static CommandResult Success() => new(CommandResultStatus.Success, failureReason: null, targeting: null);
 
     /// <summary>创建取消结果（框架内部）。</summary>
-    internal static CommandResult Cancelled(TargetingResult? targeting = null)
+    internal static CommandResult Cancelled(TargeterResult? targeting = null)
         => new(CommandResultStatus.Cancelled, failureReason: null, targeting);
 
     /// <summary>创建失败结果（框架内部）。</summary>
-    internal static CommandResult Failure(CommandFailureReason reason, TargetingResult? targeting = null)
+    internal static CommandResult Failure(CommandFailureReason reason, TargeterResult? targeting = null)
         => new(CommandResultStatus.Failed, reason, targeting);
 }
 

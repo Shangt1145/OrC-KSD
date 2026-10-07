@@ -169,14 +169,57 @@ public sealed class EffectCompiler
         // E1-42：合取（`all`）——`(a && b && …)`；空＝恒真。
         // E1-57：**数值比较条件**（真实求值；`Raw` ＝ 规范串）——求值是纯函数 ⇒ 可参与 `&&` 合取。
         DslCondition.Compare => ComparisonSpec.IsValid(condition.Raw)
-            ? $"{RuntimeType}.EvaluateCondition(self, {CsStringLiteral(condition.Raw!)})"
+            ? RenderCompareCondition(condition.Raw!)
             : "false /* TODO 条件规范串非法 */",
+        // S3：**回合归属类条件**（`Raw` ＝ `friendly`／`enemy`）——真实求值（既有回合归属判定面）。
+        DslCondition.TurnOwner => string.Equals(condition.Raw, "enemy", StringComparison.Ordinal)
+            ? $"{TurnRulesType}.IsOpponentTurn(self)"
+            : $"{TurnRulesType}.IsOwnerTurn(self)",
         DslCondition.AllKind =>
             condition.All is { Count: > 0 }
                 ? "(" + string.Join(" && ", condition.All.Select(ConditionExpression)) + ")"
                 : "true",
         _ => $"false /* TODO 条件占位：{EscapeComment(condition.Raw)} */",
     };
+
+    /// <summary>
+    /// **数值比较条件**的求值表达式（E1-57 ＋ S3 增量）：
+    /// <list type="bullet">
+    ///   <item>`turns=` 度量（在场回合数——S3 新增）：**内联渲染**（求值挂钩既有读取面
+    ///     <c>UnitCard.TurnsInPlay</c>——<c>EffectRuntime.EvaluateCondition</c> 不含该度量），
+    ///     如 `turns=s=self:gte:#3` → <c>((self as …UnitCard)?.TurnsInPlay ?? 0) &gt;= 3</c>。</item>
+    ///   <item>其余（`count=`／`points=`／`stat=`）：既有 <c>EffectRuntime.EvaluateCondition</c> 调用。</item>
+    /// </list>
+    /// </summary>
+    private static string RenderCompareCondition(string spec)
+    {
+        if (spec.StartsWith("turns=", StringComparison.Ordinal))
+        {
+            var parts = spec.Split(':');
+            var op = parts.Length == 3
+                ? parts[1] switch
+                {
+                    "gte" => ">=",
+                    "lte" => "<=",
+                    "gt" => ">",
+                    "lt" => "<",
+                    "eq" => "==",
+                    _ => null,
+                }
+                : null;
+            if (op is null
+                || parts[2].Length < 2
+                || parts[2][0] != '#'
+                || !int.TryParse(parts[2][1..], out var value))
+            {
+                return "false /* TODO 在场回合数条件右操作数非法 */";
+            }
+
+            return $"((self as {UnitCardType})?.TurnsInPlay ?? 0) {op} {value}";
+        }
+
+        return $"{RuntimeType}.EvaluateCondition(self, {CsStringLiteral(spec)})";
+    }
 
     /// <summary>C# 字符串字面量（csx 片段用；键/标识均为受控短串）。</summary>
     private static string CsStringLiteral(string value) =>
@@ -192,6 +235,10 @@ public sealed class EffectCompiler
     private const string TagDataType = "Orc.Game.Cards.TagData";
 
     private const string RuntimeType = "Orc.Game.Effects.EffectRuntime";
+
+    private const string UnitCardType = "Orc.Game.Cards.UnitCard";
+
+    private const string TurnRulesType = "Orc.Game.EffectParsing.TurnRules";
 
     /// <summary>
     /// 视图属性名白名单（E1-47；`payload.self`/`payload.hq` 的 `Raw`）——**只允许已知可选面**，
