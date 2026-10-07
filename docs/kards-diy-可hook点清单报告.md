@@ -258,5 +258,5 @@
 | JS 逃生舱 `OPS.script` | `Orc.Lua`（沙箱已就绪、未接入） | 逃生舱对位 |
 | 效果覆盖层 `KG_EFFECT_OVERLAY` | 无直接对位 | 数据层动态覆盖需新设计 |
 | 文本编译管线 | 无（OrC 卡牌为代码定义，无 JSON 载入） | 需新增（见报告 3 缺口） |
-| `chooser` / `KG.ask` | `TargeterManager.CreateTargeter` + `ITargeterBridge` | 语义接近，结构不同 |
+| `chooser` / `KG.ask` | `TargeterManager.RunAsync` + `ITargeterBridge`（会话 / 选择器 / 语义事件） | 语义接近，结构不同 |
 | `Net.hooks` / `fxPops` | `Orc/Output/*`（段轮询 `TakeSegments`） | 观察模型不同（推 vs 拉） |

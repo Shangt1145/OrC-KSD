@@ -251,7 +251,7 @@ _immediateSub = _engine.OnImmediateUpdate((updateType, payload) =>
 ### 4.1 输入模型：动作入口 + 异步倒置
 
 - **动作入口**：UI 调 `Match` 上的管理器方法，均为 `async Task<结果对象>`（**不抛**，失败以结果对象表达）。段由入口自动产出（§2.1）。
-- **目标选择＝异步倒置**：引擎需要玩家做选择时，会经 `ITargeterBridge` **反过来**向 UI 索取（收集候选 → Begin 交互 → 等 UI 应答）。**UI 必须实现该桥接**，否则目标选择以失败结局暴露。
+- **目标选择＝异步倒置**：引擎需要玩家做选择时，会经 `ITargeterBridge.BeginTargeting(session)` **反过来**把**会话**交给 UI；UI 逐个 `NextAsync()` 取选择器并以语义事件 `Submit`。**UI 必须实现该桥接**，否则目标选择以失败结局暴露。
 
 ### 4.2 前置门禁（何时可调）
 
@@ -312,20 +312,13 @@ _immediateSub = _engine.OnImmediateUpdate((updateType, payload) =>
 
 | 结果对象 | 状态 | 原因字段 | 交互透传 |
 |---|---|---|---|
-| `PlayResult` | `PlayResultStatus`（Success/Cancelled/Failed） | `PlayFailureReason?` | `TargetingResult? Targeting` |
-| `CommandResult` | `CommandResultStatus`（Success/Cancelled/Failed） | `CommandFailureReason?` | `TargetingResult? Targeting` |
-| `TargetingResult` | `TargetingStatus`（Success/Cancelled/Failed） | `TargetingEndReason?` | 产出 `TargetOutcome? Outcome` |
+| `PlayResult` | `PlayResultStatus`（Success/Cancelled/Failed） | `PlayFailureReason?` | `TargeterResult? Targeting` |
+| `CommandResult` | `CommandResultStatus`（Success/Cancelled/Failed） | `CommandFailureReason?` | `TargeterResult? Targeting` |
+| `TargeterResult` | `TargeterStatus`（Ok/Cancelled/Failed） | `TargeterFailureReason?` | 各步选择器产出 `SelectorResult<T>`（流程内部消费） |
 
 **约定**：判断请用**类别化枚举**（如 `PlayFailureReason.PhaseBlocked`、`CommandBlockReason.NoCandidates`），**不要**用文本匹配。
 
-**产出读法（`TargetOutcome`，仅 `TargetingResult` 成功时非 null）：**
-
-| 读面 | 用途 |
-|---|---|
-| `Single` / `List` | 扁平（无槽位/单槽位）引用产出 |
-| `GetSelection(slotName)` | 按槽位名取**引用类**产出 |
-| `GetIdentifiers(slotName)` | 按槽位名取**非引用类**（选项/名单）产出的标识 |
-| `GetSlotKind(slotName)` | 槽位种类 |
+**结果读法**：`TargeterResult` 只表达**流程成败**（`Ok`/`Cancelled`/`Failed`）——各步选择器的产出由流程内部消费/回写（不再有 `TargetOutcome` 产出截面）；选择器级结果＝`SelectorResult<TResult>`（`Ok(T)` / `Cancelled` / `Failed(reason)`）。
 
 **预览（`CommandAvailability`，纯查询）：** `IneligibleReason`（流程级）、`Move` / `Attack`（各为 `CommandActionAvailability`：`CanUse` + `BlockReason` + `Candidates`）、`AnyActionAvailable`。UI 可在拖拽前用它决定高亮/置黑。
 
@@ -341,73 +334,63 @@ foreach (var slotRef in availability.Move.Candidates) Highlight(slotRef);
 
 | 成员 | 签名 | 何时被调用 |
 |---|---|---|
-| 候选收集 | `Task<IReadOnlyList<object?>> CollectCandidatesAsync(TargetingCollectionContext context)` | 出队执行时**恰一次**（含"收集需求槽位"的请求）；提交"前端当前可交互的完整引用列表"（`Ref<Entity>`） |
-| 交互开始 | `void BeginInteraction(TargetingRequestDescription description, ITargetingResponder responder)` | Begin 请求描述（允许子集 + 槽位 + `requestId`）→ 等玩家操作 |
+| 交付会话 | `void BeginTargeting(ITargeterSession session)` | 引擎出队执行时交付会话（**同步、不要阻塞**） |
 
-**应答器**（`ITargetingResponder`，引擎提供、UI 调用）：
+**会话**（`ITargeterSession`，引擎提供、UI 使用）：
 
 | 成员 | 签名 | 说明 |
 |---|---|---|
-| 提交选择 | `bool Complete(string requestId, IReadOnlyDictionary<string, IReadOnlyList<Ref<Entity>>> selectionsBySlot)` | 引用类便捷面 |
-| 提交选择（类别化） | `bool Complete(string requestId, IReadOnlyDictionary<string, IReadOnlyList<TargetSelection>> selectionsBySlot)` | 支持混合槽位（引用元素 `TargetSelection.FromReference` / 标识元素 `FromIdentifier`） |
-| 取消 | `bool Cancel(string requestId)` | 前端主动放弃 |
+| 取下一个选择器 | `Task<ISelectorInstance?> NextAsync()` | 按队列**逐个取**；返回 `null`＝流程结束 |
+| 终局 | `TargeterResult? Result` | 流程结束后读取（`Ok`/`Cancelled`/`Failed`） |
+
+**选择器实例**（`ISelectorInstance`）：
+
+| 成员 | 签名 | 说明 |
+|---|---|---|
+| 身份 | `string Id` | 稳定标识；**同一 Id 再次出现＝重入**（非法选择后重选） |
+| 类型名 | `string SelectorName` | 选择视觉实现用（`fieldUnit`/`slot`/`cardPicker`…） |
+| 呈现 | `SelectorPresentation Presentation` | 候选、`Min`/`Max`、参数（`Parameter`/`HasParameter`）、交互模式（`Click`/`Drag`） |
+| 提交 | `bool Submit(SelectorEvent selectorEvent)` | 把手势**归一**为语义事件提交；判定与业务校验归后端 |
+
+**语义事件**：`PickEvent`（点选；可带 `References`/`Identifiers`）、`DropEvent`（拖拽落点；`Target` 为 null＝落空）、`CancelEvent`。
 
 **关键契约：**
 
-- **`requestId` 配对**：`Complete`/`Cancel` 必须回传 `description.RequestId`；不匹配＝违规（拒绝＋留痕＋请求继续等待）。
-- **`false` ＝ 拒绝（非终局）**：内容不合规（数量/成员/失效/类别不符）＝显式拒绝，请求**继续等待**，UI 可纠正后重试或 `Cancel`。
-- **终局恰好一次**：成功/取消/失败后，后续调用＝幂等忽略。
-- **排队不取消**：`TargeterManager` 是全局 FIFO 串行队列；**未 Begin 的排队请求不可取消**（`Cancel` 只在 Begin 后有效）。
-- **`TargetOutcome`**：成功后由 `TargetingResult.Outcome` 读取。
+- **逐个取用**：一次 targeter 可含多个选择器（多步流程）；UI 逐个 `NextAsync()` 取、逐个 `Submit`（不再"一次 Begin 完成全部槽位"）。
+- **判定与校验归后端**：UI 只采集/归一手势；"取消/非法"由后端选择器实例判定。
+- **空提交**：拖拽型（落空）＝取消；点选型＝`Failed(InvalidSelection)`；`min=0` 的多选允许空选＝`Ok`（空）。
+- **重试/重入**：非法选择后 targeter 内部可能**重入同一选择器**（同一 `Id`）——UI 再次 `NextAsync()` 会取到它，可提示"选择无效，请重选"。
+- **排队串行**：`TargeterManager` 是全局 FIFO 串行队列，一次只执行一个 targeter。
+- **候选由后端给出**：UI 不再提交"可交互引用列表"（候选收集已退场）。
 
 **最小 `ITargeterBridge` 实现骨架（可照抄）：**
 
 ```csharp
-using Orc.Core;
 using Orc.Game.Targeting;
 
 public sealed class GodotTargeterBridge : ITargeterBridge
 {
-    private readonly Func<TargetingRequestDescription, ITargetingResponder, Task> _present;
+    // 交付会话：不要阻塞；把会话挂到 UI 交互循环
+    public void BeginTargeting(ITargeterSession session) => _ = DriveAsync(session);
 
-    public GodotTargeterBridge(Func<TargetingRequestDescription, ITargetingResponder, Task> present)
-        => _present = present;
-
-    // ① 候选收集：返回"前端当前可交互的完整引用列表"（引擎侧会做粗筛/细筛）
-    public Task<IReadOnlyList<object?>> CollectCandidatesAsync(TargetingCollectionContext context)
+    private async Task DriveAsync(ITargeterSession session)
     {
-        // 约定：提交干净列表（不含 null）；元素为 Ref<Entity>
-        IReadOnlyList<object?> candidates = MyUi.CollectInteractableRefs();
-        return Task.FromResult(candidates);
-    }
+        while (await session.NextAsync() is { } selector)
+        {
+            var p = selector.Presentation;            // 类型名 / 候选 / 数量 / 参数
+            var picked = await MyUi.PresentAsync(p);  // 呈现 → 等玩家手势
 
-    // ② 交互开始：把请求描述交给 UI 渲染，并在玩家手势完成时经 responder 应答
-    public void BeginInteraction(TargetingRequestDescription description, ITargetingResponder responder)
-    {
-        // 不要在这里 await；把应答回调挂到 UI 手势上
-        _ = _present(description, responder);
+            // 归一为语义事件后提交（示例＝点选一个引用）
+            selector.Submit(new PickEvent(references: new[] { picked }));
+        }
+
+        var result = session.Result;                  // Ok / Cancelled / Failed
+        MyUi.OnTargetingEnded(result);
     }
 }
-
-// UI 侧（示意）：玩家点选完成 / 取消
-static void OnPlayerConfirmed(TargetingRequestDescription d, ITargetingResponder r, TargetSlot targetSlot, Ref<Entity> picked)
-{
-    var selections = new Dictionary<string, IReadOnlyList<TargetSelection>>
-    {
-        [targetSlot.Name] = new[] { TargetSelection.FromReference(picked) },
-    };
-
-    if (!r.Complete(d.RequestId, selections))
-    {
-        // false ＝ 内容不合规被拒绝（请求仍在等待）——提示玩家纠正，或：
-        // r.Cancel(d.RequestId);
-    }
-}
-
-static void OnPlayerCancelled(TargetingRequestDescription d, ITargetingResponder r) => r.Cancel(d.RequestId);
 ```
 
-> 说明：`TargetingRequestDescription` 携带 `RequestId`、`AllowedTargets`（既有引用类的允许子集）与 `Slots`（槽位描述：`Name`/`Kind`/`Min`/`Max`/`Presentation`，以及按类别的 `AllowedReferences`/`Options`/`CardListings`）。**未返回项与淘汰项的"置黑"由 UI 负责**，引擎不产出置黑标记。
+> 说明：`SelectorPresentation` 携带 `SelectorName`（视觉类型）、`Candidates`（**后端给出的候选**）、`Min`/`Max`、`Parameter`/`HasParameter`、`Identifiers`（非引用类：选项/卡牌名单）。**未返回项与淘汰项的"置黑"由 UI 负责**，引擎不产出置黑标记。
 
 ### 4.6 Match → 各 Manager 速查表
 
@@ -428,8 +411,8 @@ static void OnPlayerCancelled(TargetingRequestDescription d, ITargetingResponder
 
 ### 4.7 约束与坑
 
-- **桥接必须注入**：`targeterBridge` 缺省＝null 时，一旦引擎需要选择就以 `TargetingEndReason.BridgeNotAssembled` **失败结局**暴露（不抛）。
-- **收集时机**：`CollectCandidatesAsync` 在**出队执行时**调用（保证候选新鲜度），不要在入队前预先收集。
+- **桥接必须注入**：`targeterBridge` 缺省＝null 时，一旦引擎需要选择就以 `TargeterFailureReason.BridgeNotAssembled` **失败结局**暴露（不抛）。
+- **不要阻塞交付**：`BeginTargeting` 内不要 await；把会话挂到 UI 交互循环（候选由后端随选择器给出，无需预收集）。
 - **不要绕过结果对象**：入口返回结果是唯一"成功/失败/取消"判据；不要靠捕获异常。
 - **指挥只有一次拖拽入口**：`BeginCommandAsync` 是公开的唯一动作入口（内部按拖拽分派移动/攻击）；若要"分按钮"，用 `BeginMoveAsync` / `BeginAttackAsync`。
 - **纯查询无副作用**：`GetCommandAvailability` 可高频调用（拖拽高亮），不产生段、不发更新、不启动交互。
@@ -446,8 +429,8 @@ static void OnPlayerCancelled(TargetingRequestDescription d, ITargetingResponder
 2. `await match.Initialize(ct)` → 初始化作为一次大动作产出一段。
 3. UI 帧循环 `engine.TakeSegments()` → 播放初始化段（`card.load` / `deck.shuffled` / 回合五连）。
 4. 玩家点击手牌 → UI 调 `await match.PlayManager.BeginUnitPrePlayAsync(card, ct)`。
-5. 引擎需要选空槽 → `TargeterManager` → 桥接 `CollectCandidatesAsync(ctx)` 取候选 → `BeginInteraction(description, responder)` 交给 UI。
-6. 玩家点选/取消 → UI 调 `responder.Complete(description.RequestId, selectionsBySlot)` 或 `Cancel(...)`。
+5. 引擎需要选空槽 → `TargeterManager.RunAsync(flow)` → 桥接 `BeginTargeting(session)` 交付会话；UI `await session.NextAsync()` 取选择器。
+6. 玩家点选/取消 → UI 调 `selector.Submit(PickEvent / DropEvent / CancelEvent)`；流程结束读 `session.Result`。
 7. 引擎继续：结算、`Emit(card.played / unit.deployed ...)`、最外层动作作用域结束 → **封段入队**；`BeginUnitPrePlayAsync` 返回 `PlayResult`。
 8. UI 帧循环再次 `TakeSegments()` → 播放出牌段。
 
@@ -468,14 +451,13 @@ sequenceDiagram
     E-->>UI: EventSegment
 
     UI->>M: await PlayManager.BeginUnitPrePlayAsync(card, ct)
-    M->>TM: Targeting()（需要选槽位）
-    TM->>B: CollectCandidatesAsync(ctx)
-    B-->>TM: 候选引用列表
-    TM->>B: BeginInteraction(description, responder)
-    B->>UI: 渲染请求（允许子集 / 槽位 / requestId）
-    UI->>B: 玩家点选 / 取消
-    B->>TM: responder.Complete(requestId, selections) / Cancel(requestId)
-    TM-->>M: TargetingResult.Success(outcome)
+    M->>TM: RunAsync(flow)（需要选槽位）
+    TM->>B: BeginTargeting(session)
+    B->>TM: await session.NextAsync()（逐个取选择器）
+    B->>UI: 渲染（选择器类型 / 候选 / 数量）
+    UI->>B: 玩家点选 / 拖拽 / 取消
+    B->>TM: selector.Submit(语义事件)
+    TM-->>M: TargeterResult（Ok/Cancelled/Failed）
     M->>E: Emit(card.played / unit.deployed) → 作用域结束封段
     M-->>UI: PlayResult（成功/取消/失败）
     UI->>E: TakeSegments()
@@ -492,8 +474,8 @@ sequenceDiagram
 - [ ] 跑一次动作 → 对应段内能取到**期望信号**（如 `card.played`），即时口也收到。
 - [ ] **无变化零发射**：无变化动作不产段/不发信号（如空动作、被门禁拒绝）。
 - [ ] 报错能在段内读到（`Level == Error`）。
-- [ ] `ITargeterBridge` 已注入；`CollectCandidatesAsync` 在出队时被调用；`Complete` 回传正确的 `requestId`。
-- [ ] `Complete` 返回 `false` 时按"拒绝、可重试或 `Cancel`"处理，而不是当作终局。
+- [ ] `ITargeterBridge` 已注入；`BeginTargeting` 内取会话并逐个 `NextAsync()`；`Submit` 提交语义事件。
+- [ ] 同一选择器 `Id` 再次出现＝重入（非法选择后重选）——按"再选一次"处理，而不是当作新步骤。
 - [ ] 动作前检查 `Match.Phase`；调 `EndTurn` / `ShuffleDeckAsync` 前确认相位（它们非法相位会抛错）。
 - [ ] 退出时 `Dispose()` 即时监听订阅。
 

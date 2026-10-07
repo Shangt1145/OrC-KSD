@@ -84,8 +84,8 @@
 
 | 入口 | 文件 — 成员 | 行号 | 语义 |
 |---|---|---|---|
-| 发起 | `Targeting/TargeterManager.cs` — `CreateTargeter(filter,slots,context)` | 47 | 建 targeter |
-| 发起 | `Targeting/Targeter.cs` — `Targeting()` | 74 | 异步发起（等待玩家应答） |
+| 发起 | `Targeting/TargeterManager.cs` — `RunAsync(flow,param)` | — | 发起 targeter（流程函数，FIFO 排队） |
+| 发起 | `Targeting/ITargeterFlow.cs` — `Step(selector,param)` | — | 流程内产出选择器并等待应答 |
 | **应答** | `Targeting/TargetingInteraction.cs` — `Complete(requestId,refsBySlot)` / `Complete(requestId,selectionsBySlot)` / `Cancel(requestId)` | 73 / 101 / 116 | **确认/取消手势由桥接驱动** |
 | 桥接契约 | `Targeting/ITargeterBridge.cs` | — | 前端实现此接口 |
 
@@ -236,7 +236,7 @@
 | 移动（`KG.move` / `mpMove`） | `CommandManager.BeginCommandAsync` → `UnitMoveTrigger` | 已有（无独立 API） |
 | 攻击（`KG.attack` / `mpAttack`） | `CommandManager.BeginCommandAsync` → `UnitAttackTrigger`；`AttackFlow`/`DamageFlow` | 已有 |
 | 结束回合（`#endTurnBtn` / `KG.endTurn`） | `Match.EndTurn` / `TurnManager.EndTurn` | 已有 |
-| 选目标 / 抉择 / 开发（`uiChooser` / `KG.ask` / `renderPrompt`） | `TargeterManager.CreateTargeter` + `TargetingInteraction.Complete/Cancel`（`ITargeterBridge`） | 已有（结构不同） |
+| 选目标 / 抉择 / 开发（`uiChooser` / `KG.ask` / `renderPrompt`） | `TargeterManager.RunAsync` + `ITargeterBridge.BeginTargeting`（会话逐个取选择器 + 语义事件提交） | 已有（结构不同） |
 | 重调度 mulligan（`mulliganReplace`/`mulliganDone`） | **缺** | 需新增 |
 | 拖拽放置（`applyDrop`） | `BeginUnitPrePlayAsync` 的 targeter 选空槽（117-118） | 已有（形态不同） |
 | 认输 / 重开 | **缺** | 需新增 |

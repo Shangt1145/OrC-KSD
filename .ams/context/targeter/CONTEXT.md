@@ -120,3 +120,47 @@ Targeter 框架不含玩家/归属概念——槽位不携带归属标识；"己
 
 **判定器包装（Judicator Packaging）**：
 选择规则的承载形态——判定器内部持有该规则、调用方经判定器委托调用；moding 替换判定器即规则整体更换（全局生效）；不改变 Targeter 框架本体与交互流程。（2026-10-04 判定器机制·J3）
+
+## 重设计术语（2026-10-07：桥接重设计）
+
+**选择器（Selector）**：
+后端库内定义的**交互单元类型**（封闭族）：类型名（前端据以选视觉）＋交互模式（`Click`/`Drag`）＋参数模型；**定义**（模板 `Selector<TResult>`，进程内共用、无运行期身份）与**实例**（`SelectorInstance<TResult>`：身份、绑定参数、承载结果）分离。
+_Avoid_: 槽位（旧称）、选择器槽位
+
+**选择器结果（SelectorResult）**：
+三段式 `Ok(TResult)` / `Cancelled` / `Failed(reason)`；取消为一等状态；失败原因封闭（`InvalidSelection` / `RetryLimitExceeded`，预留 `Fault`）。
+_Avoid_: bool 返回值（旧）
+
+**语义事件（SelectorEvent）**：
+前端把原始手势**归一**后提交的事件：`PickEvent`（点选；可带引用/标识）／`DropEvent`（拖拽落点；null＝落空）／`CancelEvent`；判定与业务校验归后端选择器实例。
+_Avoid_: 原始手势数据、输入指令
+
+**会话（TargeterSession）**：
+一次 targeter 交互的前端视角承载：`NextAsync()` **逐个取**选择器（null＝流程结束）＋ `Result` 读终局。
+_Avoid_: 请求描述 + 应答器（旧两件套）
+
+**流程宿主（ITargeterFlow）**：
+组装方在流程内声明选择点：`Step(选择器, 参数)` 产出选择器并等待应答；`Retry()` 重入当前选择器（同一实例、同一 Id，有上限 `MaxRetry`）。
+_Avoid_: 筛选器/槽位声明（旧）
+
+**流程函数（flow）**：
+targeter 的组装形态＝`async Task<TargeterResult> Flow(ITargeterFlow flow, TParam param)`；静态函数即"**targeter 模板**"；组装方＝效果 handler 或引擎流程（`TargeterManager.RunAsync`）。
+_Avoid_: Targeter 请求对象（已退场）
+
+**targeter 结果（TargeterResult）**：
+三段式 `Ok` / `Cancelled` / `Failed(reason)`；**只表达流程成败**（各步产出由流程内部消费/回写）。
+_Avoid_: 产出截面（`TargetOutcome`，已退场）
+
+**重入（Re-entry）**：
+非法选择后 targeter 内部把**同一选择器实例**（同一 Id）再次交付前端；前端据 Id 识别并提示重选。
+_Avoid_: "拒绝并继续等待"（旧语义，已退场）
+
+**候选来源（后端给出）**：
+候选由组装方在 `Step` 参数中给出（允许集 + 数量 + 域判定可选）；**不再要求前端提交可交互引用列表**（候选收集通道已退场）。
+_Avoid_: 前端收集、两级筛选链（已退场）
+
+### 已退场（旧契约，仅供迁移参照）
+- 选择槽位族（`TargetSlot` / `SingleSelectSlot` / `MultiSelectSlot` / `HandSelectSlot` / `CardPickerSlot` / `MulliganSelectSlot` / `OptionSelectSlot`）
+- `TargetingRequestDescription` / `TargetSlotDescription` / `TargetingCollectionContext` / `ITargetingResponder`
+- `TargetFilter`（粗筛/细筛）、`TargetOutcome`、`Targeter`、`CollectCandidatesAsync`、`BeginInteraction`、`TargetingResult`/`TargetingStatus`/`TargetingEndReason`
+- "一次 Begin 完成全部槽位"、`requestId` 配对
