@@ -433,7 +433,7 @@ public sealed class Match
             player.ConfigureResourceManager(_resourceManager);
         }
 
-        // 2A 受控变更：战场构造期含 HQ 占位（各支援线槽 0＝对应玩家），创建顺序随之为玩家先、战场后。
+        // 2A 受控变更：战场构造期含 HQ 占位（各支援线槽 2＝对应玩家），创建顺序随之为玩家先、战场后。
         _battlefieldManager = new BattlefieldManager(_playerManager.Players[0], _playerManager.Players[1]);
 
         // S10「G12补」加性：玩家构筑配置注入（主国/盟国读取面）——「调用方提供数据、对局负责装配」；

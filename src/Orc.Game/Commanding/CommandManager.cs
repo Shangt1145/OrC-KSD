@@ -687,7 +687,9 @@ public sealed class CommandManager
 
         // HQ（W3-3 实体化）：目标以 HQ 实体引用承载——候选产出 hq.Ref（不留双承载：槽位引用不再作为
         // HQ 目标产出；槽位关系仅用于布局语义判定〔守护/轰炸机拦截/范围矩阵——经 HQ 占位槽〕）。
-        if (enemyLine[0].Occupant is Hq hq && _combatTargetLegal(attacker, hq.Ref))
+        // HQ 的槽位以棋盘为准查询（W3-4：HQ 居中占槽 2，不再假定 0）。
+        var hqIndex = Battlefield.IndexOfHq(enemyLine);
+        if (hqIndex >= 0 && enemyLine[hqIndex].Occupant is Hq hq && _combatTargetLegal(attacker, hq.Ref))
         {
             result.Add(hq.Ref);
         }
@@ -776,14 +778,16 @@ public sealed class CommandManager
 
     private void MaintainHqGuard(BattleLine supportLine)
     {
-        if (supportLine[0].Occupant is not Hq hq)
+        var index = Battlefield.IndexOfHq(supportLine);
+        if (index < 0 || supportLine[index].Occupant is not Hq hq)
         {
             return;
         }
 
-        if (IsGuardianAt(supportLine, 1, hq.Owner))
+        // W3-4：HQ 居中占槽（HqSlotIndex＝2），两侧都是可放单位的邻位——任一邻位有己方守护者即计入保护。
+        if (IsGuardianAt(supportLine, index + 1, hq.Owner) || IsGuardianAt(supportLine, index - 1, hq.Owner))
         {
-            _guardedHqs.Add(hq); // HQ 计入保护（守护者在槽 1 → HQ 获被守护）
+            _guardedHqs.Add(hq); // HQ 计入保护（守护者在相邻槽 → HQ 获被守护）
         }
     }
 

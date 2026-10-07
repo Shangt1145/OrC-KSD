@@ -1,5 +1,6 @@
 using Orc.Core;
 using Orc.Game;
+using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Commanding;
 using Orc.Game.Effects;
@@ -296,7 +297,7 @@ public class CommandCombatTests
         Assert.Equal(30, mega.GetData<UnitStateData>().Defense);
         Assert.Equal(MatchState.Ended, match.State);
         Assert.Same(playerA, match.Winner);
-        Assert.Same(enemyHq, match.Battlefield.PlayerBSupportLine[0].Occupant); // HQ 占位不变（占位者＝HQ 实体）
+        Assert.Same(enemyHq, match.Battlefield.PlayerBSupportLine[Battlefield.HqSlotIndex].Occupant); // HQ 占位不变（占位者＝HQ 实体）
         Assert.Equal(0, playerA.Points); // 当次收尾照常：扣费恰一次
         Assert.False(mega.GetData<CommandData>().CanAttack); // 清位照常
         Assert.False(mega.GetData<CommandData>().CanMove);

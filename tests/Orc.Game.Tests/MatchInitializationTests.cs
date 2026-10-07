@@ -2,6 +2,7 @@ using Orc.Core;
 using Orc.Game.Cards;
 using Orc.Game.Players;
 using Xunit;
+using Orc.Game.Board;
 
 namespace Orc.Game.Tests;
 
@@ -35,27 +36,27 @@ public class MatchInitializationTests
         Assert.Equal(0, match.Players[0].Index);
         Assert.Equal(1, match.Players[1].Index);
 
-        // 战场三线就绪（2A 槽位化受控变更：支援线各含 HQ 占位〔槽 0〕＋其余为空；前线全空）
+        // 战场三线就绪（2A 槽位化受控变更：支援线各含 HQ 占位〔居中槽 Battlefield.HqSlotIndex〕＋其余为空；前线全空）
         var lineA = match.Battlefield.PlayerASupportLine;
         var frontLine = match.Battlefield.FrontLine;
         var lineB = match.Battlefield.PlayerBSupportLine;
-        Assert.Same(match.Players[0].Hq, lineA[0].Occupant); // HQ 占位＝总部实体（W3-3：Player 不再作为占位者）
-        Assert.Same(match.Players[1].Hq, lineB[0].Occupant);
-        for (var i = 1; i < lineA.Count; i++)
+        Assert.Same(match.Players[0].Hq, lineA[Battlefield.HqSlotIndex].Occupant); // HQ 占位＝总部实体（W3-3：Player 不再作为占位者）
+        Assert.Same(match.Players[1].Hq, lineB[Battlefield.HqSlotIndex].Occupant);
+        for (var i = 0; i < lineA.Count; i++)
         {
-            Assert.True(lineA[i].IsEmpty); // 支援线余格初始为空
+            if (i != Battlefield.HqSlotIndex) Assert.True(lineA[i].IsEmpty); // 支援线除 HQ 占位槽外初始为空
         }
 
-        for (var i = 1; i < lineB.Count; i++)
+        for (var i = 0; i < lineB.Count; i++)
         {
-            Assert.True(lineB[i].IsEmpty);
+            if (i != Battlefield.HqSlotIndex) Assert.True(lineB[i].IsEmpty);
         }
 
         Assert.All(frontLine, slot => Assert.True(slot.IsEmpty)); // 前线 0 占位
-        // 容量 4/5/4 可读
-        Assert.Equal(4, match.Battlefield.PlayerASupportLineCapacity);
+        // 容量 5/5/5 可读
+        Assert.Equal(5, match.Battlefield.PlayerASupportLineCapacity);
         Assert.Equal(5, match.Battlefield.FrontLineCapacity);
-        Assert.Equal(4, match.Battlefield.PlayerBSupportLineCapacity);
+        Assert.Equal(5, match.Battlefield.PlayerBSupportLineCapacity);
         // 战场按玩家查询支援线（固定归属）
         Assert.Same(match.Battlefield.PlayerASupportLine, match.Battlefield.GetSupportLine(0));
         Assert.Same(match.Battlefield.PlayerBSupportLine, match.Battlefield.GetSupportLine(1));

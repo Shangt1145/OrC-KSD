@@ -10,7 +10,7 @@ namespace Orc.Game.Players;
 /// Entity 身份（<see cref="Orc.Core.Entity.Ref"/> 目标承载）＋组件容器（<see cref="Orc.Cards.Card"/> 薄容器面——
 /// AddData/GetData）＋词条/效果装载面（AddEffect/Effects/MountPassiveEffects）；不入死亡/销毁链
 /// （不发 card.died / card.destroyed、不置已毁、不清槽位、归零不注销效果/修饰；「两条链均不接」）。
-/// 归属：随 Player 创建并互持（<see cref="Player.Hq"/>——「未绑定」在结构上不可达）；占位（支援线槽 0）
+/// 归属：随 Player 创建并互持（<see cref="Player.Hq"/>——「未绑定」在结构上不可达）；占位（支援线槽 2，居中）
 /// 由对局/战场装配完成（布局语义——邻位/守护/轰炸机拦截基准；槽位关系不出现在目标承载面）。
 /// 数值模型（单一当前值；「防御力」＝血量域）：本体＝<see cref="HqStateData.Health"/>（受控写入），
 /// 有效值＝修饰机制链输出（缓存；「获得 +X 防御力」＝挂 +X 修饰）；数值改变一律走「通用数据改变管线」：

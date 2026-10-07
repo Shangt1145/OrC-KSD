@@ -6,7 +6,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2A 验收锚点⑥（战线槽位模型）：三线槽位化（容量 4/5/4）；HQ 初始占位（支援线槽 0、占容量格；前线不占）；
+/// 2A 验收锚点⑥（战线槽位模型）：三线槽位化（容量 5/5/5）；HQ 初始占位（支援线居中槽 Battlefield.HqSlotIndex、占容量格；前线不占）；
 /// 邻位动态计算（含 HQ 被占位、重叠去重、索引升序稳定、端点越界侧跳过）；槽位读面（索引/占用者/是否空；类型可判）；
 /// 越界明确错误；「整线空槽枚举」经槽位序列读面派生（不单列）。
 /// </summary>
@@ -95,21 +95,21 @@ public class SlotModelTests
         var frontLine = match.Battlefield.FrontLine;
         var lineB = match.Battlefield.PlayerBSupportLine;
 
-        // 三线槽位化：容量 4/5/4
-        Assert.Equal(4, lineA.Capacity);
+        // 三线槽位化：容量 5/5/5
+        Assert.Equal(5, lineA.Capacity);
         Assert.Equal(5, frontLine.Capacity);
-        Assert.Equal(4, lineB.Capacity);
+        Assert.Equal(5, lineB.Capacity);
 
-        // HQ 占位：支援线槽 0＝对应玩家的总部实体（占容量格——恰 1 格被占、余 3 格空）；前线 0 占位
-        Assert.Same(match.Players[0].Hq, lineA[0].Occupant);
-        Assert.Same(match.Players[1].Hq, lineB[0].Occupant);
+        // HQ 占位：支援线居中槽＝对应玩家的总部实体（占容量格——恰 1 格被占、余 4 格空）；前线 0 占位
+        Assert.Same(match.Players[0].Hq, lineA[Battlefield.HqSlotIndex].Occupant);
+        Assert.Same(match.Players[1].Hq, lineB[Battlefield.HqSlotIndex].Occupant);
         Assert.Single(lineA, slot => !slot.IsEmpty);
         Assert.Single(lineB, slot => !slot.IsEmpty);
         Assert.All(frontLine, slot => Assert.True(slot.IsEmpty));
 
-        // 邻位候选（含 HQ 被占位）：支援线＝[1]；前线（无被占）＝[]
-        Assert.Equal(new[] { 1 }, lineA.GetAdjacentEmptySlots().Select(s => s.Index));
-        Assert.Equal(new[] { 1 }, lineB.GetAdjacentEmptySlots().Select(s => s.Index));
+        // 邻位候选（含 HQ 被占位）：HQ 居中 → 两侧邻位都候选＝[1,3]；前线（无被占）＝[]
+        Assert.Equal(new[] { 1, 3 }, lineA.GetAdjacentEmptySlots().Select(s => s.Index));
+        Assert.Equal(new[] { 1, 3 }, lineB.GetAdjacentEmptySlots().Select(s => s.Index));
         Assert.Empty(frontLine.GetAdjacentEmptySlots());
     }
 

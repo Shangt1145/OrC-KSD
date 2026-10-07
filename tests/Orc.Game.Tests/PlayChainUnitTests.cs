@@ -1,5 +1,6 @@
 using Orc.Core;
 using Orc.Game;
+using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Targeting;
 using Orc.Game.Triggers;
@@ -46,9 +47,9 @@ public class PlayChainUnitTests
         var player = match.Players[0];
         var unit = await PlayChainTestKit.InstantiateLoadedAsync<UnitCard>(match, player); // 花费 1（点数足够）
         var line = match.Battlefield.PlayerASupportLine;
-        for (var i = 1; i < line.Count; i++)
+        for (var i = 0; i < line.Count; i++)
         {
-            line[i].Place(new object()); // 占满己方支援线空槽 → 邻位候选为空
+            if (i != Battlefield.HqSlotIndex) line[i].Place(new object()); // 占满己方支援线可部署空槽（跳过 HQ 占位槽）→ 邻位候选为空
         }
 
         using var recorder = new UpdateRecorder(match.Engine);

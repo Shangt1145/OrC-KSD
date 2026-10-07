@@ -158,9 +158,24 @@ internal static class CommandTestKit
         return unit;
     }
 
-    /// <summary>准备单位到我方支援线指定槽（含 HQ 槽 0——勿用；槽 1..3）。</summary>
+    /// <summary>
+    /// 准备单位到我方支援线的第 <paramref name="index"/> 个**可部署槽**（0 起、升序、自动跳过 HQ 占位槽）。
+    /// 不按"线路第几格"取位：HQ 的占位槽由棋盘决定（<see cref="Battlefield.HqSlotIndex"/>，居中），
+    /// 按绝对下标取位会在 HQ 挪动后撞上占位槽（TargetSlotOccupied）；按可部署序取位则与 HQ 位置无关。
+    /// 注意 HQ 两侧都是邻位，因此 index 1 仍是紧邻 HQ 的那一格。
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">可部署槽不足 index＋1 个。</exception>
     public static Task<UnitCard> PrepareOnSupportAsync(Match match, Player player, string id, int index)
-        => PrepareUnitAsync(match, player, id, match.Battlefield.GetSupportLine(player)[index]);
+    {
+        var line = match.Battlefield.GetSupportLine(player);
+        var deployable = Enumerable.Range(0, line.Count).Where(i => line[i].IsEmpty).ToArray();
+        if (index < 0 || index >= deployable.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, "可部署支援槽不足。");
+        }
+
+        return PrepareUnitAsync(match, player, id, line[deployable[index]]);
+    }
 
     /// <summary>准备单位到前线指定槽（归属＝player——前线共享）。</summary>
     public static Task<UnitCard> PrepareOnFrontAsync(Match match, Player player, string id, int index)

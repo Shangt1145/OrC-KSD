@@ -9,7 +9,7 @@ namespace Orc.Game.Managers;
 /// </summary>
 public sealed class BattlefieldManager
 {
-    /// <summary>创建战场管理器（初始化动作：创建三条战线＋HQ 初始占位——各支援线槽 0＝对应玩家的总部实体）。</summary>
+    /// <summary>创建战场管理器（初始化动作：创建三条战线＋HQ 初始占位——各支援线槽 2（居中）＝对应玩家的总部实体）。</summary>
     /// <exception cref="ArgumentNullException">playerA / playerB 为 null。</exception>
     public BattlefieldManager(Player playerA, Player playerB)
     {
