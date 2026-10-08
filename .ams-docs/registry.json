@@ -1,7 +1,7 @@
 [
   {
     "agentId": "\u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B",
-    "title": "\u539F\u578B\u5B8C\u6210\u603B\u7ED3\u62A5\u544A\uFF08\u7528\u6237\u79BB\u7EBF\u671F\u95F4\u81EA\u4E3B\u63A8\u8FDB\u6210\u679C\uFF09",
+    "title": "\u9700\u6C42 \u2014 \u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B",
     "docPath": ".ams-docs\\2de7063f-15d0-4a4d-b1db-5c16c71bf632\\\u89E6\u53D1\u5668\u5F15\u64CE\u539F\u578B\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "2de7063f-15d0-4a4d-b1db-5c16c71bf632"
   },
@@ -361,7 +361,7 @@
   },
   {
     "agentId": "\u5224\u5B9A\u5668\u673A\u5236",
-    "title": "\u5DE5\u4F5C\u8BB0\u5F55 \u2014 \u5224\u5B9A\u5668\u673A\u5236\uFF08\u529F\u80FD\u9762\uFF09",
+    "title": "\u6536\u7F16\uFF08A\u002BB\uFF09\u2014 \u57FA\u7EBF\u8C03\u7814\u62A5\u544A\uFF08\u73B0\u72B6\u4E0E\u5207\u5272\u5EFA\u8BAE\uFF09",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\\u5224\u5B9A\u5668\u673A\u5236\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -379,13 +379,13 @@
   },
   {
     "agentId": "c46716ca-2f4e-4d34-901e-c1827701decc",
-    "title": "C2 \u5F00\u53D1/\u53D1\u73B0\u5B8C\u6574\u94FE \u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "title": "C2 \u5F00\u53D1/\u53D1\u73B0\u5B8C\u6574\u94FE \u2014 \u5B9E\u73B0\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\c46716ca-2f4e-4d34-901e-c1827701decc\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
   {
     "agentId": "082ac32b-a0ec-4a47-8226-8ac84c4acd77",
-    "title": "B1\u2463 \u8865\u9A8C\uFF08\u968F\u673A\u8BCD\u6761\u5B8C\u6574\u9A8C\u8BC1\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "title": "B1\u2463 \u8865\u9A8C\uFF08\u968F\u673A\u8BCD\u6761\u5B8C\u6574\u9A8C\u8BC1\uFF09\u2014 \u5B9E\u73B0\u8BB0\u5F55",
     "docPath": ".ams-docs\\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\\082ac32b-a0ec-4a47-8226-8ac84c4acd77\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "b18ac18d-c36b-4b3c-8d22-1b7376195f2a"
   },
@@ -463,7 +463,7 @@
   },
   {
     "agentId": "\u8001\u5175\u4E0E\u9690\u853D\u673A\u5236",
-    "title": "Implementation \u2014 \u8001\u5175\u4E0E\u9690\u853D\uFF08\u6A21\u677F\u6548\u679C\u8865\u5168\uFF09",
+    "title": "Requirements \u2014 \u8001\u5175\u4E0E\u9690\u853D\uFF08\u6A21\u677F\u6548\u679C\u8865\u5168\uFF09",
     "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\\u8001\u5175\u4E0E\u9690\u853D\u673A\u5236\\\u9700\u6C42-grill\u8BA1\u5212.md",
     "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
   },
@@ -523,7 +523,7 @@
   },
   {
     "agentId": "_work",
-    "title": "\u6279 0 \u6D4B\u8BD5\u00B7\u968F\u6539\u9884\u6848\uFF08Targeter S7 \u6536\u655B\u540E\u5957\u7528\uFF09",
+    "title": "\u6548\u679C\u89E3\u6790\u5668\u00B7\u672C\u673A\u5236\u6837\u672C\u62A5\u544A\uFF08\u8001\u5175\uFF0F\u9690\u853D\uFF09",
     "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\6b206377-14bd-4a8c-b9cc-58c4d9db06d7\\_work\\\u968F\u6539\u9884\u6848.md",
     "parentAgentId": "6b206377-14bd-4a8c-b9cc-58c4d9db06d7"
   },
@@ -538,5 +538,173 @@
     "title": "\u8BCD\u6761\u6548\u679C\u5316\u00B7\u6279 2\uFF08\u4F0F\u51FB/\u91CD\u7532/\u514D\u75AB\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
     "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\115fcea7-292a-49c8-ab81-bd04fe238622\\\u9700\u6C42\u6587\u6863.md",
     "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "d79d25ab-0b7a-4453-a90c-49af65aaddec",
+    "title": "\u95EA\u51FB\u6548\u679C\u5316\u8FC1\u79FB \u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\d79d25ab-0b7a-4453-a90c-49af65aaddec\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "ff257e58-a71f-433e-a900-36a014d0757d",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\ff257e58-a71f-433e-a900-36a014d0757d\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "bfeeb8b1-bd16-49d9-94b6-18be1bab5da0",
+    "title": "\u652F\u63F4\u7EBF HQ \u5C45\u4E2D\u00B7\u6D4B\u8BD5\u9002\u914D\u95ED\u73AF \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\bfeeb8b1-bd16-49d9-94b6-18be1bab5da0\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "37541365-aea7-400d-bde9-50143059344f",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\37541365-aea7-400d-bde9-50143059344f\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "9e44bf64-e4f0-4903-b5b7-309d1677fa80",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\9e44bf64-e4f0-4903-b5b7-309d1677fa80\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "634a65f2-b704-4aa2-ae80-9d9ceda6654f",
+    "title": "\u8BCD\u6761\u6548\u679C\u5316\u00B7\u5B88\u62A4\uFF08guard\uFF09\u8BCD\u6761\u5316 \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\634a65f2-b704-4aa2-ae80-9d9ceda6654f\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "69d7b956-8458-4679-9cea-315ae11e3a70",
+    "title": "\u8BCD\u6761\u6548\u679C\u5316\u00B7\u51B2\u51FB\uFF08shock\uFF09\u8BCD\u6761\u5316 \u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\69d7b956-8458-4679-9cea-315ae11e3a70\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "9dffb3d8-9370-4fad-8cd2-41b2b9804289",
+    "title": "\u5B9E\u73B0\u8BB0\u5F55 \u2014 \u89E3\u6790\u5C42\u8BCD\u6761\u884C\u8054\u52A8\uFF08\u8BCD\u6761\u6548\u679C\u5316\u00B7\u6279 4\u00B7\u5E8F\u5217\u2462\uFF09",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\9dffb3d8-9370-4fad-8cd2-41b2b9804289\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "a519ec74-57f2-45c9-acaa-6b0d21fbd8ec",
+    "title": "\u8BCD\u6761\u6548\u679C\u5316\u00B7\u6279 4 \u5E8F\u5217\u2463\uFF08\u6570\u636E\u5316 MVS\u00B7\u8DEF\u7EBF A\uFF09\u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\a519ec74-57f2-45c9-acaa-6b0d21fbd8ec\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "6c2209d5-387f-4a9c-b967-b83cf49733b1",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\6c2209d5-387f-4a9c-b967-b83cf49733b1\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "831a6df8-b892-4398-8527-69f85152e6b8",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\831a6df8-b892-4398-8527-69f85152e6b8\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "a286785c-cb27-4d42-b87d-8846a2b0bcf0",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\a286785c-cb27-4d42-b87d-8846a2b0bcf0\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "dcc3d74c-481c-497e-92ac-9381b3ddc70f",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\dcc3d74c-481c-497e-92ac-9381b3ddc70f\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "\u5DE5\u5177\u94FE\u8C03\u7814",
+    "title": "\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE\u00B7\u73B0\u72B6\u8C03\u7814",
+    "docPath": ".ams-docs\\890b145c-1a6c-4a06-b05c-9285932d81dc\\\u5DE5\u5177\u94FE\u8C03\u7814\\\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE\u00B7\u73B0\u72B6\u8C03\u7814.md",
+    "parentAgentId": "890b145c-1a6c-4a06-b05c-9285932d81dc"
+  },
+  {
+    "agentId": "3ce24db6-f819-4567-99d8-9e88d1109bcc",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\a67adcb9-a3e2-473b-9ef0-359a8be69026\\3ce24db6-f819-4567-99d8-9e88d1109bcc\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "a67adcb9-a3e2-473b-9ef0-359a8be69026"
+  },
+  {
+    "agentId": "a67adcb9-a3e2-473b-9ef0-359a8be69026",
+    "title": "\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE\uFF08\u529F\u80FD\u9762\uFF09",
+    "docPath": ".ams-docs\\a67adcb9-a3e2-473b-9ef0-359a8be69026\\\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE.md",
+    "parentAgentId": null
+  },
+  {
+    "agentId": "292e9c74-0f17-45dc-8a76-f7bbebe3d24a",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\292e9c74-0f17-45dc-8a76-f7bbebe3d24a\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "315072bb-6e9d-4027-aa2a-bd6850c8ddca",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\315072bb-6e9d-4027-aa2a-bd6850c8ddca\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0",
+    "title": "\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE\uFF08\u529F\u80FD\u9762\u00B7\u63A5\u7BA1\u4F1A\u8BDD\uFF09",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE.md",
+    "parentAgentId": null
+  },
+  {
+    "agentId": "0cdfe8f8-6f55-4569-9029-440f51fa9d18",
+    "title": "\u5361\u724C\u6570\u636E\u5E8F\u5217\u5316\u5199\u65B9\u5411\u8865\u5168\uFF08\u6279 1\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\0cdfe8f8-6f55-4569-9029-440f51fa9d18\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "a194dde7-c3d2-4a9b-8498-080962188653",
+    "title": "\u6548\u679C\u4FA7\u843D\u76D8\u5BF9\u79F0\uFF0B\u7AEF\u5230\u7AEF\u5168\u94FE\u8DEF\uFF08\u6279 2\uFF09\u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\a194dde7-c3d2-4a9b-8498-080962188653\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "31d4a02b-8eac-490a-a514-00be011928f8",
+    "title": "\u5206\u53D1\u9884\u68C0\u5668\uFF08dry-run \u6821\u9A8C\u5668\uFF09\uFF08\u6279 3\uFF09\u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\31d4a02b-8eac-490a-a514-00be011928f8\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE",
+    "title": "Requirements \u2014 \u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\\u7AEF\u5230\u7AEF\u521B\u4F5C\u5361\u724C\u5DE5\u5177\u94FE\\\u9700\u6C42-grill\u8BA1\u5212.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "3734515b-d073-4a46-9e46-65877e0f5cd3",
+    "title": "csx \u52A8\u6001\u6548\u679C\u80FD\u529B\uFF08\u6279 4\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\3734515b-d073-4a46-9e46-65877e0f5cd3\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "e853c440-88b4-45b0-8665-684585fb5d8b",
+    "title": "\u6548\u679C\u79BB\u7EBF\u7F16\u8BD1\u9A71\u52A8\uFF08\u6279 5\u00B7N2a\uFF09\u2014 \u5B9E\u73B0\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\e853c440-88b4-45b0-8665-684585fb5d8b\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "4388577f-872e-4fdd-a0db-19e8b14c94c5",
+    "title": "\u5361\u7EC4\u5B9A\u5411\u53D6\u5361\uFF08\u6279 6\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\4388577f-872e-4fdd-a0db-19e8b14c94c5\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "93fc1f33-904b-42d9-80b5-7dd968eefde2",
+    "title": "\u793A\u4F8B\u5361\u5305\uFF08\u6279 7\uFF09\u2014 \u9700\u6C42\u9610\u660E\u8BB0\u5F55",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\93fc1f33-904b-42d9-80b5-7dd968eefde2\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
+  },
+  {
+    "agentId": "13e3e6f1-c26e-4b5b-848e-4f7f4468befe",
+    "title": "\u672A\u64B0\u5199",
+    "docPath": ".ams-docs\\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\\13e3e6f1-c26e-4b5b-848e-4f7f4468befe\\\u9700\u6C42\u6587\u6863.md",
+    "parentAgentId": "4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0"
   }
 ]

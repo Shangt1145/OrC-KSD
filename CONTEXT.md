@@ -159,6 +159,18 @@ _Avoid_: 隐藏、潜行
 解除隐蔽的唯一标准动作：先移除隐蔽标记 → 揭示逻辑 → 广播 `unit.revealed`（`CovertRules.RevealAsync`）；触发＝被攻击／主动攻击／主动揭示。卡侧具名**揭示触发器**供效果按名对接。
 _Avoid_: 揭露、暴露
 
+**词条效果化（Keyword effectization）**：
+词条行为的承载模式：组件收薄为壳（标识／参值／授予-移除／读取面），行为以「效果」承载（构造期内嵌效果通道）；演进方向＝无参词条→效果预制体、有参词条→模板效果（参值填槽）。
+_Avoid_: 词条迁移、效果化改造
+
+**词条效果库（Keyword prefab library）**：
+词条效果的数据壳制品集（`KeywordPrefabs/*.prefab.json`；触发器/hooks＋assemblyKey 行为引用）；经词条级绑定面（`KeywordRegistry` 声明）与装载期实例化（授予链）接入；生产装配由 `KeywordEffectAssembly` 承担。
+_Avoid_: 词条预制体目录、效果仓
+
+**词条行声明（LineDeclaration）**：
+效果解析器对卡面「词条行」（整行仅词条/数值）的解析产出：维度＋标识＋参值＋注册状态＋来源 span（`ParseResult.Declarations` 可达；与卡定义层 `KeywordDeclaration` 区分）。
+_Avoid_: 词条解析结果、关键词声明
+
 **注入目标声明（inject 声明）**：
 效果预制体 `injects` 的条目（`{ target, band, event, priority }`）：把本效果内某事件的 handler 注册进**宿主具名触发器**（宿主卡按名解析；本版仅默认区段）——是"注入（Inject）"在数据体侧的落地形态。
 _Avoid_: hook 声明（那是挂总线）、订阅声明
@@ -202,6 +214,26 @@ _Avoid_: 条件过滤、卡过滤
 **效果条件规范串（comparison spec）**：
 数值比较条件的**受控字面形式**（`左度量:算子:右操作数`，如 `count=s=friendly:gte:#3`）——由映射层结构化产出、编译器按词表白名单校验后渲染为纯函数求值（不可求值一律 `false`）。
 _Avoid_: 条件表达式字符串
+
+**加载时机声明**：
+效果数据的「何时装载（挂上事件总线）」的表达机制——以效果所处通道声明：卡 `effects`＝卡加载期、词条绑定＝授予期、库/对局＝装配期、运行期由效果逻辑触发（动态装载）；静态数据不提供独立的时机字段（见「通道即声明」）。
+_Avoid_: 时机字段、loadTiming、生效时机（装载≠触发/激活）
+
+**通道即声明**：
+「加载时机声明」的实现原则——位置即声明：效果放在哪个通道（卡 effects／词条绑定／库装配／运行期注入）即在哪个时机装载；不引入数据级时机字段（复用内核 W3-A3「Add 即装载」统一语义）。
+_Avoid_: 显式时机字段、统一加载器
+
+**读宽写窄**：
+数据体读写对偶原则：读取宽容（注释／尾逗号／键名大小写不敏感），写出规范（固定当前 schemaVersion／camelCase／UTF-8 无 BOM／LF／固定缩进）；语义级保真、文本级规范化（不承诺文本级无损往返）。
+_Avoid_: 无损往返、格式化保真
+
+**分发预检器**（dry-run 校验器）：
+注册/装载对局前对分发数据（卡目录＋效果库目录）做纯只读静态校验的组件——输出结构化报告（Errors/Warnings 分列＋汇总统计＋无 Error 判定面）；覆盖引用完整性／id 重复与冲突／内联完整性；同目录差异＝读面事实照实汇入、跨目录/跨来源＝预检新增；Error>0 不放行（CI gate）。
+_Avoid_: 校验脚本、linter
+
+**csx 动态效果（能力）**：
+csx 创作者经 `EffectRuntime` 受控门面在局中动态挂载/卸载/生成效果的受控能力（`AttachPrefabAsync`／`AttachSnapshotAsync`／`CompileAttachAsync`／`DetachEffectAsync`；统一 9 类状态结果与不透明挂载凭据）；机制沿用统一装载链（失败完整回滚、托管随卡销毁撤销）；弱沙箱前提（同进程、非安全边界）。
+_Avoid_: 运行时脚本注入、热插拔
 
 ## Sample Dialogue
 

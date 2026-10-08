@@ -30,4 +30,4 @@
 - [effect-parsing](./effect-parsing/CONTEXT.md) - 效果解析层：『揭示』三形态、事件型前缀白名单、"直接可跑"口径与条件族决策摘要
 
 
-- [keyword-effectization](./keyword-effectization/CONTEXT.md) - 词条效果化：词条壳＋效果行为、效果制品与迁移验收口径
+- [keyword-effectization](./keyword-effectization/CONTEXT.md) - 词条效果化：词条壳＋效果行为、效果制品（含数据壳制品与行为引用）与迁移验收口径
