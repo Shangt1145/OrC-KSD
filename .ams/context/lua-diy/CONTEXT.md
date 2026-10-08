@@ -2,6 +2,8 @@
 
 OrcEngine 的独立 Lua 脚本组件（社区 DIY 能力）：从脚本源定义"动态 handler"并在其中执行 Lua。本领域记录其术语与决策摘要。
 
+> **状态：已封存（2026-10-08）。** `Orc.Lua` 与 `Orc.Lua.Tests` 已移出编译区（`OrcEngine.sln`）与 GitHub 范围；代码归档于本地 `.ams/sealed/`（不在版本控制内）。以下术语与决策是封存前的最终冻结记录，保留备查，**不再代表现役能力**。
+
 ## Language
 
 **动态 handler（Lua handler）**：
