@@ -15,3 +15,22 @@
 TestResults/
 *.user
 *.suo
+
+# .ams-docs：默认拒绝，仅放行文档（*.md）
+# 目的：过程物目录名会不断新增（已见 _tools/ / tools/ / _work/ / isolate/ / verify-worktree/ /
+# tmp-probe/ / _tmp/ / _probe/，以及任务目录内的松散脚本 *.py、日志 *.log、快照 *.txt/*.json），
+# 按名字列举无法根治；本规则让一切"非 md"内容自动不入库。
+# 代价（2026-10-09 用户确认）：.ams-docs 下的非 md 交付证据不再入库，证据一律写进 .md。
+/.ams-docs/**
+!/.ams-docs/**/
+!/.ams-docs/**/*.md
+
+# 纵深防御：以下目录名在任何位置都不入库（即使不在 .ams-docs 下）
+**/_tools/
+**/tools/
+**/_work/
+**/isolate/
+**/verify-worktree/
+**/tmp-probe/
+**/_tmp/
+**/_probe/
