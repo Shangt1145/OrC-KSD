@@ -356,7 +356,8 @@ public class VeteranMechanismTests
         Assert.Same(candidate, chosen);
 
         // 「使 1 个老兵单位获得奋战和冲击」——机制级等价：对筛选所得老兵单位授予已实现词条「奋战」
-        // （「冲击」属未实现词条（留痕口径）——不阻止、不入注册面；行为赋予由后续批次补全）。
+        // （「冲击」已注册（批 5）且解析层已回补（批 4·序列③——『获得冲击』转真映射、两 grant 并列）；
+        // 本测试仅演示运行时授予链的机制等价，解析层声明/授予断言见 KeywordLineDeclarationTests）。
         Assert.True(await chosen.Keywords.GrantAsync(KeywordIds.Fury));
         Assert.True(chosen.Keywords.Has(KeywordIds.Fury));
         Assert.False(plain.Keywords.Has(KeywordIds.Fury));

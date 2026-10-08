@@ -8,7 +8,7 @@ namespace Orc.Game.Tests;
 
 /// <summary>
 /// K2 反击/伏击判定收编（C5 combat.counter.eligibility／C6 combat.ambush.condition）游戏层测试：
-/// ①默认行为等价：四条款逐条（条目级）＋流程级（炮兵不受反击／轰炸机×战斗机例外互伤）；
+/// ①默认行为等价：五条款逐条（条目级——冲击经批 5 纳入、置于最前）＋流程级（炮兵不受反击／轰炸机×战斗机例外互伤）；
 /// ②伏击条件默认：命中/不命中两态＋「攻＝防」严格边界（条目级）＋流程级（改写成立／正常互伤）；
 /// ③核心演示：单例改写（C5 恒真——无条件反击）→ 默认互伤区（原本被豁免的回击伤害恢复）与
 ///   伏击资格（原本被拦资格的改写放行）两处同步行为断言 → 注销回退（闭环）；
@@ -20,10 +20,10 @@ namespace Orc.Game.Tests;
 /// </summary>
 public class JudicatorCombatCounterAmbushTests
 {
-    // ---------- ① 四条款逐条（条目级；含多类型交叉——豁免优先） ----------
+    // ---------- ① 五条款逐条（条目级；含多类型交叉——豁免优先） ----------
 
     [Fact]
-    public async Task Counter_Eligibility_Default_Terms_One_To_Four_Entries()
+    public async Task Counter_Eligibility_Default_Terms_One_To_Five_Entries()
     {
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
@@ -31,7 +31,8 @@ public class JudicatorCombatCounterAmbushTests
         var playerB = match.Players[1];
         var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 1); // 炮兵；攻 2 / 防 2
         var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 2); // 轰炸机；攻 4 / 防 2
-        var weak = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 3); // 步兵；攻 1 / 防 2
+        var weak = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1); // 步兵；攻 1 / 防 2
+        var shocked = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 0); // 冲击步兵（批 5；运行时授予）
         var mixAir = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.MixAirId, 0); // 炮兵＋轰炸机；攻 2 / 防 5
         var enemyInfantry = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
         var enemyFighter = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.FighterId, 2); // 攻 3 / 防 2
@@ -41,7 +42,11 @@ public class JudicatorCombatCounterAmbushTests
         var entry = match.Judicators.Resolve(JudicatorNames.CombatCounterEligibility);
         Assert.NotNull(entry);
 
-        // ① 目标＝轰炸机 → 永不反击（绝对豁免、最高优先）。
+        // ⓪（批 5）攻击者具冲击 → 不受反击（豁免族最高优先——先于①②③豁免；对照④同组合本应 true）。
+        Assert.True(await shocked.Keywords.GrantAsync(KeywordIds.Shock));
+        Assert.Equal(new object[] { false }, entry.Invoke(new object[] { shocked, enemyInfantry }));
+
+        // ① 目标＝轰炸机 → 永不反击（绝对豁免）。
         Assert.Equal(new object[] { false }, entry.Invoke(new object[] { weak, enemyBomber }));
 
         // ② 攻击者＝炮兵 → 不受任何反击。
@@ -112,7 +117,7 @@ public class JudicatorCombatCounterAmbushTests
         var playerB = match.Players[1];
         var infantry = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
         var weak = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 2); // 攻 1 / 防 2
-        var ambusher = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.AmbushId, 3); // 攻 5 / 防 6（伏击）
+        var ambusher = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.AmbushId, 1); // 攻 5 / 防 6（伏击）
         var enemyInfantry = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
         var enemyArtillery = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.ArtilleryId, 2); // 攻 2 / 防 2
 
@@ -176,14 +181,14 @@ public class JudicatorCombatCounterAmbushTests
         var playerB = match.Players[1];
         var art1 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 1); // 攻 2 / 防 2
         var art2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 2);
-        var art3 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 3);
+        var art3 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 1);
         var art4 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.ArtilleryId, 0);
         var art5 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.ArtilleryId, 3);
         var infTarget1 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
         var infTarget2 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
-        var infTarget3 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 3); // 攻 2 / 防 5
+        var infTarget3 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 1); // 攻 2 / 防 5
         var ambusher1 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.AmbushId, 2); // 攻 5 / 防 6（伏击）
-        var ambusher2 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.AmbushId, 2); // 攻 5 / 防 6（伏击）
+        var ambusher2 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.AmbushId, 1); // 攻 5 / 防 6（伏击）
         foreach (var unit in new[] { art1, art2, art3, art4, art5 })
         {
             CommandTestKit.Activate(unit);
@@ -252,7 +257,7 @@ public class JudicatorCombatCounterAmbushTests
         var playerB = match.Players[1];
         var weak1 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1); // 攻 1 / 防 2
         var weak2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 2);
-        var weak3 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 3);
+        var weak3 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1);
         var ambusher1 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.AmbushId, 0); // 攻 5 / 防 6（伏击）
         var ambusher2 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.AmbushId, 1);
         var ambusher3 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.AmbushId, 2);

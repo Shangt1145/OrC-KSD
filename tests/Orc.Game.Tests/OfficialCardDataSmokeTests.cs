@@ -50,7 +50,8 @@ public class OfficialCardDataSmokeTests
         Assert.Equal(new[] { UnitType.Infantry }, dragons.UnitTypes);
         Assert.Equal(new[] { KeywordIds.Blitz }, dragons.Keywords.Select(item => item.Id));
 
-        // 未实现词条（官方大量 guard/shock/…）＝只读留痕、不 fail-fast。
+        // 未实现词条（官方其余未实现标识如 bond/alpine/salvage/…；`shock` 经批 5、`guard` 经批 4 转正式承载）
+        // ＝只读留痕、不 fail-fast。
         Assert.Contains(loaded.Definitions, entry => entry.Definition.UnmappedAttributes.Count > 0);
 
         // ---------- ③ 装配进对局并打出一张官方卡 ----------

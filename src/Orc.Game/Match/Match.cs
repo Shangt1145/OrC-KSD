@@ -405,7 +405,7 @@ public sealed class Match
         Engine.RegisterCardMountCompletedAction(CardEffectLoader.CreateManagedCleanupAction(Engine));
 
         // 生成并初始化管理器群（2B：卡牌库注入回合上下文提供器——反制「仅己方回合」验证的延迟读取来源；
-        // 2C：加注词条装载上下文提供器——词条装载〔伏击挂载〕的延迟读取来源；
+        // 2C：加注词条装载上下文提供器——词条装载〔伏击效果〕的延迟读取来源；
         // W1-1：加注对局级卡牌 ID 提供器——加载时分配自增 ID〔构筑外判定基础〕的延迟读取来源；
         // X2：加注效果装载上下文提供器〔对局装载语境——效果源可空；注册表缺省时声明为空、装载照常〕；
         // A4：加注部署逻辑装载语境提供器〔装配源可空——缺省时条目为空、生成跳过〕；
@@ -543,10 +543,10 @@ public sealed class Match
                 interceptionRule: (attacker, targetSlot, targetIsFighter) => CombatJudicatorInvoker.InvokeBool(combatInterceptionEntry, attacker, targetSlot, targetIsFighter)));
 
         // K2 加性（A 档 C5/C6：反击豁免与伏击条件）：内置注册段追加 2 条固定注册——
-        // 反击资格判定 combat.counter.eligibility（（攻击者, 目标）→ bool；四条款、豁免优先——原 CounterAttackRules 语义）＋
+        // 反击资格判定 combat.counter.eligibility（（攻击者, 目标）→ bool；五条款、豁免优先——原 CounterAttackRules 语义）＋
         // 伏击条件判定 combat.ambush.condition（（被攻击单位, 攻击者）→ bool；严格大于比较）。
         // 调用点接入：默认互伤区（CommandManager.HandleDefaultAttackDamageAsync——经条目句柄注入）＋
-        // 伏击组件（资格→C5、条件→C6——经 KeywordLoadContext 判定器通道注入）；单源、无第二真源。
+        // 伏击效果（资格→C5、条件→C6——经 KeywordLoadContext 判定器通道注入）；单源、无第二真源。
         var combatCounterEligibilityEntry = _judicators.Register(
             JudicatorNames.CombatCounterEligibility,
             new CombatCounterEligibilityJudicator());
@@ -606,11 +606,15 @@ public sealed class Match
 
         // E1 加性：效果运行时门面（csx 的**唯一**游戏层受控入口——消灭[死亡链]/伤害/属性修饰/词条/抽牌/无头选靶/槽加·减）；
         // 协作者以延迟读取 lambda 注入（指挥管理器创建较晚）；并注入各玩家（「卡 → 玩家 → 服务」读取路径的玩家环节）。
+        // 批 4 加性（csx 动态效果能力）：加传「对局引擎」与「可操作相位门禁」（动态效果受控面的实例化/预制体库与终局拒斥——
+        // 引擎不可经卡/玩家公开面解析，须装配接线；门禁读取对局生命周期——终局后挂载面拒斥、卸载面按失效结果处理）。
         _effectRuntime = new EffectRuntime(
             () => _commandManager,
             () => _playerManager,
             () => _judicators,
-            () => _resourceManager);
+            () => _resourceManager,
+            () => Engine,
+            () => _lifecycle.IsActionAllowed);
         foreach (var player in _playerManager.Players)
         {
             player.ConfigureEffectRuntime(_effectRuntime);
@@ -653,7 +657,7 @@ public sealed class Match
             // K1：目标合法性判定通道——经 combat.target.legal 条目句柄（固定内置注册段注册所得；每次调用经统一解析点）。
             (attacker, targetRef) => CombatJudicatorInvoker.InvokeBool(combatTargetLegalEntry, attacker, targetRef),
             // K2：反击资格判定通道——经 combat.counter.eligibility 条目句柄（默认互伤区与伏击资格共用）；
-            // 伏击条件判定通道——经 combat.ambush.condition 条目句柄（伏击组件经装载上下文取用）。
+            // 伏击条件判定通道——经 combat.ambush.condition 条目句柄（伏击效果经装载上下文取用）。
             (attacker, target) => CombatJudicatorInvoker.InvokeBool(combatCounterEligibilityEntry, attacker, target),
             (self, attacker) => CombatJudicatorInvoker.InvokeBool(combatAmbushConditionEntry, self, attacker),
             // K3：leg 资格（move/attack）与推进前置判定通道——经条目句柄（固定内置注册段注册所得；可用性/复验四调用点同源）。
@@ -686,6 +690,13 @@ public sealed class Match
         {
             await player.Hq.Modifiers.RequestRerunAsync(ct);
         }
+
+        // 批 4（数据化）加性：词条效果生产装配（单一时序点承担两者——行为引用注册〔键→委托〕＋词条效果库装载
+        // 〔预制体注册〕，随后绑定核验；挂于管理器群装配收尾、卡牌加载之前——「先于任何词条装载」的装配期时点）。
+        // 不变量：正常对局初始化后，任何词条装载时行为引用与库键均已就绪/可解析；库文件层失败＝隔离记录、
+        // 不阻断（报告＋总流留痕）；绑定层缺失＝装配期 fail-fast（初始化失败）。幂等以生命周期结构达成
+        // （Initialize 恰一次——重复被拒绝；每对局＝新引擎实例、各自装配，多对局天然隔离）。
+        KeywordEffectAssembly.Assemble(Engine);
 
         // 双方卡组洗切（初始化内自动；W4-1 G14 收尾：经统一「洗切动作」面——每副各发恰一条 deck.shuffled 信号〔就地打乱之后〕；
         // 固定顺序＝玩家索引升序，保证可复现；G8：随机源＝对局随机服务——洗切与效果取样共用同一流〔单流〕）

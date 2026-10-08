@@ -66,7 +66,7 @@ public class CommandRulesTests
         var playerB = match.Players[1];
         var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 1);
         var fighter = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.FighterId, 2);
-        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 3);
+        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 1);
         var enemyOnFront = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 0);
         var enemyOnFront2 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 1);
         var enemyOnFront3 = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 2);
@@ -192,7 +192,7 @@ public class CommandRulesTests
         var playerB = match.Players[1];
         var infantry = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 2);
-        var smokeOwnerSide = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.SmokeId, 3); // 我方烟幕兵
+        var smokeOwnerSide = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.SmokeId, 1); // 我方烟幕兵
         CommandTestKit.Activate(infantry);
         CommandTestKit.Activate(artillery);
         CommandTestKit.Activate(smokeOwnerSide);
@@ -248,7 +248,7 @@ public class CommandRulesTests
         await match.Initialize();
         var playerA = match.Players[0];
         var playerB = match.Players[1];
-        // B 支援线：守护兵 x2（槽 1、槽 2——相邻另一守护者）。
+        // B 支援线：守护兵 x2（槽 1、槽 4——不相邻）。
         var guardian1 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 1);
         var guardian2 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 2);
         var infantry = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 0);
@@ -257,7 +257,7 @@ public class CommandRulesTests
         CommandTestKit.Activate(artillery);
         var enemyHq = playerB.Hq; // W3-3：HQ 目标＝实体引用
 
-        // 守护者不可被守护（任何情形，含相邻另一守护者）；HQ 计入保护（槽 1 守护者 → HQ 被守护；Player 转发面／实体面双读）。
+        // 守护者不可被守护（任何情形，含另一守护者）；HQ 计入保护（槽 1 守护者 → HQ 被守护；Player 转发面／实体面双读）。
         Assert.False(match.CommandManager.IsUnitGuarded(guardian1));
         Assert.False(match.CommandManager.IsUnitGuarded(guardian2));
         Assert.True(match.CommandManager.IsHqGuarded(playerB));
@@ -280,16 +280,16 @@ public class CommandRulesTests
         await match.Initialize();
         var playerA = match.Players[0];
         var playerB = match.Players[1];
-        await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 1);
-        var nearUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 2); // 相邻（差 1）→ 获
-        var farUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 3); // 与槽 1 差 2 → 不获
+        await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 1); // 守护者（槽 1＝HQ 左邻）
+        var nearUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 0); // 落槽 0：与守护者相邻（差 1）→ 获
+        var farUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 0); // 落槽 3：与守护者差 2（隔 HQ 槽 2）→ 不获
         var crossLineUnit = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 0); // 跨线 → 不获
 
         Assert.True(match.CommandManager.IsUnitGuarded(nearUnit));
         Assert.False(match.CommandManager.IsUnitGuarded(farUnit)); // 隔空槽不相邻（物理邻位＝索引差 1）
         Assert.False(match.CommandManager.IsUnitGuarded(crossLineUnit)); // 跨线不计
 
-        // HQ 槽 0 同规则：守护者在槽 1 → HQ 获保护。
+        // HQ 两侧任一邻位同规则：守护者在槽 1（HQ 左邻）→ HQ 获保护。
         Assert.True(match.CommandManager.IsHqGuarded(playerB));
     }
 
@@ -299,8 +299,8 @@ public class CommandRulesTests
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
         var playerB = match.Players[1];
-        // B 支援线：槽 1 空、槽 2 守护者 → HQ（槽 0）与守护者隔空 → 不获保护。
-        await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 2);
+        // B 支援线：守护者落槽 4（与 HQ〔槽 2〕间隔槽 3 空位）→ HQ 与守护者隔空 → 不获保护。
+        await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.GuardianId, 3);
 
         Assert.False(match.CommandManager.IsHqGuarded(playerB)); // 隔空不相邻（物理邻位＝索引差 1）
     }
@@ -315,26 +315,43 @@ public class CommandRulesTests
         var playerB = match.Players[1];
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
 
-        // 场景：A 支援线 X（槽 2）＋守护者 G1（槽 1）、G2（槽 3）。
-        var x = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
+        // 场景（新布局适配）：支援线 HQ 居中后，单个可部署位的邻格仅一侧、无法表达「两守护者夹持」——
+        // 多源场景改在无占位的前线表达：A 前线 X（槽 2）＋守护者 G1（槽 1）、G2（槽 3）。
+        var x = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.InfantryId, 2);
         Assert.False(match.CommandManager.IsUnitGuarded(x)); // 入场前无守护源
-        var g1 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.GuardianId, 1);
-        var g2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.GuardianId, 3);
+        var g1 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.GuardianId, 1);
+        var g2 = await CommandTestKit.PrepareOnFrontAsync(match, playerA, CommandTestKit.GuardianId, 3);
         Assert.True(match.CommandManager.IsUnitGuarded(x)); // 入场占位触达维护
 
-        // G1 移动走（距离 1 的移动仍触发维护）→ X 保留被守护（G2 存在性判定）。
-        CommandTestKit.Activate(g1);
-        var moveResult = await CommandTestKit.RunCommandAsync(match, bridge, g1, match.Battlefield.FrontLine[0].Ref);
-        Assert.Equal(CommandResultStatus.Success, moveResult.Status);
-        Assert.True(match.CommandManager.IsUnitGuarded(x)); // 多守护源：移走其一仍保留
+        // 「移走其一仍保留」→ 新布局等价面：失其一仍保留（多守护源存在性判定——前线单位不可移动
+        //〔移动源须∈支援线〕，改以真实战斗击杀其一验证）。
+        var beast1 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.BeastId, 1);
+        var beast2 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.BeastId, 2);
+        await match.EndTurn(); // → 玩家 B 回合（B 恢复：巨兽两 bool＝true；结算把点数刷新为槽值 1）
+        await match.ResourceManager.AddPointsAsync(playerB, 2); // 击杀行动费用量（T2 结算后点数 1——两次击杀需 2）
+        var killG1 = await CommandTestKit.RunCommandAsync(match, bridge, beast1, g1.Ref);
+        Assert.Equal(CommandResultStatus.Success, killG1.Status);
+        Assert.True(g1.GetData<UnitStateData>().IsDestroyed);
+        Assert.True(match.CommandManager.IsUnitGuarded(x)); // 多守护源：失其一仍保留
 
-        // 切到 B 回合：B 巨兽（前线槽 4）攻击杀死 G2（A 支援线槽 3）→ card.died 触达维护 → X 失去被守护。
-        var beast = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.BeastId, 4);
-        await match.EndTurn(); // → 玩家 B 回合（B 恢复：巨兽两 bool＝true）
-        var killResult = await CommandTestKit.RunCommandAsync(match, bridge, beast, g2.Ref);
-        Assert.Equal(CommandResultStatus.Success, killResult.Status);
+        // 再杀 G2 → card.died 触达维护 → X 失去被守护。
+        var killG2 = await CommandTestKit.RunCommandAsync(match, bridge, beast2, g2.Ref);
+        Assert.Equal(CommandResultStatus.Success, killG2.Status);
         Assert.True(g2.GetData<UnitStateData>().IsDestroyed);
         Assert.False(match.CommandManager.IsUnitGuarded(x)); // 守护者死亡 → 清位后等效触达维护
-        Assert.False(match.CommandManager.IsHqGuarded(playerA)); // G1 已走、G2 已死 → HQ 不获
+
+        // 移动触点（支援线单位移动〔仅推进〕触发维护）：Y（槽 0）＋守护者 H（槽 1＝HQ 左邻）——
+        // H 移动走 → Y／HQ 失去被守护（HQ 联动）。
+        await match.EndTurn(); // → 玩家 A 回合
+        var y = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 0);
+        Assert.False(match.CommandManager.IsUnitGuarded(y)); // 入场前无守护源
+        var h = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.GuardianId, 0);
+        Assert.True(match.CommandManager.IsUnitGuarded(y)); // 入场（Join）触达维护
+        Assert.True(match.CommandManager.IsHqGuarded(playerA)); // HQ 两侧任一邻位：H（槽 1）→ HQ 获守护
+        CommandTestKit.Activate(h);
+        var moveResult = await CommandTestKit.RunCommandAsync(match, bridge, h, match.Battlefield.FrontLine[0].Ref);
+        Assert.Equal(CommandResultStatus.Success, moveResult.Status);
+        Assert.False(match.CommandManager.IsUnitGuarded(y)); // 守护者移走（移动触达维护）→ 失去
+        Assert.False(match.CommandManager.IsHqGuarded(playerA)); // HQ 无守护源（G2 死、H 走）→ 不获
     }
 }

@@ -155,7 +155,7 @@ public static class GameHooksJson
             ["Commanding/CommandManager.cs·守护维护"]),
         new SignalEntry(GameHooks.UnitUpgraded,
             [GameHooks.PayloadUnit],
-            ["Cards/UnitCard.cs·PromoteToVeteranAsync（升级收尾——先落定后发射、恰一次）"], []),
+            ["Cards/UnitCard.cs·PromoteToVeteranAsync（升级收尾——先落定后发射、恰一次）"], ["Commanding/CommandManager.cs·守护维护"]),
         new SignalEntry(GameHooks.UnitRevealed,
             [GameHooks.PayloadUnit],
             ["Cards/CovertSystem.cs·RevealAsync（揭示收尾——先落定后发射、恰一次）"], []),

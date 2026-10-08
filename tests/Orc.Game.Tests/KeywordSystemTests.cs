@@ -6,7 +6,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 2C 验收④（对战词条；2C-A1 组件化迁移随改）：四词条各自行为（闪击＝部署链收尾〔扣费后〕置位、仅部署路径；奋战＝记账双攻；
+/// 2C 验收④（对战词条；2C-A1 组件化迁移随改）：四词条各自行为（闪击＝部署（unit.deployed）时置位、仅部署路径；奋战＝记账双攻；
 /// 烟幕＝不可被攻击〔CommandRulesTests〕；伏击＝改写〔CommandCombatTests〕）＋挂载面
 /// （加载时经授予链挂载可查询＋词条组件注册；无词条卡＝无副作用；死亡后登记保留、行为注销）；定义校验
 /// （未注册标识/同标识重复项 fail-fast）；回合恢复（两 bool 恢复＋奋战记账清零）。
@@ -16,7 +16,7 @@ public class KeywordSystemTests
     // ---------- 闪击 ----------
 
     [Fact]
-    public async Task Blitz_Deployment_Sets_Flags_After_Fee_Within_Play_Chain()
+    public async Task Blitz_Deployment_Sets_Flags_Within_Play_Chain()
     {
         var match = CommandTestKit.CreateCommandMatch();
         await match.Initialize();
@@ -24,8 +24,9 @@ public class KeywordSystemTests
         var unit = await CommandTestKit.InstantiateLoadedAsync(match, player, CommandTestKit.BlitzId, toHand: true);
         var line = match.Battlefield.PlayerASupportLine;
 
-        // 观测「扣费后」落点：部署链中途（unit.deployed 发射时）两 bool 仍为 false、费用尚未扣；
-        // 链返回（收尾完成）后置位 true/true、费用已扣。
+        // 观测点（批 4 数据化调整）：unit.deployed 的「外部通道通知段」观测——置位批 4 起经数据效果 hooks 触发器
+        // 承载（同一次更新广播的「订阅者广播段」——晚于本探针所处阶段）；本处不断言置位时点（阶段顺序属实现机制、
+        // 非外部契约——语义差异文字申报），仅观测链中途费用；置位行为契约由链返回后断言覆盖。
         var probes = new List<(bool CanMove, bool CanAttack, int Points)>();
         using var probe = match.Engine.Subscribe((type, _, _) =>
         {
@@ -42,10 +43,8 @@ public class KeywordSystemTests
 
         Assert.Equal(PlayResultStatus.Success, result.Status);
         var mid = Assert.Single(probes);
-        Assert.False(mid.CanMove);  // 链中途：未置位（落点＝扣费后）
-        Assert.False(mid.CanAttack);
-        Assert.Equal(1, mid.Points); // 链中途：未扣费
-        Assert.True(unit.GetData<CommandData>().CanMove);  // 链完成后：覆盖部署初值
+        Assert.Equal(1, mid.Points); // 链中途：仍未扣费（扣费时点不变——链收尾）
+        Assert.True(unit.GetData<CommandData>().CanMove);  // 链完成后：状态一致（覆盖部署初值）
         Assert.True(unit.GetData<CommandData>().CanAttack);
         Assert.Equal(0, player.Points);
     }
@@ -202,7 +201,7 @@ public class KeywordSystemTests
         Assert.Empty(plain.Keywords.Components);
         Assert.False(plain.Keywords.Has(KeywordIds.Blitz));
 
-        // 词条卡：词条组件已挂载（闪击＝能力型组件列入 Components——含运行逻辑承载）。
+        // 词条卡：词条组件已挂载（闪击＝能力型组件列入 Components——行为经内嵌效果承载）。
         Assert.Contains(blitz.Keywords.Components, component => component.Keyword == KeywordIds.Blitz);
 
         // 死亡后：登记保留（可查询）；不再参与结算（候选层——尸体不在场）。
@@ -223,8 +222,10 @@ public class KeywordSystemTests
     [Fact]
     public void Definition_Rejects_Unimplemented_Keyword()
     {
+        // 批 5 受控适配：样本由「冲击」改合成稳定字面（冲击经批 5 注册——不再属未实现）；
+        // 合成样本——不再链式迁移。
         var ex = Assert.Throws<ArgumentException>(() => new CardDefinition(
-            "怪卡", 1, 1, 1, 1, keywords: new[] { new KeywordDeclaration("守护") }, faction: Faction.Germany, rarity: Rarity.Standard));
+            "怪卡", 1, 1, 1, 1, keywords: new[] { new KeywordDeclaration("未注册示例词条") }, faction: Faction.Germany, rarity: Rarity.Standard));
         Assert.Contains("未实现标识", ex.Message);
     }
 

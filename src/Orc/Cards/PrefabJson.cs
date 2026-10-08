@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Orc.Core;
@@ -38,6 +39,30 @@ public static class PrefabJson
         };
 
         return JsonSerializer.Serialize(dto, indented ? IndentedOptions : WriteOptions);
+    }
+
+    /// <summary>
+    /// 落盘文本生成（批 2 加性辅助——**落盘文本单一真源**；批 5 起可见性放宽〔internal→public，加性〕
+    /// 供离线编译驱动复用——落盘出口 <c>PrefabWriter</c> 与 <c>Orc.Game.EffectParsing.EffectCompilationDriver</c>
+    /// 共用，防「第二套文本标准」漂移；既有 <see cref="Serialize"/> 默认行为不变）：
+    /// 文本契约与卡侧硬契约对齐（2 空格缩进多行、LF、尾随换行、不转义非 ASCII）；键序确定（DTO 声明序）、
+    /// null 值字段忽略（沿用既有序列化选项）。UTF-8 无 BOM 由文件写入面保证。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">snapshot 为 null。</exception>
+    public static string SerializeForDisk(EffectSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var dto = new SnapshotDto
+        {
+            SchemaVersion = snapshot.Version,
+            Root = ToDto(snapshot.Root),
+        };
+
+        // 文本契约：统一 LF（写出器平台换行〔Windows＝CRLF〕经规范化——跨平台输出一致）、尾随换行补足。
+        // Replace 安全性：JSON 字符串内的 CR/LF 必为转义序列（控制字符始终转义）——原始 CR 仅出现在格式换行处。
+        var json = JsonSerializer.Serialize(dto, DiskOptions);
+        return json.Replace("\r\n", "\n", StringComparison.Ordinal) + "\n";
     }
 
     /// <summary>读回效果快照（失败＝抛，fail-fast）。</summary>
@@ -96,6 +121,18 @@ public static class PrefabJson
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         WriteIndented = true,
+    };
+
+    /// <summary>
+    /// 落盘文本选项（批 2 加性辅助）：缩进多行 ＋ 宽松编码器（不转义非 ASCII/HTML 敏感字符——
+    /// 对齐既有样本实态与卡侧「不转义非 ASCII」口径；仅落盘出口使用，不影响既有 API 输出）。
+    /// </summary>
+    private static readonly JsonSerializerOptions DiskOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     // ---------- 领域 → DTO ----------

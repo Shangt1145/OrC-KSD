@@ -28,6 +28,13 @@ public sealed class FactionCostDefinition : ICardDataComponentDefinition
         => new(
             ComponentText.RequireEnum<Faction>(element, "faction"),
             ComponentText.RequireInt(element, "kredits"));
+
+    /// <summary>序列化（写方向对称）：国籍＝枚举字面值、部署费＝整数（规范字段序：faction → kredits）。</summary>
+    public static void Write(FactionCostDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        writer.WriteString("faction", definition.Faction.ToString());
+        writer.WriteNumber("kredits", definition.DeployCost);
+    }
 }
 
 /// <summary>对战数值组件定义（数据体组件名 <c>battleStats</c>；相位＝构造期；仅单位卡）。</summary>
@@ -61,6 +68,17 @@ public sealed class BattleStatsDefinition : ICardDataComponentDefinition
             ComponentText.RequireInt(element, "operationCost"),
             ComponentText.RequireInt(element, "attack"),
             ComponentText.RequireInt(element, "defense"));
+
+    /// <summary>
+    /// 序列化（写方向对称）：三字段（规范字段序：operationCost → attack → defense）。
+    /// 非单位卡带本组件＝照写保真、不警告（读回成功——跨组件语义一致性不属写方向职责，归预检器）。
+    /// </summary>
+    public static void Write(BattleStatsDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        writer.WriteNumber("operationCost", definition.OperateCost);
+        writer.WriteNumber("attack", definition.Attack);
+        writer.WriteNumber("defense", definition.Defense);
+    }
 }
 
 /// <summary>标签数据组件定义（数据体组件名 <c>tagData</c>；相位＝加载期）：稀有度（必填）＋开放 tag（可选）。</summary>
@@ -89,6 +107,13 @@ public sealed class TagDataDefinition : ICardDataComponentDefinition
         => new(
             ComponentText.RequireEnum<Rarity>(element, "rarity"),
             ComponentText.GetStringArray(element, "tags"));
+
+    /// <summary>序列化（写方向对称）：稀有度＝枚举字面值（必写）、tags＝按序（空＝显式 <c>[]</c>；规范字段序：rarity → tags）。</summary>
+    public static void Write(TagDataDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        writer.WriteString("rarity", definition.Rarity.ToString());
+        ComponentText.WriteStringArray(writer, "tags", definition.Tags);
+    }
 }
 
 /// <summary>
@@ -165,6 +190,61 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
         }
 
         return new TypeCategoryDefinition(CardCategory.Unit, unitTypes);
+    }
+
+    /// <summary>类别反向词：指令＝<c>order</c>（读侧 <see cref="ResolveCategory"/> 的对偶）。</summary>
+    private const string CommandWord = "order";
+
+    /// <summary>类别反向词：反制＝<c>countermeasure</c>。</summary>
+    private const string CounterWord = "countermeasure";
+
+    /// <summary>
+    /// 序列化（写方向对称；类别/单位类型反向词：Command→<c>order</c>、Counter→<c>countermeasure</c>、
+    /// 单位类型→官方小写词）：写序＝类别词在前、单位类型按登记序。
+    /// 三类「读不回」组合（单位卡缺单位类型／类别词与单位类型混用／单位类型重复）＝警告＋照写
+    /// （保真意图、不静默、不降级、不伪造——读回断裂由再读侧揭示）。
+    /// </summary>
+    public static void Write(TypeCategoryDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        var words = new List<string>();
+
+        if (definition.Category == CardCategory.Command)
+        {
+            words.Add(CommandWord);
+        }
+        else if (definition.Category == CardCategory.Counter)
+        {
+            words.Add(CounterWord);
+        }
+
+        if (definition.Category is not CardCategory.Unit && definition.UnitTypes.Count > 0)
+        {
+            warnings.Add("组件 'typeCategory' 类别词与单位类型混用（读回必然被拒——已照写）。");
+        }
+
+        var seen = new HashSet<UnitType>();
+        var hasDuplicate = false;
+        foreach (var unitType in definition.UnitTypes)
+        {
+            if (!seen.Add(unitType))
+            {
+                hasDuplicate = true;
+            }
+
+            words.Add(unitType.ToString().ToLowerInvariant());
+        }
+
+        if (definition.Category is CardCategory.Unit && definition.UnitTypes.Count == 0)
+        {
+            warnings.Add("组件 'typeCategory' 单位卡缺少单位类型（读回必然被拒——已照写）。");
+        }
+
+        if (hasDuplicate)
+        {
+            warnings.Add("组件 'typeCategory' 含重复单位类型（读回必然被拒——已照写）。");
+        }
+
+        ComponentText.WriteStringArray(writer, "type", words);
     }
 
     private static CardCategory? ResolveCategory(string token)
@@ -326,6 +406,120 @@ public sealed class KeywordsDefinition : ICardDataComponentDefinition
 
         return new KeywordsDefinition(attributes, keywords, unmapped, becomesVeteran, veteranOf);
     }
+
+    /// <summary>
+    /// 序列化（写方向对称；策略＝<see cref="Attributes"/> 保真优先）：
+    /// ①保真路径（Attributes 非空）＝原始英文标识全量按序原样写回——含未映射/畸形/多重老兵声明原文，
+    /// 保真即无损失（不比对、不警告；以 Attributes 为唯一真源，派生面不一致态同样按 Attributes 输出）；
+    /// ②合成路径（Attributes 空＝代码构造卡）＝老兵端口在前 → 词条经反向映射/老兵端口生成（VeteranOf 端口
+    /// 吸收「老兵」标记）→ 留痕原文在后；不可还原项（无反向映射／参值不可表达／裸标记／端口 id 空白）
+    /// ＝输出警告、跳过该项（不静默丢失）；
+    /// ③空产出＝写空 <c>attributes</c> 数组（组件在场空态——保结构等值）。
+    /// </summary>
+    public static void Write(KeywordsDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        if (definition.Attributes.Count > 0)
+        {
+            // 保真路径：全量按序原样（含畸形/多重原文——读回后仍按既有口径归留痕，语义等值）。
+            ComponentText.WriteStringArray(writer, "attributes", definition.Attributes);
+            return;
+        }
+
+        // 合成路径：端口在前、留痕在后（输出确定性——同输入同输出）。
+        var attributes = new List<string>();
+
+        if (definition.BecomesVeteran is not null)
+        {
+            if (string.IsNullOrWhiteSpace(definition.BecomesVeteran))
+            {
+                warnings.Add("组件 'keywords' 项 'BecomesVeteran' 的卡 id 空白（不可还原——已跳过）。");
+            }
+            else
+            {
+                attributes.Add(CardAttributeMap.BecomesVeteranPrefix + definition.BecomesVeteran);
+            }
+        }
+
+        var veteranOfCarried = false;
+        if (definition.VeteranOf is not null)
+        {
+            if (string.IsNullOrWhiteSpace(definition.VeteranOf))
+            {
+                warnings.Add("组件 'keywords' 项 'VeteranOf' 的卡 id 空白（不可还原——已跳过）。");
+            }
+            else
+            {
+                attributes.Add(CardAttributeMap.VeteranOfPrefix + definition.VeteranOf);
+                veteranOfCarried = true;
+            }
+        }
+
+        foreach (var keyword in definition.Keywords)
+        {
+            if (string.Equals(keyword.Id, KeywordIds.Veteran, StringComparison.Ordinal))
+            {
+                if (veteranOfCarried)
+                {
+                    // 端口吸收标记（单一真源的对偶——不再单独处理、不警告）。
+                    continue;
+                }
+
+                warnings.Add(
+                    $"组件 'keywords' 项 '{KeywordIds.Veteran}' 无反向映射（裸「老兵」标记无 VeteranOf 端口——不可还原，已跳过）。");
+                continue;
+            }
+
+            if (keyword.Value is null)
+            {
+                if (CardAttributeMap.IsValuedKeyword(keyword.Id))
+                {
+                    warnings.Add(
+                        $"组件 'keywords' 项 '{keyword.Id}' 参值不可表达（参值型须为正整数，实际缺失——不可还原，已跳过）。");
+                    continue;
+                }
+
+                if (CardAttributeMap.TryGetExactAttribute(keyword.Id, out var exact))
+                {
+                    attributes.Add(exact);
+                    continue;
+                }
+
+                warnings.Add($"组件 'keywords' 项 '{keyword.Id}' 无反向映射（不可还原，已跳过）。");
+                continue;
+            }
+
+            var value = keyword.Value.Value;
+            if (CardAttributeMap.IsValuedKeyword(keyword.Id))
+            {
+                if (CardAttributeMap.TryGetValuedAttribute(keyword.Id, value, out var valued))
+                {
+                    attributes.Add(valued);
+                    continue;
+                }
+
+                warnings.Add(
+                    $"组件 'keywords' 项 '{keyword.Id}'（值 {value}）参值不可表达（参值型须为正整数——不可还原，已跳过）。");
+                continue;
+            }
+
+            if (CardAttributeMap.TryGetExactAttribute(keyword.Id, out _))
+            {
+                warnings.Add(
+                    $"组件 'keywords' 项 '{keyword.Id}'（值 {value}）参值不可表达（该标识无值位——不可还原，已跳过）。");
+                continue;
+            }
+
+            warnings.Add($"组件 'keywords' 项 '{keyword.Id}' 无反向映射（不可还原，已跳过）。");
+        }
+
+        // 留痕＝可还原原文（非静默丢失留痕项）：原样补入合成输出、不落警告。
+        foreach (var unmapped in definition.UnmappedAttributes)
+        {
+            attributes.Add(unmapped);
+        }
+
+        ComponentText.WriteStringArray(writer, "attributes", attributes);
+    }
 }
 
 /// <summary>
@@ -382,6 +576,24 @@ public sealed class EffectsDefinition : ICardDataComponentDefinition
 
         return new EffectsDefinition(ComponentText.GetStringArray(element, "prefabs"), inline);
     }
+
+    /// <summary>
+    /// 序列化（写方向对称；默认策略）：prefabs 引用原样按序 → inline 对象态按序（经 <c>PrefabJson</c> 同版本
+    /// v2 序列化后以对象嵌入——读宽写窄：字符串态读入统一写为对象态）；两区分组保序；空＝显式 <c>[]</c>。
+    /// </summary>
+    public static void Write(EffectsDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
+    {
+        ComponentText.WriteStringArray(writer, "prefabs", definition.Prefabs);
+
+        writer.WriteStartArray("inline");
+        foreach (var snapshot in definition.Inline)
+        {
+            using var document = JsonDocument.Parse(Orc.Cards.PrefabJson.Serialize(snapshot));
+            document.RootElement.WriteTo(writer);
+        }
+
+        writer.WriteEndArray();
+    }
 }
 
 /// <summary>
@@ -399,7 +611,8 @@ internal static class BuiltInCardComponents
             CardComponentPhase.Construction,
             static (_, _, _) => Task.CompletedTask, // 空操作：数据经 CardDefinition 派生读面消费（P4c）
             TypeCategoryDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: TypeCategoryDefinition.Write);
 
         CardComponentRegistry.Register(
             FactionCostDefinition.DefinitionName,
@@ -411,7 +624,8 @@ internal static class BuiltInCardComponents
                 return Task.CompletedTask;
             },
             FactionCostDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: FactionCostDefinition.Write);
 
         CardComponentRegistry.Register(
             BattleStatsDefinition.DefinitionName,
@@ -423,7 +637,8 @@ internal static class BuiltInCardComponents
                 return Task.CompletedTask;
             },
             BattleStatsDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: BattleStatsDefinition.Write);
 
         // 加载期段（顺序：元数据 → 词条 → 效果）。
         CardComponentRegistry.Register(
@@ -442,7 +657,8 @@ internal static class BuiltInCardComponents
                 return Task.CompletedTask;
             },
             TagDataDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: TagDataDefinition.Write);
 
         CardComponentRegistry.Register(
             KeywordsDefinition.DefinitionName,
@@ -459,13 +675,15 @@ internal static class BuiltInCardComponents
                 return Task.CompletedTask;
             },
             KeywordsDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: KeywordsDefinition.Write);
 
         CardComponentRegistry.Register(
             EffectsDefinition.DefinitionName,
             CardComponentPhase.Load,
             static (_, _, _) => Task.CompletedTask, // 空操作：声明已在载入期转为效果注册项，装载走框架步骤
             EffectsDefinition.Read,
-            isBuiltIn: true);
+            isBuiltIn: true,
+            writer: EffectsDefinition.Write);
     }
 }

@@ -10,7 +10,11 @@ namespace Orc.Game.Cards.Data;
 /// 由调用侧（<c>KeywordsDefinition.Read</c>）按既有「留痕」口径承载（不 fail-fast、不阻断加载）。
 /// S2 加性（隐蔽数据映射转正式承载）：官方标识 `covert` → 「隐蔽」标记（<see cref="KeywordIds.Covert"/>；
 /// 词条标记方案——与被压制/烟幕同族；不打对战词条标）——**不再**归未实现留痕面。
-/// 其余未命中（含官方未实现项 `guard`/`shock`/`bond`/`alpine`/`salvage`/`OnlySpawnable`）
+/// 批 4 加性（守护数据映射转正式承载）：官方标识 `guard` → 「守护」词条（<see cref="KeywordIds.Guard"/>；
+/// 标记型——行为经守护维护链读点双通道承载；打对战词条标）——**不再**归未实现留痕面。
+/// 批 5 加性（冲击数据映射转正式承载）：官方标识 `shock` → 「冲击」词条（<see cref="KeywordIds.Shock"/>；
+/// 标记型——免反击经 C5 判定器条款、消耗经攻击执行段尾部承载；打对战词条标）——**不再**归未实现留痕面。
+/// 其余未命中（含官方未实现项 `bond`/`alpine`/`salvage`/`OnlySpawnable`）
 /// ＝返回 false，由调用侧归入未实现留痕面（不 fail-fast、不写日志——P9b＝b1）。
 /// </summary>
 internal static class CardAttributeMap
@@ -31,6 +35,8 @@ internal static class CardAttributeMap
         ["pincer"] = KeywordIds.Pincer,
         ["mobilize"] = KeywordIds.Mobilize,
         ["covert"] = KeywordIds.Covert,
+        ["guard"] = KeywordIds.Guard,
+        ["shock"] = KeywordIds.Shock,
 
         // Orc 自有（官方语料无对应；供社区标识使用）
         ["suppressed"] = KeywordIds.Suppressed,
@@ -47,6 +53,12 @@ internal static class CardAttributeMap
         ("heavyArmor", KeywordIds.Armor),        // heavyArmor1..3 → 重甲 X
         ("intel", KeywordIds.Intelligence),      // intel1..3 → 情报 X
     };
+
+    /// <summary>Exact 反向表（中文标识 → 英文标识；单源＝<see cref="Exact"/> 反转——防双表漂移）。</summary>
+    private static readonly Dictionary<string, string> ExactReverse = BuildExactReverse();
+
+    /// <summary>Valued 反向表（中文标识 → 前缀；单源＝<see cref="Valued"/> 反转）。</summary>
+    private static readonly Dictionary<string, string> ValuedReverse = BuildValuedReverse();
 
     /// <summary>
     /// 映射一个数据体标识为词条声明（未命中＝false——调用侧归入未实现留痕面）。
@@ -118,5 +130,78 @@ internal static class CardAttributeMap
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// 反向映射（X1 加性·写方向；Exact 反转 16 项）：词条标识 → 数据体英文标识。
+    /// 值位语义：Exact 标识无值位——带值词条经本路径不可表达（调用侧按「不可还原」口径警告处理）。
+    /// </summary>
+    /// <param name="keywordId">词条标识（项目 <see cref="KeywordIds"/> 标识）。</param>
+    /// <param name="attribute">数据体英文标识（未命中＝空串）。</param>
+    public static bool TryGetExactAttribute(string keywordId, out string attribute)
+    {
+        attribute = string.Empty;
+        if (string.IsNullOrWhiteSpace(keywordId))
+        {
+            return false;
+        }
+
+        if (ExactReverse.TryGetValue(keywordId, out var found))
+        {
+            attribute = found;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>参值型判定（写方向分类用：重甲/情报——参值形态经 <see cref="TryGetValuedAttribute"/> 生成）。</summary>
+    public static bool IsValuedKeyword(string keywordId)
+        => !string.IsNullOrWhiteSpace(keywordId) && ValuedReverse.ContainsKey(keywordId);
+
+    /// <summary>
+    /// 反向映射（X1 加性·写方向；Valued 反转 2 项）：参值型词条 → `heavyArmorN` / `intelN`。
+    /// 参值须为正整数（与读侧一致——int 范围内无附加上界）；缺值/非正＝不可表达（调用侧按「不可还原」口径警告处理）。
+    /// </summary>
+    /// <param name="keywordId">词条标识（重甲/情报）。</param>
+    /// <param name="value">参值（须为正整数）。</param>
+    /// <param name="attribute">数据体英文标识（未命中/参值非法＝空串）。</param>
+    public static bool TryGetValuedAttribute(string keywordId, int value, out string attribute)
+    {
+        attribute = string.Empty;
+        if (value <= 0 || string.IsNullOrWhiteSpace(keywordId))
+        {
+            return false;
+        }
+
+        if (ValuedReverse.TryGetValue(keywordId, out var prefix))
+        {
+            attribute = prefix + value;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Dictionary<string, string> BuildExactReverse()
+    {
+        var reverse = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (attribute, keywordId) in Exact)
+        {
+            reverse[keywordId] = attribute;
+        }
+
+        return reverse;
+    }
+
+    private static Dictionary<string, string> BuildValuedReverse()
+    {
+        var reverse = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (prefix, keyword) in Valued)
+        {
+            reverse[keyword] = prefix;
+        }
+
+        return reverse;
     }
 }

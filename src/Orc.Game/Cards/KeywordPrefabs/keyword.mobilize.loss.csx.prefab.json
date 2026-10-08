@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "root": {
+    "id": "keyword.mobilize.loss.csx",
+    "version": 1,
+    "mainTrigger": {
+      "id": "t.main",
+      "stableKey": "动员·受伤失去（csx）",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["card.damaged"],
+      "events": [
+        {
+          "id": "onCardDamaged",
+          "entry": "HandleAsync",
+          "csx": "// 动员·受伤失去（csx 行为引用样本）：本卡受到伤害 → 撤销「动员」（经 EffectRuntime 受控入口）。\nFunc<Orc.Cards.CardEventView, Context, CancellationToken, Task> HandleAsync = async (view, ctx, ct) =>\n{\n    if (view.Host is not Orc.Cards.Card card)\n    {\n        return;\n    }\n\n    if (view.Card is not Orc.Cards.Card damaged || !object.ReferenceEquals(damaged, card))\n    {\n        return; // 非本卡受到伤害：不处理\n    }\n\n    var runtime = Orc.Game.Effects.EffectRuntime.ResolveFor(card);\n    if (runtime is null)\n    {\n        return; // 对局服务不可达：降级跳过（独立构造等）\n    }\n\n    await runtime.RevokeAsync(card, Orc.Game.Cards.KeywordIds.Mobilize, ct);\n};\n",
+          "version": 1
+        }
+      ],
+      "version": 1
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

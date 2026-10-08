@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "root": {
+    "id": "keyword.mobilize.accrual",
+    "version": 1,
+    "mainTrigger": {
+      "id": "t.main",
+      "stableKey": "动员·回合累积",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["turn.start"],
+      "events": [
+        {
+          "id": "onTurnStart",
+          "entry": "HandleAsync",
+          "assemblyKey": "keyword.mobilize.accrual",
+          "version": 1
+        }
+      ],
+      "version": 1
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

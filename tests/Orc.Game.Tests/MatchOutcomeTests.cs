@@ -1,4 +1,5 @@
 using Orc.Game;
+using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Commanding;
 using Orc.Game.Targeting;
@@ -68,7 +69,7 @@ public class MatchOutcomeTests
         Assert.Equal(MatchState.Ended, match.State);
         Assert.Same(playerA, match.Winner);
         Assert.Equal(0, playerB.HqHealth);
-        Assert.Same(playerB.Hq, match.Battlefield.PlayerBSupportLine[0].Occupant);
+        Assert.Same(playerB.Hq, match.Battlefield.PlayerBSupportLine[Battlefield.HqSlotIndex].Occupant);
         Assert.Equal(0, playerA.Points);
         Assert.False(striker.GetData<CommandData>().CanAttack);
         Assert.False(striker.GetData<CommandData>().CanMove);

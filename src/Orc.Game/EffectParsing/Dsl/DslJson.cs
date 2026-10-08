@@ -135,6 +135,7 @@ public static class DslJson
         Name = op.Name,
         Nested = op.Nested?.Select(ToDto).ToList(),
         Until = op.Until,
+        Field = op.Field,
         Value = op.Value,
     };
 
@@ -180,6 +181,7 @@ public static class DslJson
                 dto.Name,
                 dto.Nested?.Select(FromDto).ToList(),
                 dto.Until,
+                field: dto.Field,
                 value: dto.Value);
 
             var errors = DslOpRegistry.Validate(op);

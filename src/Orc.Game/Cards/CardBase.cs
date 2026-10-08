@@ -111,7 +111,7 @@ public abstract class CardBase : Orc.Cards.Card
     /// <summary>
     /// 词条装载上下文提供器（2C-A1 加性面；internal；A2 加性：存储内聚至词条管理组件——本属性为其转发面）：
     /// 加载时（<see cref="LoadAsync"/> 的词条装载步骤）与运行时授予时装载词条组件运行逻辑所需的对局级服务
-    /// （如「造成攻击伤害」触发器——伏击/免疫/重甲挂载点；钳击/压制所需的对局服务）；由对局加载路径经卡牌库注入（延迟读取）；
+    /// （如「造成攻击伤害」触发器——伏击/免疫/重甲效果的改写注册口；钳击/压制所需的对局服务）；由对局加载路径经卡牌库注入（延迟读取）；
     /// 独立构造（脱离对局）＝null（词条组件运行逻辑装载跳过注册、不抛错——功能不可用、加载不失败）。
     /// </summary>
     internal Func<KeywordLoadContext?>? KeywordLoadContextProvider

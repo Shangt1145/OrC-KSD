@@ -491,7 +491,7 @@ public class CovertMechanismTests
 
         var covert = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CovertScoutId, 1); // 隐蔽 2/5
         var plain = await CommandTestKit.PrepareOnSupportAsync(match, playerA, PlainUnitId, 2);   // 普通 2/5
-        var host = await CommandTestKit.PrepareOnSupportAsync(match, playerA, PlainUnitId, 3);    // 光环宿主（普通）
+        var host = await CommandTestKit.PrepareOnSupportAsync(match, playerA, PlainUnitId, 1);    // 光环宿主（普通）
 
         // 普通宿主声明「友方 +1 攻击」光环：隐蔽单位不被收集（无加成）；普通单位照常受益。
         var runtime = EffectRuntime.ResolveFor(host);

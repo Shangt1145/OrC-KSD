@@ -39,6 +39,8 @@ public class EffectParseCorpusTests
         var withEffects = 0;
         var totalEffects = 0;
         var totalUnresolved = 0;
+        var withDeclarations = 0;
+        var totalDeclarations = 0;
         var silent = 0;
         var semanticsComplete = 0;
         var withPlaceholderCondition = 0;
@@ -94,10 +96,16 @@ public class EffectParseCorpusTests
 
             totalEffects += result.Effects.Count;
             totalUnresolved += result.Unresolved.Count;
+            totalDeclarations += result.Declarations.Count;
+            if (result.Declarations.Count > 0)
+            {
+                withDeclarations++;
+            }
 
-            // R8 观测面（E1-38）：既无效果、也无诊断＝**静默丢弃**（应为 0；非 0 即违规——含"整条仅词条行"的合法空文本，
-            // 故此处只统计与列举、不设硬门槛，供人工复核）。
-            if (result.Effects.Count == 0 && result.Unresolved.Count == 0)
+            // R8 观测面（E1-38→序列③）：既无效果、也无诊断、也无声明产出＝**静默丢弃**（应为 0；非 0 即违规——含"整条仅词条行"的
+            // 合法空文本，故此处只统计与列举、不设硬门槛，供人工复核）。序列③口径更新：判定成立的词条行产出**声明**（新通道）
+            // ⇒ 词条行整体移出静默类（口径变化对照见报告「词条行联动对照」节；声明不得计入效果/覆盖率计——防口径污染）。
+            if (result.Effects.Count == 0 && result.Unresolved.Count == 0 && result.Declarations.Count == 0)
             {
                 silent++;
                 if (silentSamples.Count < 20)
@@ -118,12 +126,17 @@ public class EffectParseCorpusTests
         }
 
         var report = BuildReport(
-            corpusPath, texts.Count, withEffects, totalEffects, totalUnresolved, silent, silentSamples, reasons, samples,
+            corpusPath, texts.Count, withEffects, totalEffects, totalUnresolved, withDeclarations, totalDeclarations,
+            silent, silentSamples, reasons, samples,
             semanticsComplete, withPlaceholderCondition, withNeedsCsx);
 
         // S3：覆盖率报告**新增「本机制样本（老兵／隐蔽）」独立节**（逐例：文本／来源／结果类别／完整性／产物要点；
         // 全量对拍语料与总体数据口径**保持不变**——样本性质不同〔机制专项 vs 全量对拍〕，不并入对拍循环）。
         report += Environment.NewLine + BuildMechanismSamplesSection();
+
+        // 序列③：覆盖率报告**新增「词条行（声明产出）」独立节**（与专项测试同源、逐例断言随行；
+        // 独立于全量对拍语料——总体数据口径保持不变）。
+        report += Environment.NewLine + BuildKeywordLineSamplesSection();
 
         var directory = Path.Combine(AppContext.BaseDirectory, "EffectParsing", "report");
         Directory.CreateDirectory(directory);
@@ -133,7 +146,8 @@ public class EffectParseCorpusTests
         _output.WriteLine(
             $"语料：{texts.Count} 条；产出效果：{withEffects} 条（语义完整 {semanticsComplete}／含占位条件 {withPlaceholderCondition}／"
             + $"含 needsCsx {withNeedsCsx}）；效果总数：{totalEffects}；"
-            + $"未解析记录：{totalUnresolved}；既无效果也无诊断：{silent}");
+            + $"含词条行声明：{withDeclarations} 条（声明总数 {totalDeclarations}）；"
+            + $"未解析记录：{totalUnresolved}；既无效果、无诊断、无声明：{silent}");
         foreach (var pair in reasons.OrderByDescending(p => p.Value).Take(12))
         {
             _output.WriteLine($"  {pair.Value,5}  {pair.Key}");
@@ -149,6 +163,8 @@ public class EffectParseCorpusTests
         int withEffects,
         int totalEffects,
         int totalUnresolved,
+        int withDeclarations,
+        int totalDeclarations,
         int silent,
         IReadOnlyList<string> silentSamples,
         IReadOnlyDictionary<string, int> reasons,
@@ -167,7 +183,9 @@ public class EffectParseCorpusTests
         builder.Append("| 产出 0 效果 | ").Append(total - withEffects).AppendLine(" |");
         builder.Append("| 效果总数 | ").Append(totalEffects).AppendLine(" |");
         builder.Append("| 未解析记录总数 | ").Append(totalUnresolved).AppendLine(" |");
-        builder.Append("| **既无效果、也无诊断（R8 违规面）** | ").Append(silent).AppendLine(" |");
+        builder.Append("| 含词条行声明产出 | ").Append(withDeclarations).AppendLine(" |");
+        builder.Append("| 词条行声明总数 | ").Append(totalDeclarations).AppendLine(" |");
+        builder.Append("| **既无效果、无诊断、无声明（R8 违规面）** | ").Append(silent).AppendLine(" |");
         var rate = total == 0 ? 0 : withEffects * 100.0 / total;
         builder.Append("| 覆盖率（**结构**口径＝甲） | ").Append(rate.ToString("F1")).AppendLine("% |");
         var completeRate = total == 0 ? 0 : semanticsComplete * 100.0 / total;
@@ -182,6 +200,19 @@ public class EffectParseCorpusTests
         builder.Append("| 含 `needsCsx`／`csx` 逃生舱 | ").Append(withNeedsCsx)
             .AppendLine(" | 已知语义、待 csx 实现 |");
         builder.AppendLine("| 产出 0 效果（未解析） | ").Append(total - withEffects).AppendLine(" | 显式失败 + 诊断 |");
+        builder.AppendLine();
+
+        // 序列③：**词条行联动对照**（批 4·序列③基线→现——"三项对照"：声明／未解析变化／静默下降；
+        // 声明不得计入效果/覆盖率计——防口径污染）。基线＝改造前实测（对照材料：_work/corpus-dump-true-old-ops.tsv）。
+        builder.AppendLine("## 词条行联动对照（批 4·序列③）").AppendLine();
+        builder.AppendLine("| 指标 | 基线（改造前） | 现 | 差异说明 |").AppendLine("|---|---|---|---|");
+        builder.Append("| 含词条行声明产出 | 0（无通道） | ").Append(withDeclarations)
+            .AppendLine(" | 新增维度（判定成立的词条行从「静默丢弃」改为产出声明） |");
+        builder.Append("| 词条行声明总数 | 0（无通道） | ").Append(totalDeclarations).AppendLine(" | 新增维度 |");
+        builder.Append("| 未解析记录总数 | 532 | ").Append(totalUnresolved)
+            .AppendLine(" | +3＝「压制/抑制」复合词误读修正 +6／词条行「未解析转声明」-3（b/c 异常子类 3 条为原因变更、计数不变）；逐条明细见交付说明对照表 |");
+        builder.Append("| 静默（无效果、无未解析、无声明） | 0 | ").Append(silent)
+            .AppendLine(" | 语料无「整条仅被丢弃词条行」案例；口径更新后仍 0 |");
         builder.AppendLine();
 
         builder.AppendLine("## 未解析原因 TOP").AppendLine();
@@ -222,7 +253,7 @@ public class EffectParseCorpusTests
 
     /// <summary>
     /// S3 机制样本（老兵／隐蔽）：**卡池原文逐字**（含弯引号/空格）＋来源标注（分卷/行号——供后续漂移核对）
-    /// ＋完整性档位（Q&A-1c 分层规则：V4「冲击」为唯一留痕豁免，其余完整档）。
+    /// ＋完整性档位（序列③：V4 经解析层回补〔『获得冲击』真映射〕归完整档——**留痕豁免档位机制保留、当前档为空**；其余完整档）。
     /// <para>样本纪律（Q&A-6）：逐例＝卡池对应场景的连续句组；不并入全量对拍语料（总体数据口径保持不变）。</para>
     /// </summary>
     private static readonly (string Id, string Text, string Source, string Completeness)[] MechanismSamples =
@@ -230,7 +261,7 @@ public class EffectParseCorpusTests
         ("V1", "在场上的第三回合开始时，升为老兵。", "part-13.txt:29", "完整档（无占位、无 needsCsx）"),
         ("V2", "本单位对敌方总部造成伤害时，升为老兵。升为老兵时，将 1 张“一号坦克 B 型”加入手牌。", "part-03.txt:61-62", "完整档（无占位、无 needsCsx）"),
         ("V3", "友方单位升为老兵时，本单位获得 +2+2。", "part-07.txt:35", "完整档（无占位、无 needsCsx）"),
-        ("V4", "使 1 个老兵单位获得奋战和冲击。", "part-02.txt:23", "留痕豁免（「冲击」needsCsx 显式标注）"),
+        ("V4", "使 1 个老兵单位获得奋战和冲击。", "part-02.txt:23", "完整档（无占位、无 needsCsx）"),
         ("C5", "揭示：若是友方回合，获得 +2 攻击力。", "part-11.txt:48", "完整档（无占位、无 needsCsx）"),
         ("C6", "部署：揭示 1 个隐蔽单位。", "part-11.txt:60", "完整档（无占位、无 needsCsx）"),
         ("C7", "友方隐蔽单位被揭示时，使所有友方单位获得 +1+1。", "part-05.txt:10", "完整档（无占位、无 needsCsx）"),
@@ -253,7 +284,7 @@ public class EffectParseCorpusTests
         var builder = new StringBuilder();
         builder.AppendLine("## 本机制样本（老兵／隐蔽）").AppendLine();
         builder.AppendLine("> S3 机制专项样本（**独立于**全量对拍语料——总体数据口径不变）；逐字入断言，来源供漂移核对；");
-        builder.AppendLine("> 完整性档位分层规则见需求 Q&A-1c（V4「冲击」为唯一留痕豁免）。").AppendLine();
+        builder.AppendLine("> 完整性档位分层规则：完整档＝无 needsCsx/csx；留痕豁免档＝含显式留痕（批 4·序列③后 V4 归完整档、豁免档为空——档位机制保留）。").AppendLine();
         builder.AppendLine("| 样本 | 原文 | 来源 | 结果类别 | 完整性档位 | 产物要点 |").AppendLine("|---|---|---|---|---|---|");
 
         var index = 0;
@@ -300,7 +331,8 @@ public class EffectParseCorpusTests
                 }
             }
 
-            // 完整性档位与产物一致（不静默降级）：完整档＝无 needsCsx/csx；留痕豁免＝含显式留痕。
+            // 完整性档位与产物一致（不静默降级）：完整档＝无 needsCsx/csx；留痕豁免＝含显式留痕
+            // （序列③起豁免档为空——机制保留以备后续）。
             if (completeness.StartsWith("完整档", StringComparison.Ordinal))
             {
                 Assert.False(hasTrace, $"样本 {id} 标注完整档，但含 needsCsx/csx 产痕。");
@@ -345,6 +377,61 @@ public class EffectParseCorpusTests
         Assert.Contains("V1", content, StringComparison.Ordinal);
         Assert.Contains("V4", content, StringComparison.Ordinal);
         Assert.Contains("C7", content, StringComparison.Ordinal);
+    }
+
+    // ---------- 序列③：词条行（声明产出）——独立手工样本节（与专项测试同源） ----------
+
+    /// <summary>
+    /// 生成「词条行（声明产出）」节（逐例：类别／文本／声明产出／未解析数／效果数／备注）——
+    /// 样本与专项测试（<see cref="KeywordLineDeclarationTests.Samples"/>）**同源**；逐例断言随行（声明四元串、
+    /// 未解析数、效果数——不静默、不误跑、不产效果单元）。
+    /// </summary>
+    private static string BuildKeywordLineSamplesSection()
+    {
+        var parser = EffectParser.CreateDefault(out var lexiconFailures);
+        Assert.Empty(lexiconFailures);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("## 词条行（声明产出）").AppendLine();
+        builder.AppendLine("> 批 4·序列③专项样本（**独立于**全量对拍语料——总体数据口径不变；与专项测试同源）；");
+        builder.AppendLine("> 逐例断言随行（声明四元／未解析数／效果数——词条行不产效果单元）。").AppendLine();
+        builder.AppendLine("| 样本 | 类别 | 原文 | 声明产出 | 未解析数 | 效果数 | 备注 |").AppendLine("|---|---|---|---|---|---|---|");
+
+        foreach (var (id, category, text, declarations, unresolved, effects, note) in KeywordLineDeclarationTests.Samples)
+        {
+            var result = parser.Parse(text);
+            Assert.Equal(declarations, string.Join("; ", result.Declarations.Select(KeywordLineDeclarationTests.Describe)));
+            Assert.Equal(unresolved, result.Unresolved.Count);
+            Assert.Equal(effects, result.Effects.Count);
+
+            builder.Append("| ").Append(id)
+                .Append(" | ").Append(category)
+                .Append(" | ").Append(text.Replace("|", "\\|", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal))
+                .Append(" | ").Append(declarations.Length == 0 ? "（无）" : declarations.Replace("|", "\\|", StringComparison.Ordinal))
+                .Append(" | ").Append(unresolved)
+                .Append(" | ").Append(effects)
+                .Append(" | ").Append(note.Replace("|", "\\|", StringComparison.Ordinal))
+                .AppendLine(" |");
+        }
+
+        return builder.ToString();
+    }
+
+    [Fact]
+    public void KeywordLine_Samples_Report()
+    {
+        // 序列③：词条行专项样本——独立报告文件（与语料报告并入节同源）。
+        var section = BuildKeywordLineSamplesSection();
+        var directory = Path.Combine(AppContext.BaseDirectory, "EffectParsing", "report");
+        Directory.CreateDirectory(directory);
+        var reportPath = Path.Combine(directory, "keyword-line-samples.md");
+        File.WriteAllText(reportPath, "# 效果解析器·词条行样本报告（声明产出）" + Environment.NewLine + Environment.NewLine + section);
+
+        Assert.True(File.Exists(reportPath));
+        var content = File.ReadAllText(reportPath);
+        Assert.Contains("词条行（声明产出）", content, StringComparison.Ordinal);
+        Assert.Contains("K1", content, StringComparison.Ordinal);
+        Assert.Contains("K13", content, StringComparison.Ordinal);
     }
 
     /// <summary>把原因里的原文片段抹掉，便于聚合计数。</summary>

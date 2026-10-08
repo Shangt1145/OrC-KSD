@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "demo.rifleman",
+  "name": "步枪兵",
+  "components": [
+    {
+      "component": "typeCategory",
+      "type": [
+        "infantry"
+      ]
+    },
+    {
+      "component": "factionCost",
+      "faction": "Germany",
+      "kredits": 0
+    },
+    {
+      "component": "battleStats",
+      "operationCost": 1,
+      "attack": 1,
+      "defense": 2
+    },
+    {
+      "component": "tagData",
+      "rarity": "Standard"
+    }
+  ]
+}

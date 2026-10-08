@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "demo.grenadier",
+  "name": "掷弹兵",
+  "components": [
+    {
+      "component": "typeCategory",
+      "type": [
+        "infantry"
+      ]
+    },
+    {
+      "component": "factionCost",
+      "faction": "Germany",
+      "kredits": 1
+    },
+    {
+      "component": "battleStats",
+      "operationCost": 1,
+      "attack": 2,
+      "defense": 3
+    },
+    {
+      "component": "tagData",
+      "rarity": "Standard"
+    },
+    {
+      "component": "effects",
+      "inline": [
+        {
+          "schemaVersion": 2,
+          "root": {
+            "id": "demo.grenade",
+            "version": 1,
+            "mainTrigger": {
+              "id": "t.main",
+              "stableKey": "演示·掷弹（部署伤害）",
+              "kind": "passive",
+              "viewType": "Orc.Cards.CardEventView",
+              "hooks": [
+                "unit.deployed"
+              ],
+              "events": [
+                {
+                  "id": "onUnitDeployed",
+                  "entry": "HandleAsync",
+                  "csx": "// 演示·掷弹（内联效果·对象态）：unit.deployed → Host==载荷单位 → 对敌方一个单位造成 1 点伤害。\nFunc<Orc.Cards.CardEventView, Context, CancellationToken, Task> HandleAsync = async (view, ctx, ct) =>\n{\n    if (view.Unit is not Orc.Cards.Card deployed || !object.ReferenceEquals(deployed, view.Host))\n    {\n        return; // 非本单位部署：不处理（Host==载荷过滤）\n    }\n\n    var runtime = Orc.Game.Effects.EffectRuntime.ResolveFor(deployed);\n    if (runtime is null)\n    {\n        return; // 无效果运行时：跳过（脱局场景）\n    }\n\n    var targets = await runtime.SelectAsync(deployed, new Orc.Game.Effects.EffectSelector(\"one\", \"enemy\", null, null, null, null, null));\n    foreach (var target in targets)\n    {\n        await runtime.DamageAsync(target, 1, deployed, ct);\n    }\n};\n",
+                  "version": 1
+                }
+              ],
+              "version": 1
+            },
+            "otherTriggers": [],
+            "modings": [],
+            "injects": []
+          }
+        }
+      ]
+    }
+  ]
+}

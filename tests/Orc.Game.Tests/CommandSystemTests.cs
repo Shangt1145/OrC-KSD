@@ -234,7 +234,7 @@ public class CommandSystemTests
         await match.Initialize();
         // 加入路径不要求归属：构造无主已单位化单位（Owner＝null）。
         var unit = (UnitCard)match.CardLibrary.Instantiate(CommandTestKit.InfantryId);
-        var joinResult = await match.PlayManager.JoinUnitAsync(unit, match.Battlefield.PlayerASupportLine[2]);
+        var joinResult = await match.PlayManager.JoinUnitAsync(unit, match.Battlefield.PlayerASupportLine[3]); // 槽 3（避开 HQ 占位槽）
         Assert.Equal(PlayResultStatus.Success, joinResult.Status);
         CommandTestKit.Activate(unit);
 

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "root": {
+    "id": "demo.rally",
+    "version": 1,
+    "mainTrigger": {
+      "id": "t.main",
+      "stableKey": "演示·集结号（部署抽牌）",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": [
+        "unit.deployed"
+      ],
+      "events": [
+        {
+          "id": "onUnitDeployed",
+          "entry": "HandleAsync",
+          "csx": "// 演示·集结号（效果库效果）：unit.deployed → Host==载荷单位 → 从卡组抽 1 张牌。\nFunc<Orc.Cards.CardEventView, Context, CancellationToken, Task> HandleAsync = async (view, ctx, ct) =>\n{\n    if (view.Unit is not Orc.Cards.Card deployed || !object.ReferenceEquals(deployed, view.Host))\n    {\n        return; // 非本单位部署：不处理（Host==载荷过滤）\n    }\n\n    var runtime = Orc.Game.Effects.EffectRuntime.ResolveFor(deployed);\n    if (runtime is null)\n    {\n        return; // 无效果运行时：跳过（脱局场景）\n    }\n\n    await runtime.DrawAsync(deployed, 1, ct); // 抽 1 张牌（走玩家管理器——含满手爆牌裁决）\n};\n",
+          "version": 1
+        }
+      ],
+      "version": 1
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

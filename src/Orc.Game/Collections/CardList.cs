@@ -14,6 +14,8 @@ namespace Orc.Game.Collections;
 /// Instantiate 经卡牌库把名单转换为卡牌实例集（纯转换，不含洗牌/抽取等副作用）。
 /// 〔G7 回迁基础件〕InsertInstanceAt＝「新增条目＋装配实例」封装的单操作（原子；卡组侧已含同一实例＝明确拒绝）；
 /// ContainsInstance＝实例存在性只读查询（回迁动作「重复归属」前置校验的读面）。
+/// 〔批 6 定向取卡基础件〕RemoveInstance＝按实例移除条目（引用相等匹配；明确失败〔异常〕＋原子〔校验先于变更〕；
+/// 移除即释放卡组侧归属、实例此后可再次被装入；配套读面保持最小——不加新读面）。
 /// </summary>
 public sealed class CardList : IReadOnlyList<string>
 {
@@ -194,6 +196,31 @@ public sealed class CardList : IReadOnlyList<string>
     {
         ArgumentNullException.ThrowIfNull(instance);
         return _items.Any(entry => ReferenceEquals(entry.Instance, instance));
+    }
+
+    /// <summary>
+    /// 按实例移除条目（批 6 定向取卡基础件）：按**引用相等**匹配已装配实例的条目并稳定删除——其余条目相对顺序保持、计数-1；
+    /// **移除即释放卡组侧归属**（实例此后可再次被装入，如回迁/取卡等路径；设计不变量＝「任何时刻至多归属一处」——
+    /// 本基础件负责卡组侧脱出、跨集合唯一性由动作层组合保证）。
+    /// 匹配基准：只匹配已装配实例的条目（未装载条目无实例可比、不在本操作语义内）。
+    /// 原子：校验通过才变更（失败＝集合不变）。失败＝明确拒绝（异常）——「明确失败优于静默」（容器风格）：
+    /// 实例不存在／已不在（重复移除）皆抛；动作层在调用前先做前置校验（<see cref="ContainsInstance"/>），
+    /// 将「不在卡组」转为结构化结果（容器域异常与动作层结果化解耦）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">instance 为 null。</exception>
+    /// <exception cref="InvalidOperationException">实例不存在于卡组（引用不匹配任何已装配实例的条目——重复移除同此）。</exception>
+    public void RemoveInstance(CardBase instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        var index = _items.FindIndex(entry => ReferenceEquals(entry.Instance, instance));
+        if (index < 0)
+        {
+            throw new InvalidOperationException(
+                $"卡牌 '{instance.Name}' 不在卡组中（按实例移除被拒绝——实例不存在）。");
+        }
+
+        _items.RemoveAt(index);
     }
 
     /// <summary>以给定确定性随机源就地打乱（Fisher–Yates；对局路径经对局随机服务〔受控源形态〕传入、可复现——G8：集合不持有随机源）。</summary>

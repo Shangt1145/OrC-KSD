@@ -266,10 +266,10 @@ public class JudicatorRevalidationDedupTests
             () => mover.Modifiers.AddModifierAsync(new AddModifier(CardStatFields.OperateCost, 5, costSource)));
         Assert.Equal(CommandResultStatus.Failed, moveRun.Status);
         Assert.Equal(CommandFailureReason.ExecutionRejected, moveRun.FailureReason);
-        Assert.Same(match.Battlefield.GetSupportLine(playerA)[2], mover.GetData<UnitStateData>().Position);
+        Assert.Same(match.Battlefield.GetSupportLine(playerA)[4], mover.GetData<UnitStateData>().Position);
         Assert.Equal(3, playerA.Points); // 零副作用：未扣费
 
-        var attacker = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var attacker = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         CommandTestKit.Activate(attacker);
         var victim = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 0);
         var attackCostSource = new object();
@@ -340,11 +340,11 @@ public class JudicatorRevalidationDedupTests
             () => SuppressRules.ApplyAsync(mover));
         Assert.Equal(CommandResultStatus.Failed, moveRun.Status);
         Assert.Equal(CommandFailureReason.ExecutionRejected, moveRun.FailureReason);
-        Assert.Same(match.Battlefield.GetSupportLine(playerA)[2], mover.GetData<UnitStateData>().Position);
+        Assert.Same(match.Battlefield.GetSupportLine(playerA)[4], mover.GetData<UnitStateData>().Position);
         Assert.True(mover.GetData<CommandData>().CanMove); // 零副作用：两 bool 未变
         Assert.Equal(2, playerA.Points); // 零副作用：未扣费
 
-        var attacker = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var attacker = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         CommandTestKit.Activate(attacker);
         var victim = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 0);
         var attackRun = await RunCommandWithInterludeAsync(
@@ -494,7 +494,7 @@ public class JudicatorRevalidationDedupTests
         var playerB = match.Players[1];
         var probed = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var rejected = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var enemyAnchor = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 2);
         CommandTestKit.Activate(probed);
         CommandTestKit.Activate(rejected);
@@ -502,7 +502,7 @@ public class JudicatorRevalidationDedupTests
         await match.ResourceManager.AddPointsAsync(playerA, 5);
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         var probedSlot = match.Battlefield.GetSupportLine(playerA)[1];
-        var rejectedSlot = match.Battlefield.GetSupportLine(playerA)[2];
+        var rejectedSlot = match.Battlefield.GetSupportLine(playerA)[4];
 
         // ---------- 改写前（基线）：压制态 = 移动不可用 + 移动复验拒绝 ----------
         Assert.True(await SuppressRules.ApplyAsync(probed));
@@ -567,7 +567,7 @@ public class JudicatorRevalidationDedupTests
         Assert.False(MoveRecheck(match, probed, probedSlot, match.Battlefield.FrontLine[1]));
 
         // 回退后恢复原行为（真实指挥流程拒绝）：槽位复用（succeeded 已离开槽 3；目标槽避开前线占用者）。
-        var restoredRunUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var restoredRunUnit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         CommandTestKit.Activate(restoredRunUnit);
         var restoredRun = await RunCommandWithInterludeAsync(
             match, bridge, restoredRunUnit, match.Battlefield.FrontLine[2].Ref,
@@ -588,7 +588,7 @@ public class JudicatorRevalidationDedupTests
         var playerB = match.Players[1];
         var probed = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var rejected = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var victim = await CommandTestKit.PrepareOnFrontAsync(match, playerB, CommandTestKit.InfantryId, 0); // 攻 2 / 防 5
         var rearTarget = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.InfantryId, 2); // 后排目标（回退阶用）
         CommandTestKit.Activate(probed);
@@ -673,7 +673,7 @@ public class JudicatorRevalidationDedupTests
         var playerB = match.Players[1];
         var probed = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var rejected = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        var succeeded = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         CommandTestKit.Activate(probed);
         CommandTestKit.Activate(rejected);
         CommandTestKit.Activate(succeeded);
@@ -698,7 +698,7 @@ public class JudicatorRevalidationDedupTests
         var blockedRun = await pending;
         Assert.Equal(CommandResultStatus.Failed, blockedRun.Status);
         Assert.Equal(CommandFailureReason.ExecutionRejected, blockedRun.FailureReason);
-        Assert.Same(match.Battlefield.GetSupportLine(playerA)[2], rejected.GetData<UnitStateData>().Position);
+        Assert.Same(match.Battlefield.GetSupportLine(playerA)[4], rejected.GetData<UnitStateData>().Position);
 
         // ---------- 改写：move.frontline-enemy → 恒假（「前线无敌人」——C8 豁免） ----------
         var moding = match.Judicators.RegisterModing(

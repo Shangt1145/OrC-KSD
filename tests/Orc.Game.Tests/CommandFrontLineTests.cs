@@ -224,7 +224,7 @@ public class CommandFrontLineTests
         var playerA = match.Players[0];
         var playerB = match.Players[1];
         var fighter = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.FighterId, 2);
-        var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 3);
+        var artillery = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.ArtilleryId, 2);
         await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.FighterId, 1); // 敌支援线战斗机
         CommandTestKit.Activate(fighter);
         CommandTestKit.Activate(artillery);

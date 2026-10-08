@@ -16,7 +16,11 @@ namespace Orc.Game.Tests;
 ///   被使用时触发/参值随动与缺省/非本卡不触发/移除后不触发/复装/运行时授予随动/死亡注销）。
 /// ③抑制（零改动）与亡计（核对已符合）由既有测试与申报承载；回滚路径＝通道级复用
 ///   （批 0「装载失败→词条授予整体回滚」已验——申报引用，不重做失败注入）。
+/// 批 4（数据化）适配：动员二效果形态由 C# 效果迁「数据壳＋行为引用」（<see cref="DynamicPassiveEffect"/>——
+/// 类型断言随形态调整、与行为断言并存；4a 口径）；行为等价断言（累积/失去/随动/幂等/死亡注销）保持；
+/// 机制层专项（库装载/绑定核验/运行时失败回滚/独立构造/端到端）见 <see cref="KeywordEffectBatch4Tests"/>。
 /// </summary>
+[Collection("IntelligenceStaticSerial")]
 public class KeywordEffectBatch1Tests
 {
     // ---------- 定义与工具 ----------
@@ -54,10 +58,10 @@ public class KeywordEffectBatch1Tests
         var playerA = match.Players[0];
         var unit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, MobilizeUnitId, 1);
 
-        // 效果随词条装载（内嵌效果通道）：两个动员效果在列、均处装载态。
-        var accrual = Assert.IsType<MobilizeAccrualEffect>(FindEffect(unit, "动员·回合累积"));
+        // 效果随词条装载（内嵌效果通道——批 4 数据化：两个数据效果在列、均处装载态）。
+        var accrual = Assert.IsType<DynamicPassiveEffect>(FindEffect(unit, "动员·回合累积"));
         Assert.True(accrual.IsMounted);
-        var loss = Assert.IsType<MobilizeLossEffect>(FindEffect(unit, "动员·受伤失去"));
+        var loss = Assert.IsType<DynamicPassiveEffect>(FindEffect(unit, "动员·受伤失去"));
         Assert.True(loss.IsMounted);
 
         // 行为等价：友方回合开始 +1/+1（累积）；敌方回合开始不加。
@@ -140,7 +144,7 @@ public class KeywordEffectBatch1Tests
         var playerA = match.Players[0];
         var unit = await CommandTestKit.PrepareOnSupportAsync(match, playerA, MobilizeUnitId, 1);
 
-        var accrual = Assert.IsType<MobilizeAccrualEffect>(FindEffect(unit, "动员·回合累积"));
+        var accrual = Assert.IsType<DynamicPassiveEffect>(FindEffect(unit, "动员·回合累积"));
 
         // 独立卸载效果（词条仍在）：行为随效果消失——「行为由效果承载」的黑盒证据（订阅随效果卸载撤销）。
         unit.RemoveEffect(accrual);

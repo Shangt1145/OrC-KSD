@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "demo.scout",
+  "name": "侦察兵",
+  "components": [
+    {
+      "component": "typeCategory",
+      "type": [
+        "infantry"
+      ]
+    },
+    {
+      "component": "factionCost",
+      "faction": "Germany",
+      "kredits": 1
+    },
+    {
+      "component": "battleStats",
+      "operationCost": 1,
+      "attack": 1,
+      "defense": 2
+    },
+    {
+      "component": "tagData",
+      "rarity": "Standard"
+    },
+    {
+      "component": "effects",
+      "inline": [
+        "{\"schemaVersion\":2,\"root\":{\"id\":\"demo.enlist\",\"version\":1,\"mainTrigger\":{\"id\":\"t.main\",\"stableKey\":\"演示·应征（卡组定向取卡）\",\"kind\":\"passive\",\"viewType\":\"Orc.Cards.CardEventView\",\"hooks\":[\"unit.joined\"],\"events\":[{\"id\":\"onUnitJoined\",\"entry\":\"HandleAsync\",\"csx\":\"// 演示·应征（内联效果·字符串态）：unit.joined → 从卡组定向抽取此牌（宿主自我取件；经受控面）。\\nFunc<Orc.Cards.CardEventView, Context, CancellationToken, Task> HandleAsync = async (view, ctx, ct) =>\\n{\\n    var self = view.Host as Orc.Cards.Card;\\n    if (self is null)\\n    {\\n        return;\\n    }\\n\\n    var runtime = Orc.Game.Effects.EffectRuntime.ResolveFor(self);\\n    if (runtime is null)\\n    {\\n        return;\\n    }\\n\\n    await runtime.FetchFromDeckAsync(self, ct);\\n};\\n\",\"version\":1}],\"version\":1},\"otherTriggers\":[],\"modings\":[],\"injects\":[]}}"
+      ]
+    }
+  ]
+}

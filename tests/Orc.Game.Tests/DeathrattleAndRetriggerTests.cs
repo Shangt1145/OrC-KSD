@@ -417,7 +417,7 @@ public class DeathrattleAndRetriggerTests
 
         var alive1 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         var alive2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        var dead = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 3);
+        var dead = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1);
         var inHand = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.InfantryId); // 在手（未上场）
 
         var exec1 = 0;

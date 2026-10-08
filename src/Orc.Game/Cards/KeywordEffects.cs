@@ -29,6 +29,19 @@ namespace Orc.Game.Cards;
 //   独立构造（脱离对局）＝上下文不可达＝不注册（功能不可用、加载不失败）。
 // ④参值（重甲）一律运行期经词条读取面读取（KeywordRules.GetKeywordValue——不构造期捕获；参值改写后行为随动）。
 // ⑤行为等价：语义与收薄前的组件实现逐一对应（含方向/防御边界）；差异与改签清单见批 2 实现记录与汇报。
+//
+// 批 3 词条效果化（C 档首迁）：闪击（能力型）行为迁效果承载（组件收薄为壳——标识／授予-移除／读取面；
+// 「部署置位」（unit.deployed → CanMove/CanAttack 置位）由效果承载——订阅建立/撤销随效果生命周期；仅部署路径生效）。
+// （批 3 时制品与装配口径同批 1/2——构造期 EmbedEffect；批 4 起闪击改经「数据壳＋行为引用」，见下批 4 段。）
+//
+// 批 4 数据化（路线 A·混合形态最小试点）：闪击／动员（含双效果）由「C# 效果注入」迁「数据壳＋行为引用」形态——
+// ①数据壳＝词条效果库制品（Cards/KeywordPrefabs/*.prefab.json：触发器/hooks 结构面＋assemblyKey 行为引用）；
+// ②绑定声明＝注册面（KeywordRegistry.DeclareEffectBindings——词条 → 效果清单）；
+// ③装载期实例化＝授予链（KeywordManager 的装载期实例化点——context.Engine 可用时实例化数据效果并接入内嵌效果通道）；
+// ④行为引用生产注册＝KeywordEffectAssembly（对局装配段——行为引用注册＋库装载＋绑定核验）。
+// 本文件中三个试点类型（BlitzDeployEffect／MobilizeAccrualEffect／MobilizeLossEffect）现为**行为引用目标**
+// （不再作为 Effect 装配——原效果实例订阅路径退役；行为经数据效果 hooks 触发器驱动——「回调先 vs hooks 后」语义差异
+// 见批 4 实现记录与汇报）；其余批 1/2 效果（压制/情报/伏击/重甲/免疫）保持「C# 效果注入」形态不变。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -94,41 +107,35 @@ public abstract class KeywordSignalEffect : PassiveEffect
 }
 
 /// <summary>
-/// 动员·回合累积效果（批 1；由 <see cref="MobilizeKeywordComponent"/> 内嵌装配）：
-/// 友方回合开始（拥有者回合开始相位）→ +1/+1（累积——修饰器来源＝词条组件〔构造传入〕、无撤销路径：
-/// 失去/再获得不清理既得）。仅在场（已单位化、未死亡、有位置）单位获得加成（卡在卡组/手牌/未在场时跳过）。
-/// 订阅挂点＝装载（OnMount）/卸载（OnUnmount）——行为随词条生灭。
+/// 动员·回合累积行为（批 4 数据化：由「C# 效果注入」迁「数据壳＋行为引用」形态——本类型为**行为引用目标**
+/// 〔数据壳 <c>keyword.mobilize.accrual</c> 的 assemblyKey 指向 <see cref="HandleAccrualAsync"/>〕；
+/// 原效果实例订阅路径退役，行为现由数据效果 hooks 触发器（<c>turn.start</c>）驱动〔订阅者广播段——语义差异申报〕）。
+/// 语义（等价基线）：友方回合开始（拥有者回合开始相位）→ +1/+1（累积——修饰器来源无撤销路径：失去/再获得不清理既得；
+/// 来源标识改签＝宿主卡〔原词条组件〕——黑盒等价＝既得 +1/+1 保留、不随效果卸载撤销，见批 4 申报）。
+/// 仅在场（已单位化、未死亡、有位置）单位获得加成（卡在卡组/手牌/未在场时跳过）。
 /// </summary>
-public sealed class MobilizeAccrualEffect : KeywordSignalEffect
+public sealed class MobilizeAccrualEffect
 {
-    private readonly object _source; // 修饰器来源＝词条组件（现状口径：既得保留——不挂效果来源、不随效果卸载撤销）
-
-    /// <summary>创建动员·回合累积效果（来源＝词条组件——修饰器记账来源标识）。</summary>
-    /// <exception cref="ArgumentNullException">source 为 null。</exception>
-    internal MobilizeAccrualEffect(object source)
-        : base("动员·回合累积")
+    private MobilizeAccrualEffect()
     {
-        ArgumentNullException.ThrowIfNull(source);
-        _source = source;
     }
 
-    /// <inheritdoc />
-    protected override async Task HandleUpdateAsync(
-        string updateType, IReadOnlyDictionary<string, object?>? payload, CancellationToken ct)
+    /// <summary>
+    /// 行为处理器（数据壳 <c>keyword.mobilize.accrual</c> 的 assemblyKey 目标；签名＝
+    /// <c>Func&lt;CardEventView, Context, CancellationToken, Task&gt;</c>）：条件/过滤/守卫保留在行为内部
+    /// （数据壳仅承载「触发器/hooks＋行为引用」结构面）——触发过滤（turn.start）由数据壳 hooks 承载、
+    /// 归属/在场过滤与加成逐条等价于原效果处理。
+    /// </summary>
+    internal static async Task HandleAccrualAsync(CardEventView view, Context ctx, CancellationToken ct)
     {
-        if (updateType != GameUpdates.TurnStart)
-        {
-            return;
-        }
-
-        if (payload?[GameUpdates.PayloadPlayer] is not Player current
-            || Host is not CardBase ownerCard
+        if (view.Player is not Player current
+            || view.Host is not CardBase ownerCard
             || !ReferenceEquals(ownerCard.Owner, current))
         {
             return; // 非该单位拥有者的回合开始：不处理
         }
 
-        if (Host is not UnitCard unit
+        if (view.Host is not UnitCard unit
             || !unit.TryGetData<UnitStateData>(out var state)
             || state.IsDestroyed
             || state.Position is null)
@@ -139,39 +146,40 @@ public sealed class MobilizeAccrualEffect : KeywordSignalEffect
         await unit.Modifiers.AddModifiersAsync(
             new Modifier[]
             {
-                new AddModifier(CardStatFields.Attack, 1, _source),
-                new AddModifier(CardStatFields.Defense, 1, _source),
+                new AddModifier(CardStatFields.Attack, 1, ownerCard), // 来源＝宿主卡（批 4 改签——既得保留、无撤销路径）
+                new AddModifier(CardStatFields.Defense, 1, ownerCard),
             },
             ct);
     }
 }
 
 /// <summary>
-/// 动员·受伤失去效果（批 1；由 <see cref="MobilizeKeywordComponent"/> 内嵌装配）：
-/// 监听 <see cref="GameUpdates.CardDamaged"/>（「受到伤害」——伤害结算后、实际扣减＞0 恰一次、先落定后发射；
-/// 伤害被完全吸收/归零＝不发）→ 失去动员（词条移除链——走移除链、既得 +1/+1 保留）。
+/// 动员·受伤失去行为（批 4 数据化：由「C# 效果注入」迁「数据壳＋行为引用」形态——本类型为**行为引用目标**
+/// 〔数据壳 <c>keyword.mobilize.loss</c> 的 assemblyKey 指向 <see cref="HandleLossAsync"/>〕；
+/// 原效果实例订阅路径退役，行为现由数据效果 hooks 触发器（<c>card.damaged</c>）驱动〔订阅者广播段——语义差异申报〕）。
+/// 语义（等价基线）：监听 <see cref="GameUpdates.CardDamaged"/>（「受到伤害」——伤害结算后、实际扣减＞0 恰一次、
+/// 先落定后发射；伤害被完全吸收/归零＝不发）→ 失去动员（词条移除链——走移除链、既得 +1/+1 保留）。
 /// 「受伤监听类信号 → RevokeAsync 自我撤销」——门户直调路径已退役（门户不再感知动员）。
-/// 订阅挂点＝装载（OnMount）/卸载（OnUnmount）——行为随词条生灭。
 /// </summary>
-public sealed class MobilizeLossEffect : KeywordSignalEffect
+public sealed class MobilizeLossEffect
 {
-    /// <summary>创建动员·受伤失去效果。</summary>
-    internal MobilizeLossEffect()
-        : base("动员·受伤失去")
+    private MobilizeLossEffect()
     {
     }
 
-    /// <inheritdoc />
-    protected override async Task HandleUpdateAsync(
-        string updateType, IReadOnlyDictionary<string, object?>? payload, CancellationToken ct)
+    /// <summary>
+    /// 行为处理器（数据壳 <c>keyword.mobilize.loss</c> 的 assemblyKey 目标；签名＝
+    /// <c>Func&lt;CardEventView, Context, CancellationToken, Task&gt;</c>）：触发过滤（card.damaged）由数据壳 hooks 承载、
+    /// 本卡过滤与自我撤销逐条等价于原效果处理。
+    /// </summary>
+    internal static async Task HandleLossAsync(CardEventView view, Context ctx, CancellationToken ct)
     {
-        if (updateType != GameUpdates.CardDamaged)
+        if (view.Host is not Card card)
         {
             return;
         }
 
-        var card = Host;
-        if (payload?[GameUpdates.PayloadCard] is not Card damaged || !ReferenceEquals(damaged, card))
+        if (view.Card is not Card damaged || !ReferenceEquals(damaged, card))
         {
             return; // 非本卡受到伤害：不处理
         }
@@ -589,5 +597,52 @@ public sealed class ImmuneZeroingEffect : KeywordDamageRewriteEffect
         }
 
         return Task.CompletedTask;
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 批 3/批 4：闪击（能力型；部署置位）——批 3 迁效果承载、批 4 迁「数据壳＋行为引用」；
+// 模式说明见文件头「批 3 词条效果化」与「批 4 数据化」段。
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// 闪击·部署置位行为（批 4 数据化：由「C# 效果注入」迁「数据壳＋行为引用」形态——本类型为**行为引用目标**
+/// 〔数据壳 <c>keyword.blitz.deploy-set</c> 的 assemblyKey 指向 <see cref="HandleDeploySetAsync"/>〕；
+/// 原效果实例订阅路径退役，行为现由数据效果 hooks 触发器（<c>unit.deployed</c>）驱动〔订阅者广播段——语义差异申报〕）。
+/// 行为（等价基线）：监听 <see cref="GameUpdates.UnitDeployed"/>（「单位部署」——单位化完成后发射、恰一次；
+/// 载荷＝{ Unit, Position }）→ 过滤 Host==载荷单位 → 置位指挥组件 CanMove/CanAttack＝true（覆盖部署初值 false/false）。
+/// 仅部署路径生效：加入链（unit.joined）/部署重放（不发射链级信号）/升级替换（unit.upgraded）等路径
+/// 不发射 unit.deployed——不置位（与现状一致）。防御：载荷缺失/非本单位/无 CommandData＝跳过、不抛错（沿既有口径）。
+/// 差异申报（沿批 3/批 4 口径）：①置位时点迁移——「部署链收尾（扣费后）」→「unit.deployed 发射时」（批 3）
+/// →「unit.deployed 订阅者广播段」（批 4 数据效果 hooks——外部通道通知段之后；仍在本信号分发流程内、先于可指挥读取）；
+/// ②扣费异常边界（unit.deployed 与扣费之间链中断时「已置位」——对局不可达：费用校验先于链执行、
+/// 收尾扣费为常规扣减无失败分支）；③独立构造（无上下文）＝不实例化、不订阅、不置位（「独立构造＝功能不可用」
+/// 既定口径；加载不失败、无半态）。
+/// </summary>
+public sealed class BlitzDeployEffect
+{
+    private BlitzDeployEffect()
+    {
+    }
+
+    /// <summary>
+    /// 行为处理器（数据壳 <c>keyword.blitz.deploy-set</c> 的 assemblyKey 目标；签名＝
+    /// <c>Func&lt;CardEventView, Context, CancellationToken, Task&gt;</c>）：触发过滤（unit.deployed）由数据壳
+    /// hooks 承载、主机过滤与置位逐条等价于原效果处理。
+    /// </summary>
+    internal static Task HandleDeploySetAsync(CardEventView view, Context ctx, CancellationToken ct)
+    {
+        if (view.Unit is not Card deployed || !ReferenceEquals(deployed, view.Host))
+        {
+            return Task.CompletedTask; // 非本单位部署：不处理（Host==载荷过滤——其他单位部署不误置位）
+        }
+
+        if (deployed.TryGetData<CommandData>(out var command))
+        {
+            command.CanMove = true; // 置位（覆盖部署初值 false/false；重复信号幂等——已是 true 再置 true 无副作用）
+            command.CanAttack = true;
+        }
+
+        return Task.CompletedTask; // 无 CommandData（防御——非单位/未单位化）：跳过、不抛错
     }
 }

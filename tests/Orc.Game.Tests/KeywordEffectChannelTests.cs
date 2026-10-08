@@ -411,7 +411,7 @@ public class KeywordEffectChannelTests
         Assert.Equal(1, probe.Executions);
 
         // A2（硬性）：授予 → 移除 → 内容卸载（不可再消费）。
-        var victim2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 3);
+        var victim2 = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.WeakId, 1);
         var probe2 = new ProbeDeathrattleEffect("卸载探针", _ => Task.CompletedTask);
         Assert.True(await runtime.GrantWithContentAsync(victim2, KeywordIds.Deathrattle, probe2));
         Assert.True(await runtime.RevokeAsync(victim2, KeywordIds.Deathrattle));
@@ -435,7 +435,7 @@ public class KeywordEffectChannelTests
         await victim4.ApplyDefenseDamageAsync(victim4.Modifiers.GetEffectiveValue(CardStatFields.Defense));
         Assert.True(victim4.GetData<UnitStateData>().IsDestroyed);
 
-        var victim5 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.WeakId, 3);
+        var victim5 = await CommandTestKit.PrepareOnSupportAsync(match, playerB, CommandTestKit.WeakId, 1);
         Assert.Throws<InvalidOperationException>(() =>
         {
             _ = runtime.GrantWithContentAsync(victim5, "不存在的词条", content: null);

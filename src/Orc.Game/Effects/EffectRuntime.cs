@@ -70,10 +70,15 @@ public enum EffectDuration
 /// <summary>
 /// 效果运行时门面（csx handler 的**唯一游戏层受控入口**）：把「消灭（死亡链）／伤害／属性修饰／词条授予（含参值）／
 /// 词条撤销／词条参值改写／内容型词条授予／抽牌／无头选靶／指挥点槽加·减／指挥点加·减（E1-25）」收敛到一处集中暴露——不给各服务零散加 public 面（便于审计与替换）。
+/// <para>批 4 加性（csx 动态效果能力）：动态效果的**受控挂载/卸载/编译挂载**（<c>AttachPrefabAsync</c>／
+/// <c>AttachSnapshotAsync</c>／<c>CompileAttachAsync</c>／<c>DetachEffectAsync</c>——统一结果体系）见
+/// <c>EffectRuntime.DynamicEffects.cs</c>。</para>
+/// <para>批 6 加性（卡组定向取卡）：<c>FetchFromDeckAsync</c>——从目标卡归属玩家卡组定向取出该实例并移动到其手牌
+/// （主场景＝「（触发条件）后从卡组抽取此牌」；结果对象 <c>DeckFetchResult</c>——三态＋类别，两层同型）。</para>
 /// <para>解析路径与既有服务同构：<see cref="ResolveFor"/>（卡 → 玩家 → 服务）。</para>
 /// <para>服务不可达（未装配/脱局）＝**降级不抛错**：返回 false／空集（沿用「功能不可用＝不失败」口径）。</para>
 /// </summary>
-public sealed class EffectRuntime
+public sealed partial class EffectRuntime
 {
     private readonly Func<CommandManager?> _commands;
     private readonly Func<PlayerManager?> _players;
@@ -81,12 +86,20 @@ public sealed class EffectRuntime
     private readonly Func<ResourceManager?> _resources;
 
     /// <summary>创建运行时门面（协作者以延迟读取注入——装配链时序无关）。</summary>
-    /// <exception cref="ArgumentNullException">任一访问器为 null。</exception>
+    /// <param name="commands">指挥管理器访问器。</param>
+    /// <param name="players">玩家管理器访问器。</param>
+    /// <param name="judicators">判定器注册表访问器。</param>
+    /// <param name="resources">资源管理器访问器。</param>
+    /// <param name="engine">对局引擎访问器（批 4 加性；动态效果受控面用——实例化/预制体库；缺省 null＝动态效果面按「服务不可用」降级）。</param>
+    /// <param name="isActionAllowed">可操作相位门禁访问器（批 4 加性；终局/非进行相位的受控面拒斥——缺省 null＝无门禁）。</param>
+    /// <exception cref="ArgumentNullException">任一必填访问器为 null。</exception>
     public EffectRuntime(
         Func<CommandManager?> commands,
         Func<PlayerManager?> players,
         Func<JudicatorRegistry?> judicators,
-        Func<ResourceManager?> resources)
+        Func<ResourceManager?> resources,
+        Func<LogicEngine?>? engine = null,
+        Func<bool>? isActionAllowed = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(players);
@@ -96,6 +109,8 @@ public sealed class EffectRuntime
         _players = players;
         _judicators = judicators;
         _resources = resources;
+        _engine = engine;
+        _isActionAllowed = isActionAllowed;
     }
 
     /// <summary>卡 → 运行时解析（「卡 → 玩家 → 服务」收敛点；脱局/未注入＝null）。</summary>
@@ -282,6 +297,65 @@ public sealed class EffectRuntime
         }
 
         return count;
+    }
+
+    // ---------- 定向取卡（批 6·Q7：csx 受控面） ----------
+
+    /// <summary>
+    /// **定向取卡**（批 6·Q7；csx 受控面）：从 <paramref name="target"/> 的归属玩家卡组把该卡实例定向取出并
+    /// 移动到其手牌——主场景＝「（触发条件）后从卡组抽取此牌」（宿主自我取件：<c>FetchFromDeckAsync(self)</c>）。
+    /// 能力范围：**任意指定实例**（引用可达即可——不设「仅宿主/仅己方」收窄；他方卡组经调用方组合合法可达）、
+    /// **单张**（「取 N 张」＝调用方连续组合）、目标区域锁定手牌；落点＝目标卡归属玩家（＝「声明玩家」——从卡推导形态；
+    /// 同玩家容器间移动，不支持跨玩家转移）。
+    /// 语义＝**抽取**（对齐抽牌链路）：未满手＝<c>card.drawn</c> → <c>card.hand.add</c>（恰一次、顺序）；
+    /// 满手＝爆牌裁决（<c>card.drawn</c> → 销毁 → <c>card.burned</c>；<c>card.hand.add</c> 零次）；失败＝零信号、零变更。
+    /// 结局一律**结果化**（与动作层**同一对象**）；
+    /// 判定优先级：参数层（异常）→ <see cref="DeckFetchFailureReason.InvalidTarget"/>（未加载/独立构造/非本局）
+    /// → <see cref="DeckFetchFailureReason.Unavailable"/>（服务不可用/门禁：准备态/初始化加载未完成/终局后）
+    /// → <see cref="DeckFetchFailureReason.CardDestroyed"/> → <see cref="DeckFetchFailureReason.NotInDeck"/>（后两者由动作层细化）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">target 为 null（参数层）。</exception>
+    public async Task<DeckFetchResult> FetchFromDeckAsync(Card target, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        // ① 引用契约（InvalidTarget）：
+        if (OwnerOf(target) is not { } player)
+        {
+            // 未加载／独立构造（无归属——无法推导落点玩家）。
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.InvalidTarget, target);
+        }
+
+        if (ResolveFor(target) is not { } resolved || !ReferenceEquals(resolved, this))
+        {
+            // 非本局引用（归属到其它门面/未装配——不构成本门面的有效目标）。
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.InvalidTarget, target);
+        }
+
+        // ② 服务可用性与门禁（Unavailable——对齐批 4 服务不可用／门禁先例；零副作用、不抛）：
+        if (_engine?.Invoke() is null)
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.Unavailable, target);
+        }
+
+        if (_isActionAllowed is { } allowed && !allowed())
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.Unavailable, target);
+        }
+
+        if (_players() is not { } players)
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.Unavailable, target);
+        }
+
+        // ③ 目标形态（HQ 等不入卡组——不在卡组；失败零副作用；判定置于门禁之后、对齐全局优先级）：
+        if (target is not CardBase cardBase)
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.NotInDeck, target);
+        }
+
+        // ④ 委托动作层（CardDestroyed / NotInDeck 的精确分类在动作层——两层同型、结果透传）：
+        return await players.FetchFromDeckAsync(player, cardBase, ct).ConfigureAwait(false);
     }
 
     /// <summary>行动花费修饰（+N 花费；缺省来源＝本门面实例）。</summary>

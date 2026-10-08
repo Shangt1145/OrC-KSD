@@ -15,7 +15,9 @@ public sealed record SegmentedEffect(int Start, int Length, bool HardBoundary, I
 
 /// <summary>
 /// 效果切分（解析段 S8/I13）：
-/// ① 丢弃"整行只有词条/数值"的行（P1.2）；② 按 `。！？`（硬）/`；`（软）切单元，
+/// ① 把"整行只有词条/数值"的**词条行**从效果切分流中排除（P1.2——判定语义与
+/// <see cref="KeywordLineScanner"/> 共用同一实现；词条行**不产效果单元**、其**声明产出**见该类——
+/// 本类不再"静默丢弃"声明面）；② 按 `。！？`（硬）/`；`（软）切单元，
 /// **引号内不切**（按引号深度跳过，A-D3）。
 /// </summary>
 public sealed class Segmenter
@@ -77,74 +79,33 @@ public sealed class Segmenter
         return results;
     }
 
-    /// <summary>丢弃整行只有词条/数值的行。</summary>
+    /// <summary>
+    /// 把"整行只有词条/数值"的行排除出切分流（判定＝<see cref="KeywordLineScanner.IsKeywordOnlyLine"/>；
+    /// 行分组＝<see cref="KeywordLineScanner.GroupByLine"/>——同一实现，杜绝两处口径漂移）。
+    /// 过滤形态保持既有语义：按输入 token 序过滤掉判定成立行的 token。
+    /// </summary>
     private static List<Token> DropKeywordOnlyLines(string original, IReadOnlyList<Token> tokens)
     {
-        var lineStarts = new List<int> { 0 };
-        for (var i = 0; i < original.Length; i++)
+        var byLine = KeywordLineScanner.GroupByLine(original, tokens);
+        var droppedLines = byLine
+            .Where(pair => KeywordLineScanner.IsKeywordOnlyLine(pair.Value))
+            .Select(pair => pair.Key)
+            .ToHashSet();
+
+        if (droppedLines.Count == 0)
         {
-            if (original[i] == '\n')
+            return tokens.ToList();
+        }
+
+        var tokenLine = new Dictionary<Token, int>();
+        foreach (var pair in byLine)
+        {
+            foreach (var token in pair.Value)
             {
-                lineStarts.Add(i + 1);
+                tokenLine[token] = pair.Key;
             }
         }
 
-        var byLine = new Dictionary<int, List<Token>>();
-        foreach (var token in tokens)
-        {
-            var line = LineOf(lineStarts, token.Start);
-            if (!byLine.TryGetValue(line, out var list))
-            {
-                byLine[line] = list = new List<Token>();
-            }
-
-            list.Add(token);
-        }
-
-        var droppedLines = byLine.Where(pair => IsKeywordOnlyLine(pair.Value)).Select(pair => pair.Key).ToHashSet();
-
-        return droppedLines.Count == 0
-            ? tokens.ToList()
-            : tokens.Where(token => !droppedLines.Contains(LineOf(lineStarts, token.Start))).ToList();
-    }
-
-    private static bool IsKeywordOnlyLine(IReadOnlyList<Token> lineTokens)
-    {
-        if (lineTokens.Count == 0)
-        {
-            return false;
-        }
-
-        foreach (var token in lineTokens)
-        {
-            var isKeywordFilter = token.Type == TokenType.Filter
-                && (token.Get("dimension") is "keyword" or "unitType" or "attribute");
-            if (token.Type != TokenType.Num && token.Type != TokenType.Punct && !isKeywordFilter)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static int LineOf(List<int> lineStarts, int offset)
-    {
-        var low = 0;
-        var high = lineStarts.Count - 1;
-        while (low < high)
-        {
-            var mid = (low + high + 1) / 2;
-            if (lineStarts[mid] <= offset)
-            {
-                low = mid;
-            }
-            else
-            {
-                high = mid - 1;
-            }
-        }
-
-        return low;
+        return tokens.Where(token => !droppedLines.Contains(tokenLine[token])).ToList();
     }
 }

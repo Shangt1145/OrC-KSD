@@ -21,14 +21,17 @@ namespace Orc.Game.Commanding;
 //   候选＝前线空槽；无后撤/横移候选；发射 unit.position.changed——恰一次）；
 // ⑤攻击执行（单位 vs 单位必经「造成攻击伤害」触发器中转；HQ 简路＝伤害经 HQ 数值路径与管线
 //   〔改写→介入→应用→跑链集中触发〕、不反击、不走「造成攻击伤害」）；攻击结算＝按反击豁免判定表
-//   （后置项 A：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常；
-//   多类型逐条适用、豁免优先；同时互伤框架——豁免方不结算反击伤害）→ HP≤0 死亡（统一死亡流程：清位＋置毁＋
+//   （后置项 A：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/
+//   攻击者具冲击不受反击〔批 5——豁免族最高优先〕/ 其余正常；
+//   多类型逐条适用、豁免优先；同时互伤框架——豁免方不结算反击伤害）→ 执行段公共尾部＝冲击消耗
+//   （批 5；X1＝攻击即消耗——含 HQ 攻击）→ HP≤0 死亡（统一死亡流程：清位＋置毁＋
 //   效果注销＋Position 置空＋card.died 恰一次）；HQ≤0 → HQ 侧统一响应（W3-3：终局判定迁至 HQ——归零检查
 //   〔响应 card.stat.changed〕执行终局记录：状态置结束＋胜者＝HQ 归零方之对手；其后动作入口拒绝，
 //   当次结算收尾照常完成）；
 // ⑥守护维护（被守护状态：相邻〔同线槽位索引差 1〕守护者 → 获被守护；仅能被炮/轰攻击；守护者自身不可被守护；
-//   由位置/入场/死亡更新驱动重算——底层链负责）；⑦回合恢复（turn.start 处理段：行动方在场单位重置两 bool）。
-// 「两 bool 只在外层更新」：内层（移动/攻击/伤害/词条）一律不写——法定写入点＝指挥收尾 / 部署链收尾（闪击）/ 回合恢复。
+//   由位置/入场/死亡/升级更新与词条授予-移除完成点驱动重算——底层链负责〔批 4 加性：升级与词条变更纳入驱动；
+//   守护者判定双通道＝IsGuard 代码通道 / 守护词条〕）；⑦回合恢复（turn.start 处理段：行动方在场单位重置两 bool）。
+// 「两 bool 只在外层更新」：内层（移动/攻击/伤害/词条）一律不写——法定写入点＝指挥收尾 / 部署链〔闪击效果——unit.deployed 发射时〕/ 回合恢复。
 // W2b G3 接线（加性）：数值读取面接改——攻击力/防御力/行动费结算读点改读「有效值」（修饰机制缓存；
 //   伤害值/HQ 伤害＝攻击有效值、扣减经门户〔ApplyDefenseDamageAsync〕、死亡判定＝防御有效值、可用性/扣费/复验＝行动费有效值〔K4：行动费取值经 OperateCosts 共享单元——判定/扣费同源〕）；
 //   防御归零统一死亡衔接——被动触发器（响应 card.stat.changed；外部订阅通知完成之后检查）「防御有效值 ≤0 且未死亡」
@@ -109,7 +112,7 @@ public sealed class CommandManager
     /// combat.counter.eligibility 条目〔经条目句柄调用——moding 动态生效；默认互伤区与伏击资格共用〕；
     /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
     /// <param name="combatAmbushCondition">伏击条件判定通道（K2；（被攻击单位, 攻击者）→ bool——对局路径＝固定内置注册段注册的
-    /// combat.ambush.condition 条目〔经条目句柄调用——moding 动态生效；伏击组件经装载上下文取用〕；
+    /// combat.ambush.condition 条目〔经条目句柄调用——moding 动态生效；伏击效果经装载上下文取用〕；
     /// 缺省＝null＝独立构造路径——内置默认判定器〔构造即可用〕）。</param>
     /// <param name="moveLegEligibility">move leg 资格判定通道（K3；（单位, 源位置）→ 结果〔null＝通过〕——对局路径＝固定内置注册段注册的
     /// move.leg.eligibility 条目〔经条目句柄调用——moding 动态生效；可用性与移动复验共用〕；
@@ -200,21 +203,27 @@ public sealed class CommandManager
         AttackDamageTrigger.Register("默认基础互伤", HandleDefaultAttackDamageAsync, DefaultDamagePriority);
 
         // 词条装载上下文（卡牌加载时取用；伏击注册「造成攻击伤害」改写）。
-        // A2 加性：随带对局服务——钳击（同伴选择交互/候选枚举/关系注册表）与压制（当前行动方）组件的运行逻辑取用；
-        // K2 加性：随带判定器通道——伏击组件资格（combat.counter.eligibility）与条件（combat.ambush.condition）判定取用
+        // A2 加性：随带对局服务——钳击（同伴选择交互/候选枚举/关系注册表）与被压制（当前行动方）效果的运行逻辑取用；
+        // K2 加性：随带判定器通道——伏击效果资格（combat.counter.eligibility）与条件（combat.ambush.condition）判定取用
         // （缺通道＝组件静默不注册——防御；对局/独立构造路径下本管理器两通道恒非空）。
+        // 批 4 加性（守护词条化）：随带词条变更观察者——词条链真实授予/移除完成点驱动守护维护重算
+        // （授予-移除-复装动作完成即随动；同步执行、变更驱动——无对局上下文＝跳过、不抛错）。
         // lambda 免——直接引用（构造时点这些字段均已赋值）。
         KeywordLoadContext = new KeywordLoadContext(
             engine, AttackDamageTrigger, _targeterManager, _battlefield, _pincers, _currentPlayerProvider,
-            _combatCounterEligibility, _combatAmbushCondition);
+            _combatCounterEligibility, _combatAmbushCondition,
+            keywordChangeObserver: MaintainGuardState);
 
-        // 守护维护：由位置/入场/死亡更新驱动（凡影响占用布局的变动均等效触达；词条效果不直接发射更新）
+        // 守护维护：由位置/入场/死亡/升级更新驱动（凡影响占用布局或守护者身份的变动均等效触达——
+        // 批 4 加性：升级可能经词条集替换改变守护者身份，unit.upgraded 纳入订阅；词条授予-移除-复装
+        // 经词条链完成点观察者驱动〔见下方 KeywordLoadContext 注入〕——同步、变更驱动）
         _engine.Subscribe((updateType, _, _) =>
         {
             if (updateType == GameUpdates.UnitPositionChanged
                 || updateType == GameUpdates.UnitJoined
                 || updateType == GameUpdates.UnitDeployed
-                || updateType == GameUpdates.CardDied)
+                || updateType == GameUpdates.CardDied
+                || updateType == GameUpdates.UnitUpgraded)
             {
                 MaintainGuardState();
             }
@@ -278,11 +287,11 @@ public sealed class CommandManager
     /// <summary>单位攻击触发器（内置；执行段＝HQ 简路〔伤害经 HQ 数值路径〕/ 单位互伤经「造成攻击伤害」）。</summary>
     public Trigger<UnitAttackTriggerView> UnitAttackTrigger { get; }
 
-    /// <summary>「造成攻击伤害」共享流程触发器（内置；单位 vs 单位攻击结算必经；伏击挂载点）。</summary>
+    /// <summary>「造成攻击伤害」共享流程触发器（内置；单位 vs 单位攻击结算必经；伏击效果的改写注册口）。</summary>
     public Trigger<AttackDamageTriggerView> AttackDamageTrigger { get; }
 
     /// <summary>词条装载上下文（卡牌加载时取用；经对局装配注入卡牌库）。
-    /// A2 加性：随带对局服务面（目标选择管理器／战场／钳击关系注册表／当前行动方提供器——钳击与压制组件的运行逻辑取用）。</summary>
+    /// A2 加性：随带对局服务面（目标选择管理器／战场／钳击关系注册表／当前行动方提供器——钳击与被压制效果的运行逻辑取用）。</summary>
     public KeywordLoadContext KeywordLoadContext { get; }
 
     /// <summary>钳击关系注册表（A2 加性；对局级服务——一对一占用约束的查询与登记；只读转发面）。</summary>
@@ -721,12 +730,13 @@ public sealed class CommandManager
     // 归属→占位槽→守护→拦截→范围），combat.range 子规则承载 IsLineInRange 范围矩阵；
     // 本管理器候选/复验调用点经 _combatTargetLegal 单源调用（只调用不判断——无第二真源）。
 
-    // ---------- ③ 守护状态（维护型；由更新驱动重算） ----------
+    // ---------- ③ 守护状态（维护型；由更新/词条变更驱动重算） ----------
 
     /// <summary>
     /// 被守护状态查询（单位）：相邻（同线槽位索引差 1）存在同方存活守护者 ＝ 被守护
-    /// （仅能被炮/轰攻击；守护者自身永不获被守护；多守护源不叠加＝存在性判定）。
-    /// 读取形式＝维护型状态查询（由位置/入场/死亡更新驱动维护）。
+    /// （仅能被炮/轰攻击；守护者自身永不获被守护；多守护源不叠加＝存在性判定；
+    /// 守护者判定＝双通道并行〔IsGuard 代码通道 / 「守护」词条〕——批 4）。
+    /// 读取形式＝维护型状态查询（由位置/入场/死亡/升级更新与词条授予-移除完成点驱动维护）。
     /// </summary>
     /// <exception cref="ArgumentNullException">unit 为 null。</exception>
     public bool IsUnitGuarded(UnitCard unit)
@@ -753,7 +763,8 @@ public sealed class CommandManager
 
     /// <summary>
     /// 被守护状态重算（全量；存在性判定——「至少一个相邻守护者」）：
-    /// 逐线（双方支援线＋前线）对每个在场单位检查物理邻位；HQ 检查同支援线槽 1；
+    /// 逐线（双方支援线＋前线）对每个在场单位检查物理邻位；HQ 检查两侧邻位（W3-4：HQ 居中占槽、两侧均可放单位）；
+    /// 守护者判定＝双通道并行（IsGuard 代码通道 / 「守护」词条——现势词条面，批 4；判定等价）；
     /// 守护者存活状态计入（死亡即不构成保护来源）；守护者自身跳过（永不获被守护）；同方限定。
     /// </summary>
     private void MaintainGuardState()
@@ -778,9 +789,9 @@ public sealed class CommandManager
                 continue;
             }
 
-            if (unit.Definition.IsGuard)
+            if (unit.Definition.IsGuard || KeywordRules.HasKeyword(unit, KeywordIds.Guard))
             {
-                continue; // 守护者自身永不获被守护（任何情形，含相邻另一守护者）
+                continue; // 守护者自身永不获被守护（任何情形，含相邻另一守护者；双通道判定——代码通道/守护词条）
             }
 
             if (unit.Owner is not { } owner)
@@ -817,8 +828,9 @@ public sealed class CommandManager
             return false;
         }
 
+        // 守护者判定＝双通道并行（批 4）：IsGuard 代码通道或「守护」词条（现势词条面——加载/授予-移除-复装/升级随动）。
         return line[index].Occupant is UnitCard guardian
-            && guardian.Definition.IsGuard
+            && (guardian.Definition.IsGuard || KeywordRules.HasKeyword(guardian, KeywordIds.Guard))
             && !IsDead(guardian)
             && ReferenceEquals(guardian.Owner, owner);
     }
@@ -1163,7 +1175,7 @@ public sealed class CommandManager
         }
         else if (targetEntity is UnitCard)
         {
-            // 单位 vs 单位：必经「造成攻击伤害」（伏击挂载点；同一目标承载）
+            // 单位 vs 单位：必经「造成攻击伤害」（伏击效果的改写注册口；同一目标承载）
             // X1：触发者随链路传递（同一效果链内一致——攻击链读数透传至伤害链；主动指挥＝空、照常透传）
             var damageData = new Dictionary<string, object?>
             {
@@ -1186,6 +1198,18 @@ public sealed class CommandManager
 
         // 执行段记账（词条侧）：奋战——本轮已攻次数 +1（先执行（含记账）→ 后更新）
         KeywordRules.RecordAttack(attacker);
+
+        // 冲击消耗（批 5；X1＝攻击即消耗）：到达执行段公共尾部即消耗——与对象类型（单位/HQ/伏击者）、
+        // 反击/伏击是否起效均无关（「到达尾部」为唯一判据）；「未抵达尾部」（发起前拒绝/复验拒绝/
+        // 执行段载荷中断）＝不消耗、未触发不失去。存活防御：攻击者已死亡＝防御性跳过（真实对局不可达——
+        // 带冲击攻击者因 C5 豁免不被反击致死；终态卡移除链会被拒绝——防御）；幂等（无冲击＝零操作）。
+        // 顺序口径（Q&A-6(b) 裁量）：先记账（RecordAttack）后消耗——既有记账块收口保持不动，
+        // 消耗作为执行段最后副作用落地（消耗触发词条变更通知——如守护维护随动重算）。
+        if (KeywordRules.HasKeyword(attacker, KeywordIds.Shock)
+            && !attacker.GetData<UnitStateData>().IsDestroyed)
+        {
+            await attacker.Keywords.RevokeAsync(KeywordIds.Shock);
+        }
     }
 
     // ---------- ⑧ 「造成攻击伤害」默认链（基础互伤；伏击改写的替代面） ----------
@@ -1217,7 +1241,8 @@ public sealed class CommandManager
 
         // 默认基础互伤：按反击豁免判定表（后置项 A；K2：经 combat.counter.eligibility 判定器条目——单源、moding 动态生效）
         // ——同时结算、以互扣前有效值为基准；豁免方不结算反击伤害
-        // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/ 其余正常）
+        // （判定表：目标轰炸机永不反击 / 攻击者炮兵不受反击 / 攻击者轰炸机不受反击〔目标战斗机例外〕/
+        //  攻击者具冲击不受反击〔批 5——豁免族最高优先〕/ 其余正常）
         // W2b：伤害值与扣减一律接改——伤害读「攻击力有效值」；扣减经门户（损伤量→跑链→有变更集中触发）。
         // A2：伤害修正读取（handler 链介入——免疫归零／重甲减伤在默认结算 handler 之前登记；修正后照常走
         // 「0 伤害」路径——净伤害＝0 不算「受到伤害」，与动员失去等消费一致）。

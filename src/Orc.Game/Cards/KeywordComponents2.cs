@@ -18,6 +18,9 @@ namespace Orc.Game.Cards;
 // 批 2 词条效果化（B 档扩展）：重甲／免疫两枚（伤害改写族）行为迁效果承载（组件收薄为壳——重甲保留
 // 参值/钳制/AppliesToCommandDamage 公开面；免疫无行为性残留）；效果制品与装配（构造期 EmbedEffect＋
 // 装载/卸载/死亡注销/回滚/复装随词条生灭）见 KeywordEffects.cs（ArmorReductionEffect／ImmuneZeroingEffect）。
+// 批 4 数据化（路线 A）：动员（双效果）由「C# 效果注入」迁「数据壳＋行为引用」形态（绑定声明于注册面、
+// 装载期实例化数据效果——见 KeywordManager 装载期实例化点与 KeywordEffectAssembly）；被压制/情报/重甲/免疫
+// 保持「C# 效果注入」形态不变。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -41,11 +44,12 @@ public sealed class SuppressedKeywordComponent : KeywordComponent
 /// <summary>
 /// 动员（能力型；Q&A-6 口径）：友方回合开始（拥有者回合开始相位）时 +1/+1（累积）；
 /// 受到实际伤害（净伤害＞0）后失去动员（词条移除链——伤害被完全吸收/归零＝不算）。
-/// 既得 +1/+1 保留（失去/再获得不清理——修饰器来源＝本组件、无撤销路径）。
+/// 既得 +1/+1 保留（失去/再获得不清理——无撤销路径；来源标识批 4 改签＝宿主卡，见实现记录申报）。
 /// 仅在场（已单位化、未死亡、有位置）单位获得加成（卡在卡组/手牌/未在场时跳过）。
-/// 批 1 效果化：本组件收薄为壳（标识／参值／授予-移除／读取面）——「回合开始 +1/+1」与「受伤失去」
-/// 分别由内嵌效果 <see cref="MobilizeAccrualEffect"/> / <see cref="MobilizeLossEffect"/> 承载
-/// （受伤失去监听 card.damaged 信号自我撤销——受伤害门户直调路径已退役）。
+/// 批 1/批 4 效果化：本组件收薄为壳（标识／参值／授予-移除／读取面）——「回合开始 +1/+1」与「受伤失去」
+/// 批 4 数据化迁「数据壳＋行为引用」形态（双效果：绑定声明于注册面——词条 → 效果清单〔N＝2〕；
+/// 装载期经授予链实例化并接入内嵌效果通道；行为引用目标＝<see cref="MobilizeAccrualEffect"/> /
+/// <see cref="MobilizeLossEffect"/>；受伤失去监听 card.damaged 信号自我撤销——受伤害门户直调路径已退役）。
 /// </summary>
 public sealed class MobilizeKeywordComponent : KeywordComponent
 {
@@ -53,8 +57,7 @@ public sealed class MobilizeKeywordComponent : KeywordComponent
     public MobilizeKeywordComponent()
         : base(KeywordIds.Mobilize)
     {
-        EmbedEffect(new MobilizeAccrualEffect(this)); // 批 1：回合开始累积迁效果承载（修饰器来源＝本组件——既得保留）
-        EmbedEffect(new MobilizeLossEffect());        // 批 1：受伤失去迁效果承载（监听 card.damaged 自我撤销）
+        // 批 4 数据化：双效果（回合累积/受伤失去）迁「数据壳＋行为引用」（单源——本组件不再构造 C# 效果；装配见 KeywordEffectAssembly）。
     }
 }
 

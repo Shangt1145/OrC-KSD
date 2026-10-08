@@ -79,8 +79,8 @@ public class PlayChainUnitTests
         var task = match.PlayManager.BeginUnitPrePlayAsync(unit);
         var (description, responder) = await bridge.WaitForNextBeginAsync();
 
-        // 候选＝己方支援线空槽位（邻位规则计算；初始＝HQ 邻位槽 1）；单选槽。
-        Assert.Equal(new[] { line[1].Ref }, description.AllowedTargets);
+        // 候选＝己方支援线空槽位（邻位规则计算；初始＝HQ 两侧邻位槽 [1, 3]）；单选槽。
+        Assert.Equal(new[] { line[1].Ref, line[3].Ref }, description.AllowedTargets);
         Assert.Equal(SelectorNames.Slot, description.Slots[0].Name);
         Assert.Equal(1, description.Slots[0].Min);
         Assert.Equal(1, description.Slots[0].Max);
@@ -174,12 +174,12 @@ public class PlayChainUnitTests
         Assert.Equal(PlayResultStatus.Success, first.Status);
 
         using var recorder = new UpdateRecorder(match.Engine);
-        var again = await match.PlayManager.PlayUnitAsync(unit, line[2]);
+        var again = await match.PlayManager.PlayUnitAsync(unit, line[3]); // 目标槽＝槽 3（避开 HQ 占位槽）
 
         // 已单位化（重复部署被拒绝）：目标槽未动、无新更新。
         Assert.Equal(PlayResultStatus.Failed, again.Status);
         Assert.Equal(PlayFailureReason.UnitAlreadyUnitized, again.FailureReason);
-        Assert.True(line[2].IsEmpty);
+        Assert.True(line[3].IsEmpty);
         Assert.Empty(recorder.Updates);
     }
 
@@ -197,13 +197,13 @@ public class PlayChainUnitTests
         Assert.Equal(PlayResultStatus.Success, (await match.PlayManager.PlayUnitAsync(first, line[1])).Status);
 
         using var recorder = new UpdateRecorder(match.Engine);
-        var result = await match.PlayManager.PlayUnitAsync(second, line[2]);
+        var result = await match.PlayManager.PlayUnitAsync(second, line[3]); // 目标槽＝槽 3（避开 HQ 占位槽）
 
         // 复验失败（打出段；原因与预打出阶段拒绝在阶段上可区分）：仅本次取消语义＋留痕；
         // 零副作用——不部署、不扣费、不发更新、不离手。
         Assert.Equal(PlayResultStatus.Failed, result.Status);
         Assert.Equal(PlayFailureReason.PlayVerificationRejected, result.FailureReason);
-        Assert.True(line[2].IsEmpty);
+        Assert.True(line[3].IsEmpty);
         Assert.False(second.TryGetData<UnitStateData>(out _));
         Assert.Empty(recorder.Updates);
         Assert.Contains(second, player.Hand);

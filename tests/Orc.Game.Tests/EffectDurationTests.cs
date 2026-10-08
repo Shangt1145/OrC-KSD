@@ -21,7 +21,7 @@ public class EffectConditionTests
         // 三个友方兵（攻 2／3／4）——视角卡＝首个（攻 2，兼作 EffectRuntime 解析宿主）
         var viewer = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);   // 攻 2
         var fighter = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.FighterId, 2);   // 攻 3
-        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 3);     // 攻 4
+        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 1);     // 攻 4
         var runtime = EffectRuntime.ResolveFor(viewer);
         Assert.NotNull(runtime);
 
@@ -99,7 +99,7 @@ public class EffectAuraTests
         Assert.Equal(baseAttack, enemy.Modifiers.GetEffectiveValue(CardStatFields.Attack));
 
         // 友方非步兵不受益（兵种面）：等于其**自身基准**攻（未被光环加成）
-        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 3);
+        var bomber = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.BomberId, 1);
         Assert.Equal(
             bomber.Definition.Attack, bomber.Modifiers.GetEffectiveValue(CardStatFields.Attack));
     }

@@ -21,13 +21,14 @@ namespace Orc.Game.Cards;
 
 /// <summary>
 /// 词条标识常量集（2C；需求指定固定字面值、精确匹配；对外读取契约）。
-/// 本批生产内建四枚：<see cref="Blitz"/> / <see cref="Fury"/> / <see cref="SmokeScreen"/> / <see cref="Ambush"/>
-/// （经 <see cref="KeywordRegistry"/> 注册面装配）；合法标识集＝注册面内容（含开放扩展注册的标识）。
+/// 生产内建标识经 <see cref="KeywordRegistry"/> 注册面装配（2C 首批四枚：<see cref="Blitz"/> / <see cref="Fury"/> /
+/// <see cref="SmokeScreen"/> / <see cref="Ambush"/>；其后随批次逐步扩展——当前全集见登记序清单 <see cref="All"/>）；
+/// 合法标识集＝注册面内容（含开放扩展注册的标识）。
 /// 词条声明含未注册标识＝定义期明确错误（fail-fast；校验承载于 <see cref="CardDefinition"/>）。
 /// </summary>
 public static class KeywordIds
 {
-    /// <summary>闪击（能力型）：部署链收尾（扣费后）置单位可移动＋可攻击。</summary>
+    /// <summary>闪击（能力型）：部署（unit.deployed）时置单位可移动＋可攻击。</summary>
     public const string Blitz = "闪击";
 
     /// <summary>奋战（能力型）：攻击后记账——首次攻击后仍可攻、二次后不可（「本轮已攻次数」由词条组件自维护）。</summary>
@@ -99,6 +100,27 @@ public static class KeywordIds
     /// </summary>
     public const string Covert = "隐蔽";
 
+    // ---------- 批 4 新增（守护词条化——新词条纳入；标识字面＝对外数据契约基线） ----------
+
+    /// <summary>
+    /// 守护（标记型）：相邻（同线槽位索引差 1）同方存活「守护者」使该单位/HQ 获「被守护」
+    /// （被守护者仅能被炮/轰攻击）。守护者判定＝双通道并行——代码通道（<see cref="CardDefinition.IsGuard"/>）
+    /// 或本词条（现势词条面；数据体 `guard` 映射落地），两者行为等价（判定/保护/豁免规则零变化）。
+    /// 无参值；打对战词条标（wiki『属于对战词条』）；行为面＝无（纯标记——守护维护重算由
+    /// 位置/入场/死亡/升级更新与词条授予-移除完成点驱动，见 CommandManager）。
+    /// </summary>
+    public const string Guard = "守护";
+
+    // ---------- 批 5 新增（冲击词条化——新词条纳入；标识字面＝对外数据契约基线） ----------
+
+    /// <summary>
+    /// 冲击（标记型）：攻击后不再受到反击（反击资格判定条款——豁免族最高优先、先于轰炸机/炮兵豁免；
+    /// 伏击先资格随之翻转）；攻击一次后永久移除（消耗＝攻击执行段公共尾部——攻击即消耗、含 HQ 攻击；
+    /// 未触发不失去；消耗后经「获得」渠道可再授予）。无参值；打对战词条标（wiki『属于对战词条』）；
+    /// 行为面＝无（纯标记——免反击＝C5 条款现势读取〔静态读〕、消耗＝攻击执行段尾部词条移除链，均不内嵌逻辑）。
+    /// </summary>
+    public const string Shock = "冲击";
+
     /// <summary>生产内建词条标识清单（登记序；注册面静态装配依据与诊断用——合法集真源＝注册面内容）。</summary>
     public static IReadOnlyList<string> All { get; } = new[]
     {
@@ -108,6 +130,8 @@ public static class KeywordIds
         Deathrattle,
         Veteran,
         Covert,
+        Guard,
+        Shock,
     };
 
     /// <summary>标识是否已注册（存在性判定，转发注册面——单源；null/空白＝false）。</summary>
@@ -123,6 +147,7 @@ public static class KeywordIds
 /// 钳击关系注册表（一对一占用查询/登记）、当前行动方提供器（压制施加时的「拥有者回合」判定）。
 /// K2 判定器通道（可缺省——缺省＝无判定器通道：伏击效果静默不注册〔与「无上下文」同构〕、不抛错、不回退直调）：
 /// 反击资格（combat.counter.eligibility——伏击资格判定取用）、伏击条件（combat.ambush.condition——伏击条件判定取用）。
+/// 批 4 加性：词条变更观察者（可缺省——缺省＝不通知〔跳过〕；对局侧随动驱动的接入面，如守护维护重算）。
 /// </summary>
 public sealed class KeywordLoadContext
 {
@@ -134,7 +159,8 @@ public sealed class KeywordLoadContext
         PincerRegistry? pincerRegistry = null,
         Func<Player?>? currentPlayerProvider = null,
         Func<UnitCard, UnitCard, bool>? counterEligibility = null,
-        Func<UnitCard, UnitCard, bool>? ambushCondition = null)
+        Func<UnitCard, UnitCard, bool>? ambushCondition = null,
+        Action? keywordChangeObserver = null)
     {
         Engine = engine;
         AttackDamageTrigger = attackDamageTrigger;
@@ -144,6 +170,7 @@ public sealed class KeywordLoadContext
         CurrentPlayerProvider = currentPlayerProvider;
         CounterEligibility = counterEligibility;
         AmbushCondition = ambushCondition;
+        KeywordChangeObserver = keywordChangeObserver;
     }
 
     /// <summary>对局引擎（发射更新 / 触发子触发器所需）。</summary>
@@ -171,6 +198,14 @@ public sealed class KeywordLoadContext
     /// <summary>伏击条件判定通道（K2 加性；combat.ambush.condition——伏击条件判定取用〔条件→C6〕；
     /// 可空＝无判定器通道：伏击效果静默不注册、不抛错、不回退直调）。</summary>
     public Func<UnitCard, UnitCard, bool>? AmbushCondition { get; }
+
+    /// <summary>
+    /// 词条变更观察者（批 4 加性；守护词条化的随动驱动通道）：词条链在**真实授予/移除完成点**通知恰一次
+    /// （幂等重复＝零通知、失败回滚＝零通知——「改变才传播」）；对局侧据此随动重算（如守护维护——
+    /// 「授予-移除-复装动作完成即重算」，与位置/入场/死亡/升级更新驱动同模式、同步执行）。
+    /// 可空＝无对局上下文（独立构造/部分装配）＝跳过、不抛错（操作不失败）。
+    /// </summary>
+    public Action? KeywordChangeObserver { get; }
 }
 
 /// <summary>
@@ -232,7 +267,8 @@ public static class KeywordRules
 
     /// <summary>
     /// 部署链收尾驱动（扣费完成后、链返回前；仅部署路径调用）：遍历已挂载词条组件、逐组件执行收尾钩子
-    /// （闪击＝置位两 bool；钳击＝同伴选择；其余默认空操作）——收尾钩子的静态入口（消费点收口、细节在组件面）。
+    /// （钳击＝同伴选择；闪击已迁效果承载〔批 3——部署时置位、不再经本钩子〕；其余默认空操作）——
+    /// 收尾钩子的静态入口（消费点收口、细节在组件面）。
     /// </summary>
     public static async Task OnDeployChainFinalizedAsync(Card unit, CancellationToken ct)
     {

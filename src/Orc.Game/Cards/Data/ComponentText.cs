@@ -118,4 +118,22 @@ internal static class ComponentText
 
         return parsed;
     }
+
+    /// <summary>
+    /// 写字符串数组属性（X1 加性·写方向辅助）：集合字段空＝显式 <c>[]</c>（不空省——空值统一规范）、
+    /// 非空＝按序原样写出（与读侧 <see cref="GetStringArray"/> 对称）。
+    /// </summary>
+    /// <param name="writer">JSON 写出器（光标位于组件对象内）。</param>
+    /// <param name="name">属性名。</param>
+    /// <param name="items">字符串项（保序；空＝写空数组）。</param>
+    public static void WriteStringArray(Utf8JsonWriter writer, string name, IReadOnlyList<string> items)
+    {
+        writer.WriteStartArray(name);
+        foreach (var item in items)
+        {
+            writer.WriteStringValue(item);
+        }
+
+        writer.WriteEndArray();
+    }
 }

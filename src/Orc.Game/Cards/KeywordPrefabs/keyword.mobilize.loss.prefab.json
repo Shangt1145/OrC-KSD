@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "root": {
+    "id": "keyword.mobilize.loss",
+    "version": 1,
+    "mainTrigger": {
+      "id": "t.main",
+      "stableKey": "动员·受伤失去",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["card.damaged"],
+      "events": [
+        {
+          "id": "onCardDamaged",
+          "entry": "HandleAsync",
+          "assemblyKey": "keyword.mobilize.loss",
+          "version": 1
+        }
+      ],
+      "version": 1
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

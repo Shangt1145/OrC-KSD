@@ -11,6 +11,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>端到端可运行验证（E1-35 续）：把各模板类别逐一放进真实对局跑，断言世界状态。</summary>
+[Collection("IntelligenceStaticSerial")]
 public class EffectRuntimeEndToEndMoreTests
 {
     /// <summary>「加入时 → 将 1 张“步兵”加入手中」：验证 **卡名 → 牌库 → 手牌** 的真实落地。</summary>
@@ -310,7 +311,7 @@ public class EffectRuntimeEndToEndMoreTests
 
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, hostId, 1);
         var intel = await CommandTestKit.PrepareOnSupportAsync(match, playerA, intelId, 2);
-        var plain = await CommandTestKit.PrepareOnSupportAsync(match, playerA, plainId, 3);
+        var plain = await CommandTestKit.PrepareOnSupportAsync(match, playerA, plainId, 1);
 
         var handBefore = playerA.Hand.Count;
 

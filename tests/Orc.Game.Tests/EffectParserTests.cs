@@ -93,12 +93,22 @@ public class EffectParserTests
         const string text = "闪击\n部署：造成1点伤害；抽一张牌。亡计：造成2点伤害。";
         var asts = Parser.ParseAst(text);
 
-        // 词条行"闪击"被丢弃 ⇒ 不产生额外单元；硬/软边界 ⇒ 三个单元（部署；软；亡计）
+        // 词条行"闪击"从效果切分流排除 ⇒ 不产生额外单元（原「丢弃」断言语义保留）；硬/软边界 ⇒ 三个单元（部署；软；亡计）。
         Assert.Equal(3, asts.Count);
         Assert.Equal(BoundaryKind.Hard, asts[0].Boundary);
         Assert.Equal(BoundaryKind.Soft, asts[1].Boundary);
         Assert.Same(asts[0], asts[1].InheritsFrom);
         Assert.Equal(BoundaryKind.Hard, asts[2].Boundary);
+
+        // 序列③：词条行不再"静默丢弃"——经公共入口产出**声明**（新增通道；效果面/单元数不变）。
+        var result = Parser.Parse(text);
+        var declaration = Assert.Single(result.Declarations);
+        Assert.Equal(DeclarationDimension.Keyword, declaration.Dimension);
+        Assert.Equal("闪击", declaration.Id);
+        Assert.Null(declaration.Value);
+        Assert.Equal(DeclarationRegistration.Registered, declaration.Registration);
+        Assert.Equal(3, result.Effects.Count);
+        Assert.Empty(result.Unresolved);
     }
 
     [Fact]
@@ -914,10 +924,10 @@ public class EffectParserTests
     }
 
     [Fact]
-    public void Parse_Maps_Veteran_Unit_Gain_Fury_With_Impact_Trace()
+    public void Parse_Maps_Veteran_Unit_Gain_Fury_And_Shock()
     {
         // V4（part-02:23）：「使 1 个老兵单位获得奋战和冲击。」——
-        // 「老兵单位」筛选＋「获得奋战」完整授予链；「冲击」（词条未实现）**显式留痕**（needsCsx 原文保留）。
+        // 「老兵单位」筛选＋「获得奋战和冲击」**两词条逐个授予**（序列③回补：『获得冲击』needsCsx→真映射）。
         var dsl = Assert.Single(Parser.Parse("使 1 个老兵单位获得奋战和冲击。").Effects);
         Assert.Equal("deploy_basic", dsl.Template);
 
@@ -930,14 +940,17 @@ public class EffectParserTests
         Assert.Equal("one", grant.Target!.Sel);
         Assert.Equal("老兵", grant.Target.Filter!.Keyword);
 
-        var trace = ops[1];
-        Assert.Equal(DslOpRegistry.NeedsCsxOpName, trace.Op);
-        Assert.Equal("冲击", trace.Script);
+        // 序列③：第二个词条「冲击」＝**第二个 grant**（不再 needsCsx 留痕——一 op 一词条）。
+        var shock = ops[1];
+        Assert.Equal("grant", shock.Op);
+        Assert.Equal("冲击", shock.Keyword);
+        Assert.DoesNotContain(ops, op => op.Op == DslOpRegistry.NeedsCsxOpName);
 
-        // 编译：授予链真实渲染；留痕以 TODO 注释承载（不静默、不误跑）。
+        // 编译：两词条授予链真实渲染（无留痕 TODO）。
         var csx = CompileSingleEventCsx(dsl, "effect.veteran.v4");
         Assert.Contains("\"奋战\"", csx, StringComparison.Ordinal);
-        Assert.Contains("TODO", csx, StringComparison.Ordinal);
+        Assert.Contains("\"冲击\"", csx, StringComparison.Ordinal);
+        Assert.DoesNotContain("TODO", csx, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1090,7 +1103,7 @@ public class EffectParserTests
 
         var builder = new System.Text.StringBuilder();
         builder.AppendLine("# 效果解析器覆盖率报告").AppendLine();
-        builder.AppendLine("| 原文 | 效果数 | 未解析数 | 备注 |").AppendLine("|---|---|---|---|");
+        builder.AppendLine("| 原文 | 效果数 | 未解析数 | 声明数 | 备注 |").AppendLine("|---|---|---|---|---|");
         var ok = 0;
         foreach (var text in corpus)
         {
@@ -1106,6 +1119,7 @@ public class EffectParserTests
             builder.Append("| ").Append(text.Replace("\n", "\\n", StringComparison.Ordinal))
                 .Append(" | ").Append(result.Effects.Count)
                 .Append(" | ").Append(result.Unresolved.Count)
+                .Append(" | ").Append(result.Declarations.Count)
                 .Append(" | ").Append(note).AppendLine(" |");
         }
 
@@ -1116,6 +1130,7 @@ public class EffectParserTests
         Assert.True(File.Exists(reportPath));
         var content = File.ReadAllText(reportPath);
         Assert.Contains("覆盖率", content, StringComparison.Ordinal);
+        Assert.Contains("声明数", content, StringComparison.Ordinal);
         Assert.Contains("覆盖率：10/10", content, StringComparison.Ordinal);
     }
 }

@@ -17,7 +17,7 @@ public sealed class CardDefinition
     /// <summary>创建定义（主构造：名称 ＋ 组件定义集）。</summary>
     /// <param name="name">卡牌名称（非 null/空白）。</param>
     /// <param name="components">组件定义集（每类型至多一份；须含 <c>factionCost</c> 与 <c>tagData</c>）。</param>
-    /// <param name="isGuard">守护者标记（代码注册路径加性面；数据体路径恒 false——官方 <c>guard</c> 走未实现留痕）。</param>
+    /// <param name="isGuard">守护者标记（代码注册路径加性面；数据体路径恒 false——官方 <c>guard</c> 走词条承载〔批 4 守护词条化〕）。</param>
     /// <exception cref="ArgumentException">name 为 null/空白；components 含 null/重复类型；缺 factionCost/tagData。</exception>
     /// <exception cref="ArgumentOutOfRangeException">国籍/稀有度为未定义枚举值。</exception>
     public CardDefinition(string name, IEnumerable<ICardDataComponentDefinition> components, bool isGuard = false)

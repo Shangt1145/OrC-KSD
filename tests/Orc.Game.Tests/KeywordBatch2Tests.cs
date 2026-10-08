@@ -14,6 +14,7 @@ namespace Orc.Game.Tests;
 /// （清空处置三件套＋防御复位＋交叉断言）；③免疫专项（归零＋不限制索敌＋HQ 同族）；④参值域钳制与定义校验面。
 /// 对战词条（打标/读取/随机授予组合）见 BattleKeywordTests。
 /// </summary>
+[Collection("IntelligenceStaticSerial")]
 public class KeywordBatch2Tests
 {
     // ---------- 定义与工具 ----------
@@ -69,10 +70,14 @@ public class KeywordBatch2Tests
         Assert.True(KeywordRegistry.IsDefined(KeywordIds.Intelligence));
         Assert.True(KeywordRegistry.IsDefined(KeywordIds.CannotBeSuppressed));
         Assert.True(KeywordRegistry.IsDefined(KeywordIds.CannotBeInhibited));
+        Assert.True(KeywordRegistry.IsDefined(KeywordIds.Guard)); // 批 4：守护注册（数据体 `guard` 映射同单落地）
+        Assert.True(KeywordRegistry.IsDefined(KeywordIds.Shock)); // 批 5：冲击注册（数据体 `shock` 映射同单落地）
         // A4 受控变更（旧→新：14 → 15）：注册清单新增一枚「亡计」（A4；注册清单＝对外契约基线）。
         // S1 受控变更（旧→新：15 → 16）：注册清单新增一枚「老兵」（S1；标记型——老兵读取面承载）。
         // S2 受控变更（旧→新：16 → 17）：注册清单新增一枚「隐蔽」（S2；标记型——隐蔽读取面/豁免/揭示承载）。
-        Assert.Equal(17, KeywordIds.All.Count); // 4 既有 + 10 新增（A2）+ 1 新增（A4 亡计）+ 1 新增（S1 老兵）+ 1 新增（S2 隐蔽）
+        // 批 4 受控变更（旧→新：17 → 18）：注册清单新增一枚「守护」（批 4；标记型——守护维护链读点承载；打对战词条标）。
+        // 批 5 受控变更（旧→新：18 → 19）：注册清单新增一枚「冲击」（批 5；标记型——C5 判定器条款＋攻击执行段消耗承载；打对战词条标）。
+        Assert.Equal(19, KeywordIds.All.Count); // 4 既有 + 10 新增（A2）+ 1 新增（A4 亡计）+ 1 新增（S1 老兵）+ 1 新增（S2 隐蔽）+ 1 新增（批 4 守护）+ 1 新增（批 5 冲击）
     }
 
     [Fact]
@@ -482,7 +487,7 @@ public class KeywordBatch2Tests
         await match.Initialize();
         var playerA = match.Players[0];
         var supportLine = match.Battlefield.GetSupportLine(playerA);
-        var friend = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
+        var friend = await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3); // 落槽 4（为后续 second 部署保留槽 3）
         bridge.CollectScript = CommandTestKit.AllRefsScript(match);
         bridge.InteractionScript = TargeterTestKit.AutoCompleteWithFirstAllowed();
 

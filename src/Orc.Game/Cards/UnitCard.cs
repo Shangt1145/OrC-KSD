@@ -13,7 +13,7 @@ namespace Orc.Game.Cards;
 /// 单位数据 / 指挥组件于「单位化」时挂载（2B：单位化触发器默认事件——位置＝槽位、已毁＝false、类型＝从定义填充〔2C〕、三实时值＝对战组件值）。
 /// 触发器（2B）：
 /// ①预打出触发器（费用校验——指挥点验证；开始＝验证＋targeter 交互由打出管理器驱动）；
-/// ②打出触发器（费用校验——外层复验；默认链＝打出宣告〔card.played〕→ 部署链 → 收尾〔扣费→离手→词条落点〔闪击＝扣费后〕〕）；
+/// ②打出触发器（费用校验——外层复验；默认链＝打出宣告〔card.played〕→ 部署链〔闪击＝unit.deployed 发射时置位〕→ 收尾〔扣费→离手→词条落点〔钳击＝同伴选择〕〕）；
 /// ③部署触发器（默认链＝部署逻辑检查〔组件存在且 handler 非空〕→ 部署词条效果按序触发〔逐条异常隔离〕→ 单位化触发器 → card.placed → unit.deployed）；
 /// ④加入触发器（默认链＝单位化触发器 → card.placed → unit.joined；不扣费、不走部署词条）；
 /// ⑤单位化触发器（部署/加入共用：加单位组件＋指挥组件＋实际加入空槽位＋建立修饰机制初始快照〔W2b〕）。
@@ -159,7 +159,7 @@ public class UnitCard : CardBase
         }
 
         // ③ 收尾：扣费（仅部署扣费——恰一次；W3-2 G5：读有效部署费——与校验/复验同口径；
-        //    E1-25 后续：经点数通用入口发 point.changed）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C-A1：闪击＝扣费后；经静态助手收口——组件遍历在其内）
+        //    E1-25 后续：经点数通用入口发 point.changed）→ 离手（扣费之后、链尾前最后一步）→ 词条落点（2C-A1：钳击＝同伴选择；经静态助手收口——组件遍历在其内）
         var deployCost = unit.Modifiers.GetEffectiveValue(CardStatFields.DeployCost);
         if (ResourceManager.ResolveFor(unit) is { } manager)
         {
@@ -577,7 +577,7 @@ public class UnitCard : CardBase
         state.DefenseLoss += amount; // 受控写入（门户面；运行期直写收窄）
 
         // 批 1（动员效果化）：门户直调路径退役——「受到伤害后失去」不再由门户感知，改由动员效果
-        // （MobilizeLossEffect）监听下方 card.damaged 信号自我撤销（净伤害＞0＝防御实际扣减；被完全吸收/
+        // （MobilizeLossEffect——批 4 数据化行为引用目标）监听下方 card.damaged 信号自我撤销（净伤害＞0＝防御实际扣减；被完全吸收/
         // 归零〔amount=0〕不发信号＝不算；失去走词条移除链、既得 +1/+1 保留）。先记伤害、后跑链、末发信号。
         await Modifiers.RequestRerunAsync(ct); // 变更经门户 → 跑链 → 变化时集中触发
 

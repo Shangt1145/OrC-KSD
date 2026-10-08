@@ -315,9 +315,16 @@ public sealed class SemanticMapper
                 continue;
             }
 
-            foreach (var action in clause.Actions)
+            for (var actionIndex = 0; actionIndex < clause.Actions.Count; actionIndex++)
             {
+                var action = clause.Actions[actionIndex];
                 var clauseText = RawOf(original, clause.Span);
+
+                // 序列③：**宾语窗口**＝本动作之后、下一动作之前（多动作子句下防"后位动作的宾语"溢出到前位动作）；
+                // 无后续动作＝窗口开至无穷（既有形态）。
+                var keywordWindowEnd = actionIndex + 1 < clause.Actions.Count
+                    ? clause.Actions[actionIndex + 1].Span.Start
+                    : int.MaxValue;
 
                 if (string.Equals(action.VerbKey, "state", StringComparison.Ordinal))
                 {
@@ -345,22 +352,32 @@ public sealed class SemanticMapper
                     continue;
                 }
 
-                if (TryMapAction(action, clause.Target, threshold, out var op, out var reason))
+                if (TryMapAction(action, clause.Target, threshold, keywordWindowEnd, out var mappedOps, out var reason))
                 {
                     // 期限只对**可承载期限**的 op 有意义（buff/costMod）；其余（如 grant 无期限面）
                     // 若带期限 ⇒ 不产"永久"错误效果，改留痕 needsCsx（E1-41）。
-                    if (until is not null && op.Op is not ("buff" or "costMod"))
+                    // needsCsx 本身已是留痕 op（非可执行）——不参与替换（保持其原脚本）。
+                    var untilReplaced = false;
+                    foreach (var mappedOp in mappedOps)
                     {
-                        ops.Add(WithCondition(new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
-                        continue;
+                        if (until is not null
+                            && mappedOp.Op is not ("buff" or "costMod" or DslOpRegistry.NeedsCsxOpName))
+                        {
+                            ops.Add(WithCondition(new DslOp(DslOpRegistry.NeedsCsxOpName, script: clauseText), condition));
+                            untilReplaced = true;
+                            continue;
+                        }
+
+                        ops.Add(WithCondition(WithUntil(mappedOp, until), condition));
                     }
 
-                    ops.Add(WithCondition(WithUntil(op, until), condition));
-
-                    // S3：`获得`类动作的**已识别部分完整落地**后，宾语区仍有未识别词（如「使 1 个老兵单位
-                    // 获得奋战和冲击」的「冲击」——词条未实现）⇒ **局部显式留痕**（needsCsx 原文保留——
-                    // 不静默、不误跑；随词条效果化批次回补）。范围限 `gain`（其余动作的动词后词法不在此口径）。
-                    if (string.Equals(action.VerbKey, "gain", StringComparison.Ordinal)
+                    // S3→序列③：`获得`类动作的**已识别部分完整落地**后，宾语区仍有未识别词（如「获得奋战和炮击」
+                    // 的「炮击」——词条未实现）⇒ **局部显式留痕**（needsCsx 原文保留——不静默、不误跑）。
+                    // 范围限 `gain`（其余动作的动词后词法不在此口径）。序列③回补：词条「冲击」经词法补入后
+                    // 『获得冲击』不再触发本留痕（「使 1 个老兵单位获得奋战和冲击」→ **两个 grant 并列**、
+                    // 无 needsCsx 残留）；留痕机制**保留**——其它未识别词的残留仍显式留痕（仅输入集合变化）。
+                    if (!untilReplaced
+                        && string.Equals(action.VerbKey, "gain", StringComparison.Ordinal)
                         && !string.IsNullOrWhiteSpace(action.ObjectRaw))
                     {
                         ops.Add(WithCondition(
@@ -429,10 +446,11 @@ public sealed class SemanticMapper
         ActionPhrase action,
         TargetPhrase? target,
         (string Field, string Op, int Value)? threshold,
-        out DslOp op,
+        int keywordWindowEnd,
+        out List<DslOp> mappedOps,
         out string? reason)
     {
-        op = null!;
+        mappedOps = null!;
         reason = null;
         var selector = BuildSelector(target, action, threshold: threshold);
 
@@ -445,7 +463,7 @@ public sealed class SemanticMapper
                     return false;
                 }
 
-                op = new DslOp("damage", selector, amount: action.Payload.Int);
+                mappedOps = new List<DslOp> { new DslOp("damage", selector, amount: action.Payload.Int) };
                 return true;
 
             case "draw":
@@ -455,7 +473,7 @@ public sealed class SemanticMapper
                     return false;
                 }
 
-                op = new DslOp("draw", selector, count: action.Payload.Int);
+                mappedOps = new List<DslOp> { new DslOp("draw", selector, count: action.Payload.Int) };
                 return true;
 
             case "gain":
@@ -466,7 +484,7 @@ public sealed class SemanticMapper
                     var inner = _innerParser(quoted);
                     if (inner.Effects.Count > 0)
                     {
-                        op = new DslOp(DslOpRegistry.NestedOpName, nested: inner.Effects);
+                        mappedOps = new List<DslOp> { new DslOp(DslOpRegistry.NestedOpName, nested: inner.Effects) };
                         return true;
                     }
                 }
@@ -477,23 +495,33 @@ public sealed class SemanticMapper
                 var attribute = FindFilter(target, FilterKind.Attribute);
                 if (attribute is not null && action.Payload is not null)
                 {
-                    op = attribute == "attack"
-                        ? new DslOp("buff", selector, attack: action.Payload.Int)
-                        : new DslOp("buff", selector, defense: action.Payload.Int);
+                    mappedOps = new List<DslOp>
+                    {
+                        attribute == "attack"
+                            ? new DslOp("buff", selector, attack: action.Payload.Int)
+                            : new DslOp("buff", selector, defense: action.Payload.Int),
+                    };
+                    // 序列③：混合宾语（属性 ＋ 词条）下**未落地词条**的显式留痕（不静默）。
+                    AppendKeywordTraces(mappedOps, target, action, keywordWindowEnd);
                     return true;
                 }
 
                 // 「获得 +1+1」＝两个数：第一＝攻击力、第二＝防御力（无属性名词时的形态）。
                 if (action.Payload is not null && action.SecondaryPayload is not null && attribute is null)
                 {
-                    op = new DslOp("buff", selector, attack: action.Payload.Int, defense: action.SecondaryPayload.Int);
+                    mappedOps = new List<DslOp>
+                    {
+                        new DslOp("buff", selector, attack: action.Payload.Int, defense: action.SecondaryPayload.Int),
+                    };
+                    // 序列③：混合宾语（数值 ＋ 词条）下**未落地词条**的显式留痕（不静默）。
+                    AppendKeywordTraces(mappedOps, target, action, keywordWindowEnd);
                     return true;
                 }
 
                 var objectNoun = FindFilter(target, FilterKind.Object);
                 if (objectNoun == "opCost" && action.Payload is not null)
                 {
-                    op = new DslOp("costMod", selector, amount: action.Payload.Int);
+                    mappedOps = new List<DslOp> { new DslOp("costMod", selector, amount: action.Payload.Int) };
                     return true;
                 }
 
@@ -505,7 +533,7 @@ public sealed class SemanticMapper
                         return false;
                     }
 
-                    op = new DslOp("gainSlot", selector, amount: action.Payload.Int);
+                    mappedOps = new List<DslOp> { new DslOp("gainSlot", selector, amount: action.Payload.Int) };
                     return true;
                 }
 
@@ -517,17 +545,29 @@ public sealed class SemanticMapper
                         return false;
                     }
 
-                    op = new DslOp("gainPoint", selector, amount: action.Payload.Int);
+                    mappedOps = new List<DslOp> { new DslOp("gainPoint", selector, amount: action.Payload.Int) };
                     return true;
                 }
 
-                var keyword = FindFilter(ObjectFilters(target, action), FilterKind.Keyword)
-                    ?? FindFilter(target, FilterKind.Keyword);
-                if (keyword is not null)
+                // 序列③（回补＋泛化）：宾语区词条**逐个授予**——「获得 X 和 Y」（X、Y 均已识别词条）＝
+                // 两个 grant 并列（一 op 一词条；不采用"单授予携带多词条"）。宾语（**动词之后**）词条优先——
+                // 如「使 1 个老兵单位获得奋战和冲击」的「老兵」是目标限定、「奋战」「冲击」是宾语；
+                // 宾语区无词条时才回退全量过滤短语**首个**（既有形态兼容）。
+                // 混合形态（已识别＋未识别并存）＝已识别逐个授予 ＋ 未识别部分残留 needsCsx（调用方局部留痕）。
+                var objectKeywords = KeywordsOf(ObjectFilters(target, action, keywordWindowEnd));
+                if (objectKeywords.Count == 0 && FindFilter(target, FilterKind.Keyword) is { } fallbackKeyword)
                 {
-                    // S3：宾语（**动词之后**）词条优先——如「使 1 个老兵单位获得奋战和冲击」的「老兵」是
-                    // 目标限定、「奋战」是宾语；宾语区无词条时才回退全量过滤短语（既有形态兼容）。
-                    op = new DslOp("grant", selector, keyword: keyword);
+                    objectKeywords.Add(fallbackKeyword);
+                }
+
+                if (objectKeywords.Count > 0)
+                {
+                    mappedOps = new List<DslOp>(objectKeywords.Count);
+                    foreach (var keyword in objectKeywords)
+                    {
+                        mappedOps.Add(new DslOp("grant", selector, keyword: keyword));
+                    }
+
                     return true;
                 }
 
@@ -545,7 +585,7 @@ public sealed class SemanticMapper
                         return false;
                     }
 
-                    op = new DslOp("loseSlot", selector, amount: action.Payload.Int);
+                    mappedOps = new List<DslOp> { new DslOp("loseSlot", selector, amount: action.Payload.Int) };
                     return true;
                 }
 
@@ -557,7 +597,7 @@ public sealed class SemanticMapper
                         return false;
                     }
 
-                    op = new DslOp("losePoint", selector, amount: action.Payload.Int);
+                    mappedOps = new List<DslOp> { new DslOp("losePoint", selector, amount: action.Payload.Int) };
                     return true;
                 }
 
@@ -571,7 +611,7 @@ public sealed class SemanticMapper
                     return false;
                 }
 
-                op = new DslOp("move", selector, zone: target.ZoneValue);
+                mappedOps = new List<DslOp> { new DslOp("move", selector, zone: target.ZoneValue) };
                 return true;
 
             case "addToHand":
@@ -583,26 +623,29 @@ public sealed class SemanticMapper
                     return false;
                 }
 
-                op = new DslOp(action.VerbKey, selector, count: action.Payload?.Int ?? 1, name: cardName);
+                mappedOps = new List<DslOp>
+                {
+                    new DslOp(action.VerbKey, selector, count: action.Payload?.Int ?? 1, name: cardName),
+                };
                 return true;
 
             case "pin":
-                op = new DslOp("pin", selector);
+                mappedOps = new List<DslOp> { new DslOp("pin", selector) };
                 return true;
 
             case "silence":
-                op = new DslOp("silence", selector);
+                mappedOps = new List<DslOp> { new DslOp("silence", selector) };
                 return true;
 
             case "destroy":
                 // 消灭＝**游戏层死亡链**（亡计/词条注销/修饰清理/card.died）；
                 // 与总线 card.destroyed（内存销毁，可能只是弃牌）语义不同——不容混用。
-                op = new DslOp("destroy", selector);
+                mappedOps = new List<DslOp> { new DslOp("destroy", selector) };
                 return true;
 
             case "upgrade":
                 // S3：升为老兵（csx 对接 EffectRuntime.UpgradeAsync——S1 冻结的升级发动公共路径）。
-                op = new DslOp("upgrade", selector);
+                mappedOps = new List<DslOp> { new DslOp("upgrade", selector) };
                 return true;
 
             case "reveal":
@@ -610,7 +653,7 @@ public sealed class SemanticMapper
                 // EffectRuntime.RevealAsync 唯一标准口）。「揭示 1 个隐蔽单位」的限定词位于动词**之后**
                 // ⇒ 以**全量过滤短语**为限定面（动词后限定词＝该动作的目标——与「获得…」的动词后宾语区分）。
                 var revealSelector = BuildSelector(target, action: null, threshold: threshold);
-                op = new DslOp("reveal", revealSelector, count: action.Payload?.Int ?? 1);
+                mappedOps = new List<DslOp> { new DslOp("reveal", revealSelector, count: action.Payload?.Int ?? 1) };
                 return true;
 
             default:
@@ -904,8 +947,10 @@ public sealed class SemanticMapper
         return result;
     }
 
-    /// <summary>动作宾语（过滤短语中位于**动词之后**者——E1-41）。</summary>
-    private static IReadOnlyList<FilterPhrase> ObjectFilters(TargetPhrase? target, ActionPhrase action)
+    /// <summary>
+    /// 动作宾语（过滤短语中位于**动词之后**者——E1-41；可选**窗口上界**——多动作子句下不含后位动作的宾语）。
+    /// </summary>
+    private static IReadOnlyList<FilterPhrase> ObjectFilters(TargetPhrase? target, ActionPhrase action, int windowEnd = int.MaxValue)
     {
         var result = new List<FilterPhrase>();
         if (target is null)
@@ -915,13 +960,48 @@ public sealed class SemanticMapper
 
         foreach (var filter in target.Filters)
         {
-            if (filter.Span.Start >= action.Span.End)
+            if (filter.Span.Start >= action.Span.End && filter.Span.Start < windowEnd)
             {
                 result.Add(filter);
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 过滤短语中的**词条**（FilterKind.Keyword）归类值清单（保序——序列③「逐词条授予」的宾语收集；
+    /// null/空白值剔除）。
+    /// </summary>
+    private static List<string> KeywordsOf(IReadOnlyList<FilterPhrase> filters)
+    {
+        var result = new List<string>();
+        foreach (var filter in filters)
+        {
+            if (filter.Kind == FilterKind.Keyword && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                result.Add(filter.Value);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 序列③：混合宾语（属性/数值 ＋ 词条）下**未落地词条**的显式留痕——`needsCsx` 原文保留
+    /// （不静默、不误跑）。本单泛化的完整落地（逐词条授予）只覆盖"宾语区全部为词条"的形态；
+    /// 属性/数值混合形态的完整映射（含连接词/选择语义）留后续批次——未落地词条一律**保持留痕**
+    /// （历史对照：识别前因"未识别"由局部留痕捕捉〔script＝未识别原文〕；识别后经本函数继续留痕，脚本＝词条原文）。
+    /// </summary>
+    private static void AppendKeywordTraces(List<DslOp> ops, TargetPhrase? target, ActionPhrase action, int keywordWindowEnd)
+    {
+        foreach (var filter in ObjectFilters(target, action, keywordWindowEnd))
+        {
+            if (filter.Kind == FilterKind.Keyword && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                ops.Add(new DslOp(DslOpRegistry.NeedsCsxOpName, script: filter.RawText));
+            }
+        }
     }
 
     /// <summary>在过滤短语清单中按维度取值（E1-41 重载：供限定词/宾语分离后使用）。</summary>

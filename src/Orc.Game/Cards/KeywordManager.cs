@@ -255,11 +255,13 @@ public sealed class KeywordManager
     // ---------- 装载链核心（加载期固有词条与运行时动态授予同一机制） ----------
 
     /// <summary>
-    /// 授予链核心：①存在性置位（数据面可见）→ ②运行逻辑装载＋内嵌效果装载 → ③OnGrant（最后）。
-    /// 装载链内失败（构造/挂载/回调抛）＝fail-fast：逆序整体回滚（②→①；存在性回 false、零残留）、异常上抛。
+    /// 授予链核心：①存在性置位（数据面可见）→ ②运行逻辑装载＋词条效果库实例化＋内嵌效果装载 → ③OnGrant（最后）。
+    /// 装载链内失败（构造/挂载/实例化/回调抛）＝fail-fast：逆序整体回滚（②→①；存在性回 false、零残留）、异常上抛。
     /// 已存在＝幂等无操作（false）；不做死亡校验（公开面已校验、加载期为未死亡卡）。
     /// A4 加性：<paramref name="content"/>＝内容载荷（携带内容形态的授予；组件创建后、装载遍历前经内容装载点注入——
     /// 注入失败＝未置位、无状态变更）。
+    /// 批 4 加性：成功后经词条变更观察者通知恰一次（真实授予完成点——对局侧随动，如守护维护重算；
+    /// 幂等/回滚＝零通知；无上下文＝跳过、不抛错）。
     /// </summary>
     internal bool GrantCore(string keyword, int? value, KeywordLoadContext? context, Effect? content = null)
     {
@@ -278,6 +280,11 @@ public sealed class KeywordManager
         {
             component.Mount(_card, context); // ② 运行逻辑装载（如伏击注册改写；缺上下文＝组件内防御跳过）
 
+            // ② 词条效果库实例化（批 4 数据化·装载期实例化点）：数据壳效果（context.Engine 可用时）实例化并
+            // 接入内嵌效果通道——随词条生灭（下方统一遍历装载）；独立构造（无上下文）＝不实例化/跳过
+            // （功能不可用、加载不失败）；库键缺失/实例化失败＝fail-fast（授予整体回滚、零残留）。
+            AttachKeywordEffectPrefabs(component, context);
+
             foreach (var effect in component.EmbeddedEffects)
             {
                 AttachEmbeddedEffect(component, effect, attached); // ② 内嵌效果装载（完整装载链语义）
@@ -291,6 +298,7 @@ public sealed class KeywordManager
             throw;
         }
 
+        NotifyKeywordChanged(); // 批 4 加性：真实授予完成点（对局侧随动——无上下文＝跳过）
         return true;
     }
 
@@ -298,6 +306,8 @@ public sealed class KeywordManager
     /// 移除链核心：①OnRevoke（作者回调、最先——其异常＝操作失败上抛、机制面未变更、无半态）→
     /// ②运行逻辑注销＋内嵌效果卸载（逆序；异常隔离记录、不阻断后续——对齐效果体系卸载链先例「卸载力求完成」）
     /// → ③存在性清除（参值不可读）。不存在＝幂等无操作（false）。
+    /// 批 4 加性：成功后经词条变更观察者通知恰一次（真实移除完成点——存在性清除后、读点所见即终态；
+    /// 幂等＝零通知；无上下文＝跳过、不抛错）。
     /// </summary>
     internal bool RevokeCore(string keyword)
     {
@@ -325,6 +335,7 @@ public sealed class KeywordManager
 
         _components.Remove(keyword); // ③ 存在性清除
         _active.Remove(component);
+        NotifyKeywordChanged(); // 批 4 加性：真实移除完成点（存在性清除后——读点所见即终态；无上下文＝跳过）
         return true;
     }
 
@@ -367,6 +378,46 @@ public sealed class KeywordManager
     }
 
     // ---------- 内部辅助 ----------
+
+    /// <summary>
+    /// 词条效果库实例化（批 4 数据化·装载期实例化点）：按「词条 → 数据壳效果清单」绑定声明（注册面）逐项
+    /// 实例化数据效果（<see cref="DynamicEffectFactory"/>——数据壳快照 ＋ assemblyKey 行为引用），以声明序
+    /// 接入组件内嵌效果通道（随词条生灭；实例化名＝绑定的效果名——卡容器效果检索面契约保持）。
+    /// 失败语义（沿既有口径）：context 为 null（独立构造）＝不实例化/跳过（功能不可用、加载不失败）；
+    /// 库键缺失 / 实例化失败（处理器缺失、签名不符、装配异常等）＝fail-fast（异常上抛——授予链整体回滚、零残留）。
+    /// </summary>
+    private void AttachKeywordEffectPrefabs(KeywordComponent component, KeywordLoadContext? context)
+    {
+        var bindings = KeywordRegistry.GetEffectBindings(component.Keyword);
+        if (bindings.Count == 0)
+        {
+            return; // 无数据壳绑定（未迁移词条）：零行为变化
+        }
+
+        if (context is null)
+        {
+            return; // 独立构造（无上下文）：不实例化/跳过（功能不可用、加载不失败）
+        }
+
+        foreach (var binding in bindings)
+        {
+            if (!context.Engine.Prefabs.TryGetPrefab(binding.PrefabId, out var snapshot))
+            {
+                throw new InvalidOperationException(
+                    $"词条 '{component.Keyword}' 的数据壳效果 '{binding.PrefabId}' 未在词条效果库注册（库键缺失——装载 fail-fast，授予整体回滚）。");
+            }
+
+            var instantiation = DynamicEffectFactory.Instantiate(context.Engine, snapshot, binding.EffectName);
+            if (!instantiation.Success)
+            {
+                throw new InvalidOperationException(
+                    $"词条 '{component.Keyword}' 的数据壳效果 '{binding.PrefabId}' 实例化失败"
+                    + $"（{instantiation.ErrorCategory}）：{instantiation.Error}（装载 fail-fast，授予整体回滚）。");
+            }
+
+            component.AttachDataEffect(instantiation.Effect!); // 数据效果接入内嵌效果通道（随词条生灭）
+        }
+    }
 
     /// <summary>
     /// 内嵌效果装载（复用 Effect 体系完整链语义）：登记入卡（列表序；Add 即装载——W3-A3）→ 装载兜底
@@ -421,6 +472,14 @@ public sealed class KeywordManager
         => _card is UnitCard unit
             && unit.TryGetData<UnitStateData>(out var state)
             && state.IsDestroyed;
+
+    /// <summary>
+    /// 词条变更通知（批 4 加性；守护词条化的随动驱动——真实授予/移除完成点、恰一次）：
+    /// 经词条装载上下文的变更观察者通知对局侧（如守护维护重算——「授予-移除-复装动作完成即重算」）；
+    /// 无上下文（独立构造/未装配）＝跳过、不抛错（操作不失败——沿用「可缺省＝防御跳过」先例）。
+    /// 幂等重复（false 返回）与失败回滚（异常路径）＝零通知（改变才传播）。
+    /// </summary>
+    private void NotifyKeywordChanged() => LoadContextProvider?.Invoke()?.KeywordChangeObserver?.Invoke();
 
     /// <summary>写词条链错误记录（引擎总流；与既有装载留痕同渠道）。</summary>
     private void WriteError(string source, string message, Exception ex)

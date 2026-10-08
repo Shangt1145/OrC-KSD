@@ -54,7 +54,7 @@ public abstract class KeywordComponent
     }
 
     /// <summary>
-    /// 部署链收尾挂钩（扣费完成后、链返回前；仅部署路径调用）：闪击在此置位两 bool；钳击在此发起同伴选择（可选）。
+    /// 部署链收尾挂钩（扣费完成后、链返回前；仅部署路径调用）：钳击在此发起同伴选择（可选）；闪击已迁效果承载〔批 3——部署时置位、不再经本钩子〕。
     /// 默认无操作（非该类词条不参与部署链收尾）。宿主＝引擎薄容器 <see cref="Card"/>（A2 泛化）。
     /// </summary>
     internal virtual Task OnDeployChainFinalizedAsync(Card card, CancellationToken ct) => Task.CompletedTask;
@@ -75,6 +75,18 @@ public abstract class KeywordComponent
     /// </summary>
     /// <exception cref="ArgumentNullException">effect 为 null。</exception>
     protected void EmbedEffect(Effect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        _embeddedEffects.Add(effect);
+    }
+
+    /// <summary>
+    /// 数据壳效果接入（批 4 加性·数据化；**框架装载链专用**——词条装载期实例化点经本方法把实例化的数据效果
+    /// 〔数据壳＋行为引用形态〕并入内嵌效果通道，与构造期 <see cref="EmbedEffect"/> 的制品同待遇：随词条生灭
+    /// （装载/卸载/死亡注销/回滚/复装——同一条遍历链）。**不面向词条作者**（作者装配一律经构造期 <see cref="EmbedEffect"/>）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">effect 为 null。</exception>
+    internal void AttachDataEffect(Effect effect)
     {
         ArgumentNullException.ThrowIfNull(effect);
         _embeddedEffects.Add(effect);

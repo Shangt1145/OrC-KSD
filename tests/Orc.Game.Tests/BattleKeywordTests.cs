@@ -5,7 +5,7 @@ using Xunit;
 namespace Orc.Game.Tests;
 
 /// <summary>
-/// 第 2 批·A2 对战词条验收（Q&A-2）：打标清单（本批 5 项＝闪击/奋战/烟幕/伏击/重甲X）＋
+/// 第 2 批·A2 对战词条验收（Q&A-2）＋批 4 守护、批 5 冲击纳入口径：打标清单（本批 7 项＝闪击/奋战/烟幕/伏击/重甲X＋守护＋冲击）＋
 /// 读取面（按标记筛选/计数/集合读取）＋组合场景（「获得 1 个随机对战词条」＝池构建＋PickOne＋授予；
 /// 「获得全部对战词条」＝集合读取＋逐个授予——均不新增专门机制）。
 /// </summary>
@@ -27,12 +27,15 @@ public class BattleKeywordTests
     [Fact]
     public void BattleKeyword_Marking_Set_And_Universe()
     {
-        // 本批实现打标（5 项）：既有四枚＋重甲N（Q&A-2 判定依据＝B 站 Wiki 标注）。
+        // 本批实现打标（7 项）：既有四枚＋重甲N（Q&A-2 判定依据＝B 站 Wiki 标注）＋守护（批 4——wiki『属于对战词条』）
+        // ＋冲击（批 5——wiki『属于对战词条』）。
         Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Blitz));
         Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Fury));
         Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.SmokeScreen));
         Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Ambush));
         Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Armor));
+        Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Guard));
+        Assert.True(KeywordRegistry.IsBattleKeyword(KeywordIds.Shock));
 
         // 其余本批词条不打标（wiki 无「属于对战词条」标注——按不属处理）。
         Assert.False(KeywordRegistry.IsBattleKeyword(KeywordIds.Suppressed));
@@ -47,9 +50,9 @@ public class BattleKeywordTests
         Assert.False(KeywordRegistry.IsBattleKeyword("未注册标识")); // 宽容查询
         Assert.False(KeywordRegistry.IsBattleKeyword(null!));
 
-        // 打标全集（「已实现且打标」池边界；登记序稳定）——「守护」「冲击」属标注全集但不在本批实现范围、不入池。
+        // 打标全集（「已实现且打标」池边界；登记序稳定）——守护经批 4 纳入、冲击经批 5 纳入（全集 7 项）。
         Assert.Equal(
-            new[] { KeywordIds.Blitz, KeywordIds.Fury, KeywordIds.SmokeScreen, KeywordIds.Ambush, KeywordIds.Armor },
+            new[] { KeywordIds.Blitz, KeywordIds.Fury, KeywordIds.SmokeScreen, KeywordIds.Ambush, KeywordIds.Armor, KeywordIds.Guard, KeywordIds.Shock },
             KeywordRegistry.BattleKeywordUniverse);
     }
 
@@ -146,7 +149,7 @@ public class BattleKeywordTests
         }
 
         Assert.Equal(KeywordRegistry.BattleKeywordUniverse, BattleKeywordRules.GetBattleKeywords(full));
-        Assert.Equal(5, BattleKeywordRules.CountBattleKeywords(full));
-        Assert.True(BattleKeywordRules.HasAtLeastBattleKeywords(full, 5));
+        Assert.Equal(7, BattleKeywordRules.CountBattleKeywords(full)); // 批 5 全集口径：6 → 7（冲击纳入）
+        Assert.True(BattleKeywordRules.HasAtLeastBattleKeywords(full, 7));
     }
 }

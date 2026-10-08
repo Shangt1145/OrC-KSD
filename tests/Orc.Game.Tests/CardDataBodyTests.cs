@@ -128,15 +128,18 @@ public class CardDataBodyTests
     }
 
     [Fact]
-    public void Keywords_Maps_Official_Identifiers_And_Traces_Unmapped()
+    public void Keywords_Maps_Official_Identifiers_Without_Tracing()
     {
+        // 批 4 受控适配（守护数据映射转正式承载）：`guard` → 「守护」词条——四项均已映射、不再留痕；
+        // 批 5 受控适配（冲击数据映射转正式承载）：shock 映射断言由本文件 `Keywords_Maps_Shock_To_Shock_Without_Tracing` 承载；
+        // 未实现项留痕语义由本文件 `Keywords_Traces_Unmapped_Without_Failing`（留痕样本 `salvage`）承载。
         var definition = KeywordsDefinition.Read(ParseAttributes("""["blitz","guard","heavyArmor2","intel3"]"""));
 
         Assert.Equal(
-            new[] { KeywordIds.Blitz, KeywordIds.Armor, KeywordIds.Intelligence },
+            new[] { KeywordIds.Blitz, KeywordIds.Guard, KeywordIds.Armor, KeywordIds.Intelligence },
             definition.Keywords.Select(item => item.Id));
-        Assert.Equal(new int?[] { null, 2, 3 }, definition.Keywords.Select(item => item.Value));
-        Assert.Equal(new[] { "guard" }, definition.UnmappedAttributes);
+        Assert.Equal(new int?[] { null, null, 2, 3 }, definition.Keywords.Select(item => item.Value));
+        Assert.Empty(definition.UnmappedAttributes);
         Assert.Equal(new[] { "blitz", "guard", "heavyArmor2", "intel3" }, definition.Attributes);
     }
 
@@ -144,23 +147,40 @@ public class CardDataBodyTests
     public void Keywords_Maps_Covert_To_Covert_Marker_Without_Tracing()
     {
         // S2 受控适配（隐蔽数据映射转正式承载）：官方标识 `covert` → 「隐蔽」标记（词条标记方案）——
-        // 不再归未实现留痕面；其它未实现项照常留痕（原语义保持）。
+        // 不再归未实现留痕面。批 4 受控适配（守护数据映射转正式承载）：`guard` → 「守护」词条——
+        // 同样不再留痕（未实现项留痕语义由本文件 `Keywords_Traces_Unmapped_Without_Failing`〔留痕样本 `salvage`〕承载）。
         var definition = KeywordsDefinition.Read(ParseAttributes("""["covert","guard"]"""));
 
         Assert.Contains(definition.Keywords, item => item.Id == KeywordIds.Covert);
-        Assert.Equal(new[] { "guard" }, definition.UnmappedAttributes);
+        Assert.Contains(definition.Keywords, item => item.Id == KeywordIds.Guard);
+        Assert.Empty(definition.UnmappedAttributes);
         Assert.Equal(new[] { "covert", "guard" }, definition.Attributes);
+    }
+
+    [Fact]
+    public void Keywords_Maps_Shock_To_Shock_Without_Tracing()
+    {
+        // 批 5 受控适配（冲击数据映射转正式承载）：官方标识 `shock` → 「冲击」词条——不再归未实现留痕面
+        // （原 shock 留痕断言转映射断言——由本用例承载；剩余留痕样本改用 `salvage`）。
+        var definition = KeywordsDefinition.Read(ParseAttributes("""["shock"]"""));
+
+        Assert.Equal(new[] { KeywordIds.Shock }, definition.Keywords.Select(item => item.Id));
+        Assert.Empty(definition.UnmappedAttributes);
+        Assert.Equal(new[] { "shock" }, definition.Attributes);
     }
 
     [Fact]
     public void Keywords_Traces_Unmapped_Without_Failing()
     {
-        var definition = KeywordsDefinition.Read(ParseAttributes("""["shock","BecomesVeteran:102_grenadier"]"""));
+        // 批 5 受控适配（冲击数据映射转正式承载）：`shock` 转映射（断言由本文件
+        // `Keywords_Maps_Shock_To_Shock_Without_Tracing` 承载）；留痕样本改用 `salvage`
+        // （留痕样本标识——未实现清单中选定、语义与词条机制距离最远；不再链式迁移）。
+        var definition = KeywordsDefinition.Read(ParseAttributes("""["salvage","BecomesVeteran:102_grenadier"]"""));
 
         // S1 受控适配（机制扩展）：`BecomesVeteran:` 转正式承载（端口可读、不再留痕）；
-        // 未映射项（shock）照常留痕、不 fail-fast（原验收语义保持）。
+        // 未映射项（salvage）照常留痕、不 fail-fast（原验收语义保持）。
         Assert.Empty(definition.Keywords);
-        Assert.Equal(new[] { "shock" }, definition.UnmappedAttributes);
+        Assert.Equal(new[] { "salvage" }, definition.UnmappedAttributes);
         Assert.Equal("102_grenadier", definition.BecomesVeteran);
         Assert.Null(definition.VeteranOf);
     }

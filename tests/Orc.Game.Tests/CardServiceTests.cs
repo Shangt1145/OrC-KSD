@@ -109,7 +109,7 @@ public class CardServiceTests
         var match = S9Kit.CreateSceneMatch();
         await match.Initialize();
         var playerA = match.Players[0];
-        var slot = match.Battlefield.GetSupportLine(playerA)[2];
+        var slot = match.Battlefield.GetSupportLine(playerA)[3]; // 目标槽＝槽 3（避开 HQ 占位槽）
 
         using var recorder = new UpdateRecorder(match.Engine);
         var pointsBefore = playerA.Points;
@@ -202,8 +202,8 @@ public class CardServiceTests
         var playerA = match.Players[0];
         var supportLine = match.Battlefield.GetSupportLine(playerA);
 
-        // 场上布局：HQ（槽 0）＋ 步兵（槽 2）→ 候选＝[1, 3]（被占槽位〔含 HQ〕左右空邻位、去重、索引升序）
-        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
+        // 场上布局：HQ（槽 2）＋ 步兵（槽 4）→ 候选＝[1, 3]（被占槽位〔含 HQ〕左右空邻位、去重、索引升序）
+        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
 
         var (_, effect) = await S9Kit.PrepareEmitterAsync(match, playerA);
         using var recorder = new UpdateRecorder(match.Engine);
@@ -234,10 +234,11 @@ public class CardServiceTests
         var playerA = match.Players[0];
         var supportLine = match.Battlefield.GetSupportLine(playerA);
 
-        // 占满支援线（槽 1..3）——无相邻空槽（HQ 左右邻位均被占）
+        // 占满支援线（全部可部署格——HQ 两侧；跳过 HQ 占位槽）——无相邻空槽
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
+        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 0);
 
         var (_, effect) = await S9Kit.PrepareEmitterAsync(match, playerA);
         using var recorder = new UpdateRecorder(match.Engine);
@@ -846,12 +847,12 @@ public class CardServiceTests
         var playerA = match.Players[0];
         var supportLine = match.Battlefield.GetSupportLine(playerA);
 
-        // 空线（仅 HQ 占位）：HQ 右邻空槽 1 → 候选 [1]
-        Assert.Equal(new[] { supportLine[1] }, match.CardService.GetAdjacentEmptySlots(playerA));
+        // 空线（仅 HQ 占位）：HQ 两侧邻位空槽 [1, 3] → 候选 [1, 3]
+        Assert.Equal(new[] { supportLine[1], supportLine[3] }, match.CardService.GetAdjacentEmptySlots(playerA));
 
-        // 单位落位后：HQ（槽 0）＋单位（槽 3）→ 候选 [1, 2]（去重、索引升序）
+        // 单位落位后：HQ（槽 2）＋单位（槽 4）→ 候选 [1, 3]（去重、索引升序）
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
-        Assert.Equal(new[] { supportLine[1], supportLine[2] }, match.CardService.GetAdjacentEmptySlots(playerA));
+        Assert.Equal(new[] { supportLine[1], supportLine[3] }, match.CardService.GetAdjacentEmptySlots(playerA));
 
         // 与既有「邻位动态候选」单源一致（同一实现，不另建规则）
         Assert.Equal(supportLine.GetAdjacentEmptySlots().ToArray(), match.CardService.GetAdjacentEmptySlots(playerA));

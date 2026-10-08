@@ -166,10 +166,11 @@ public class C2ReferenceAndFailureTests
         await match.Initialize();
         var playerA = match.Players[0];
 
-        // 填占己方支援线 1..3（＋HQ 占 0）→ 相邻空槽解析为空（稳定构造）
+        // 填占己方支援线全部可部署格（HQ 两侧；跳过 HQ 占位槽）→ 相邻空槽解析为空（稳定构造）
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
         await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 2);
-        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 3);
+        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 1);
+        await CommandTestKit.PrepareOnSupportAsync(match, playerA, CommandTestKit.InfantryId, 0);
         Assert.Empty(match.CardService.GetAdjacentEmptySlots(playerA)); // 前置：解析为空
 
         using var recorder = new UpdateRecorder(match.Engine);

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "root": {
+    "id": "keyword.blitz.deploy-set",
+    "version": 1,
+    "mainTrigger": {
+      "id": "t.main",
+      "stableKey": "闪击·部署置位",
+      "kind": "passive",
+      "viewType": "Orc.Cards.CardEventView",
+      "hooks": ["unit.deployed"],
+      "events": [
+        {
+          "id": "onUnitDeployed",
+          "entry": "HandleAsync",
+          "assemblyKey": "keyword.blitz.deploy-set",
+          "version": 1
+        }
+      ],
+      "version": 1
+    },
+    "otherTriggers": [],
+    "modings": [],
+    "injects": []
+  }
+}

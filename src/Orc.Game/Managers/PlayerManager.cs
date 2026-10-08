@@ -6,6 +6,79 @@ using Orc.Game.Players;
 
 namespace Orc.Game.Managers;
 
+/// <summary>定向取卡（Deck Fetch·批 6）结局状态（三态：完成 / 爆牌 / 失败）。</summary>
+public enum DeckFetchStatus
+{
+    /// <summary>完成（卡实际自卡组取件并进入手牌）。</summary>
+    Fetched,
+
+    /// <summary>
+    /// 爆牌（满手裁决·**完成语义**——对齐 <c>CardPlaceStatus.Burned</c>「裁决完成——非失败」口径）：
+    /// 卡已自卡组移除并销毁（card.drawn 恰一次 → 销毁 → card.burned 恰一次；card.hand.add 零次——不经手牌）。
+    /// </summary>
+    Burned,
+
+    /// <summary>失败（未执行；零变更、零信号——可编程处置）。</summary>
+    Rejected,
+}
+
+/// <summary>定向取卡失败原因（类别化；完成/爆牌＝null；字面稳定、测试锁定）。</summary>
+public enum DeckFetchFailureReason
+{
+    /// <summary>卡不在所声明玩家卡组中（含从未在过、已被取出／重复调用——失败路径幂等零副作用）。</summary>
+    NotInDeck,
+
+    /// <summary>卡已销毁（引用已失效——判定先于容器归属：「已销毁＋不在卡组」＝本类别）。</summary>
+    CardDestroyed,
+
+    /// <summary>目标无效（未加载／独立构造／定义未注册于本对局；含跨玩家——声明玩家≠卡归属玩家）。</summary>
+    InvalidTarget,
+
+    /// <summary>服务不可用／门禁（准备态／初始化加载未完成／非可操作相位／终局后——对齐批 4 服务不可用／门禁先例）。</summary>
+    Unavailable,
+}
+
+/// <summary>
+/// 定向取卡结果对象（不抛；消费方读 <see cref="Status"/> ＋ <see cref="FailureReason"/> 分流）：
+/// 完成＝<see cref="DeckFetchStatus.Fetched"/>；爆牌＝<see cref="DeckFetchStatus.Burned"/>（完成语义——被爆卡已销毁）；
+/// 失败＝<see cref="DeckFetchStatus.Rejected"/>（携带原因类别）。
+/// <see cref="Card"/>＝关联卡片引用（完成＝已入手的卡；爆牌＝被爆卡〔生命周期仍可读——观察点＝Life.IsAlive〕；
+/// 失败＝目标卡〔按可用性，可为 null〕）。
+/// 两层同型：<see cref="PlayerManager.FetchFromDeckAsync"/> 动作（动作层）与
+/// csx 受控面（<c>EffectRuntime.FetchFromDeckAsync</c>）返回**同一类型**。
+/// </summary>
+public sealed class DeckFetchResult
+{
+    private DeckFetchResult(DeckFetchStatus status, DeckFetchFailureReason? failureReason, Card? card)
+    {
+        Status = status;
+        FailureReason = failureReason;
+        Card = card;
+    }
+
+    /// <summary>结局状态（三态）。</summary>
+    public DeckFetchStatus Status { get; }
+
+    /// <summary>失败原因（仅失败时非 null；完成/爆牌＝null）。</summary>
+    public DeckFetchFailureReason? FailureReason { get; }
+
+    /// <summary>关联卡片引用（完成＝已入手的卡；爆牌＝被爆卡〔仍可读其生命周期〕；失败＝目标卡〔按可用性，可为 null〕）。</summary>
+    public Card? Card { get; }
+
+    /// <summary>是否成功（Fetched 或 Burned——爆牌为完成语义的裁决完成）。</summary>
+    public bool IsSuccess => Status != DeckFetchStatus.Rejected;
+
+    /// <summary>创建「完成」结果（框架内部）。</summary>
+    internal static DeckFetchResult Fetched(Card card) => new(DeckFetchStatus.Fetched, failureReason: null, card);
+
+    /// <summary>创建「爆牌」结果（框架内部；满手裁决——实例已销毁）。</summary>
+    internal static DeckFetchResult Burned(Card card) => new(DeckFetchStatus.Burned, failureReason: null, card);
+
+    /// <summary>创建「失败」结果（框架内部；类别＋目标卡〔按可用性〕）。</summary>
+    internal static DeckFetchResult Rejected(DeckFetchFailureReason reason, Card? card = null)
+        => new(DeckFetchStatus.Rejected, reason, card);
+}
+
 /// <summary>
 /// 玩家管理器（玩家领域真源）：创建双玩家、提供玩家访问、执行卡组加载与抽牌操作。
 /// 卡组加载（对局开始；2A 新增）：逐玩家（索引升序）逐张——卡组取件（洗牌后顺序）→ 经卡牌库实例化（三类卡之一）
@@ -18,6 +91,10 @@ namespace Orc.Game.Managers;
 /// 归属口径＝卡当前所在手牌、拒绝语义明确、非幂等）与回迁动作（手牌 → 卡组：跨集合受控动作——移出＋装入一体；
 /// 位置＝卡组顶/指定位置；静默）。弃置与爆牌仅共享「销毁」步骤（引擎既有销毁）；信号发射各自独立
 /// （弃置＝card.discarded、爆牌＝card.burned——爆牌不经弃置动作）。
+/// 〔批 6 定向取卡加性面〕FetchFromDeckAsync＝「从卡组定向取出指定卡实例并移动到目标区域（手牌）」的受控动作——
+/// 抽取语义（对齐抽牌链路；取件位置＝指定实例）：完成＝card.drawn → card.hand.add；满手＝爆牌裁决（drawn → 销毁 →
+/// burned、hand.add 零次、卡自卡组移除）；失败＝结果对象（三态＋类别；零变更、零信号）；
+/// 落点＝卡归属玩家（＝声明玩家——同玩家容器间移动，不支持跨玩家转移）；结果类型 <see cref="DeckFetchResult"/>（两层同型）。
 /// 空卡组抽牌＝抛错（集合契约）；"卡组为空的游戏层处理（疲劳等）"属后续批次。
 /// 〔W1-1 G12 加性面〕对局级卡牌 ID 水位线：加载时逐张分配自增整数 ID（承载于卡上）→ 初始化加载完成后快照水位线
 /// （＝已分配最大值；起手装载之前）→ 构筑外判定（ID ＞ 水位线）与访问口（本类 <see cref="IsOutsideDeck"/>）。
@@ -239,6 +316,85 @@ public sealed class PlayerManager
 
         player.Hand.Remove(card); // 全部校验通过：移出 → 装入（两步之间无失败点——成功即完整迁移）
         player.Deck.InsertInstanceAt(position, definitionId, card);
+    }
+
+    // ---------- 定向取卡（批 6·Q7：从卡组定向取件到目标区域——本批目标区域锁定手牌） ----------
+
+    /// <summary>
+    /// 定向取卡动作（批 6·Q7）：从卡组定向取出指定卡实例并移动到目标区域（手牌）的受控动作。
+    /// 语义＝**抽取**（对齐抽牌链路；取件位置＝指定实例，而抽牌＝卡组顶）：正常路径（未满手）＝取出＋进手牌＋
+    /// 发 <c>card.drawn</c> → <c>card.hand.add</c>（顺序：drawn 先、hand.add 后；载荷均＝{ 玩家, 卡牌实例 }；
+    /// 均恰一次）；满手（≥ <see cref="Player.HandLimit"/>〔9〕）＝**爆牌裁决**（对齐 DrawCard 路径「算被抽到」口径：
+    /// <c>card.drawn</c> 恰一次 → 销毁〔引擎既有机制〕→ <c>card.burned</c> 恰一次；<c>card.hand.add</c> 零次；卡自卡组移除）。
+    /// 调用面：任意指定实例、**单张**（「取 N 张」＝调用方连续组合、各自独立结果、非原子）；
+    /// 归属口径＝「卡当前所在卡组」（不设「仅己方」限制——他方卡组经调用方组合合法可达）；
+    /// 落点＝卡归属玩家（＝声明玩家——同玩家容器间移动〔其卡组 → 其手牌〕，不支持跨玩家转移）；
+    /// 入位＝**尾部追加**（对齐一切「抽牌/生成到手牌」先例）。
+    /// 失败分层：参数层（null）＝异常（全库一致 fail-fast）；其余一切语义层结局＝结果对象（三态＋类别；
+    /// 判定优先级：参数层 → <see cref="DeckFetchFailureReason.InvalidTarget"/> → <see cref="DeckFetchFailureReason.Unavailable"/>
+    /// → <see cref="DeckFetchFailureReason.CardDestroyed"/> → <see cref="DeckFetchFailureReason.NotInDeck"/>）。
+    /// 原子性：失败＝零变更（卡留原处、手牌不变、零信号；可重复调用——**失败路径幂等零副作用**）；
+    /// 爆牌＝卡已自卡组移除并销毁（变更已发生、完成语义）；完成＝移除＋进手牌＋信号。
+    /// 单线程语义（与引擎一致）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">player / card 为 null（参数层——编程契约错误 fail-fast）。</exception>
+    public async Task<DeckFetchResult> FetchFromDeckAsync(
+        Player player, CardBase card, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(player);
+        ArgumentNullException.ThrowIfNull(card);
+
+        // ① 引用契约（InvalidTarget——引用失效优先于环境/生命周期/容器状态）：
+        if (card.Owner is null)
+        {
+            // 未加载／独立构造（无归属）——结果化、不抛（面向 csx 的运行时动作：效果域需要统一的结构化消费面）。
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.InvalidTarget, card);
+        }
+
+        if (!ReferenceEquals(card.Owner, player))
+        {
+            // 跨玩家（声明玩家≠卡归属玩家）＝参数自洽校验失败（归属口径＝卡当前所在卡组——不设「仅己方」限制）。
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.InvalidTarget, card);
+        }
+
+        if (!_library.TryGetRegisteredId(card.Definition, out _))
+        {
+            // 定义未注册于本对局卡牌库（非本局引用——按引用相等反查）。
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.InvalidTarget, card);
+        }
+
+        // ② 门禁（Unavailable——对局初始化未完成〔卡牌 ID 水位线未快照〕；零副作用、不抛）：
+        if (_cardIdWatermark is null)
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.Unavailable, card);
+        }
+
+        // ③ 生命周期（CardDestroyed）先于容器归属（NotInDeck）——「已销毁＋不在卡组」＝CardDestroyed：
+        if (!card.Life.IsAlive)
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.CardDestroyed, card);
+        }
+
+        // ④ 容器归属（NotInDeck——含从未在过、已被取出／重复调用；失败路径幂等零副作用）：
+        if (!player.Deck.ContainsInstance(card))
+        {
+            return DeckFetchResult.Rejected(DeckFetchFailureReason.NotInDeck, card);
+        }
+
+        // 执行段：前置校验全部通过——先移除（基础件必命中、无失败点），再按满手裁决分支。
+        player.Deck.RemoveInstance(card);
+        if (HandLimitBurn.IsAtLimit(player))
+        {
+            // 满手＝爆牌（对齐 DrawCard 路径「算被抽到」：drawn → 销毁 → burned；hand.add 零次；
+            // 经共享爆牌单元〔K0·B12 统一；Kb 独立信号输出〕）。
+            await HandLimitBurn.BurnAsync(_engine, player, card, emitDrawn: true, ct).ConfigureAwait(false);
+            return DeckFetchResult.Burned(card);
+        }
+
+        player.Hand.Add(card);
+        await GameUpdates.EmitCardDrawn(_engine, player, card, ct).ConfigureAwait(false);
+        await GameUpdates.EmitCardHandAdd(_engine, player, card, ct).ConfigureAwait(false);
+        return DeckFetchResult.Fetched(card);
     }
 
     /// <summary>抽牌核心链路（静默）：卡组条目取件（加载实例通道）→ 加入手牌。</summary>

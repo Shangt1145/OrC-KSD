@@ -5,8 +5,8 @@ namespace Orc.Game.Cards;
 /// <summary>
 /// 词条注册面（2C-A1；进程级全局）：登记「词条标识 → 组件工厂（卡实例＋参值 → 词条组件）」。
 /// 作用域与契约（实现 grill 第 2 批·场 1 第 5 轮裁定）：
-/// 【进程级全局】生产内建十七枚（闪击/奋战/烟幕/伏击＋被压制/被抑制/动员/钳击/预报/免疫/重甲/情报/
-/// 无法被压制/无法被抑制——A2 扩展；亡计——A4 扩展；老兵——S1 扩展；隐蔽——S2 扩展）经本面装配（取代硬编码工厂 switch）；开放扩展注册
+/// 【进程级全局】生产内建十九枚（闪击/奋战/烟幕/伏击＋被压制/被抑制/动员/钳击/预报/免疫/重甲/情报/
+/// 无法被压制/无法被抑制——A2 扩展；亡计——A4 扩展；老兵——S1 扩展；隐蔽——S2 扩展；守护——批 4 扩展；冲击——批 5 扩展）经本面装配（取代硬编码工厂 switch）；开放扩展注册
 /// （测试/后续批次可注册自定义标识）。
 /// 【注册先于使用】为使用者义务：定义声明的合法性校验（<see cref="CardDefinition"/>）与加载期组件构造
 /// （<see cref="KeywordManager"/>）均以本面内容为唯一来源（单源）；注册须发生在定义构造/加载装配之前。
@@ -15,11 +15,15 @@ namespace Orc.Game.Cards;
 /// 【线程安全】以内部锁保护全部读写（装配期注册为主；如需运行时注册/注销，操作线程安全、即刻可见）。
 /// 【测试隔离】测试以唯一命名隔离为主；<see cref="Unregister"/> 为测试清理/装配维护的可选注销面
 /// （注销生产内建属误用——后续定义校验/装载将 fail-fast）。
+/// 【词条效果绑定（批 4 加性·数据化）】词条 → 数据壳效果清单的声明面（<see cref="DeclareEffectBindings"/>）：
+/// 装载期实例化（<see cref="KeywordManager"/> 授予链的装载期实例化点）与装配期核验
+/// （<see cref="KeywordEffectAssembly"/>）的查询源；生产内建绑定于本面静态构造声明（试点：闪击/动员）；
+/// 绑定随 <see cref="Unregister"/> 一并清理。键常量登记处＝<see cref="KeywordEffectAssembly"/>。
 /// 【对战词条分类（A2 加性）】注册时以 <c>isBattleKeyword</c> 声明打标（标识级分类——非实例级）；
 /// 打标全集＝「已实现且打标」（池边界）——供「获得 1 个随机对战词条」类消费由调用方构建池
 /// （<see cref="BattleKeywordUniverse"/>＋取样＋授予组合；筛选/计数读取面见 <see cref="BattleKeywordRules"/>）。
-/// 打标清单（Q&A-2，B 站 Wiki 2025-12 版判定）：闪击/奋战/烟幕/伏击/重甲X（本批 5 项）；
-/// 「守护」「冲击」属标注全集但不在本批实现范围——不入批内池、留后续批次。
+/// 打标清单（Q&A-2，B 站 Wiki 2025-12 版判定）：闪击/奋战/烟幕/伏击/重甲X（A2 批 5 项）＋守护（批 4——wiki『属于对战词条』）
+/// ＋冲击（批 5——wiki『属于对战词条』）。
 /// </summary>
 public static class KeywordRegistry
 {
@@ -27,10 +31,11 @@ public static class KeywordRegistry
     private static readonly Dictionary<string, Func<Card, int?, KeywordComponent>> Factories = new(StringComparer.Ordinal);
     private static readonly List<string> Order = new();
     private static readonly HashSet<string> BattleKeywords = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, IReadOnlyList<KeywordEffectBinding>> EffectBindings = new(StringComparer.Ordinal);
 
     static KeywordRegistry()
     {
-        // 生产内建十七枚（经注册面装配——合法标识集来源＝本面内容；S2 起含隐蔽——「十六枚」旧注释随注册面同步）。
+        // 生产内建十九枚（经注册面装配——合法标识集来源＝本面内容；S2 起含隐蔽、批 4 起含守护、批 5 起含冲击——「十八枚」旧口径随本行同步）。
         // 既有四枚（2C-A1 迁移）——均属对战词条（打标）。
         Register(KeywordIds.Blitz, (_, _) => new BlitzKeywordComponent(), isBattleKeyword: true);
         Register(KeywordIds.Fury, (_, _) => new FuryKeywordComponent(), isBattleKeyword: true);
@@ -58,6 +63,26 @@ public static class KeywordRegistry
         // S2 新增一枚——隐蔽（标记型；无行为面；不打对战词条标——纯内容标记，读取面经 CovertRules.IsCovert；
         // 豁免剔除经判定器默认规则/剔除点承载、揭示经 CovertRules.RevealAsync 承载）。
         Register(KeywordIds.Covert, (_, _) => new PlainKeywordComponent(KeywordIds.Covert));
+
+        // 批 4 新增一枚——守护（标记型；无行为面；打对战词条标——wiki『属于对战词条』；
+        // 行为面＝守护维护链读点（双通道：IsGuard 代码通道 / 本词条）承载——维护重算见 CommandManager）。
+        Register(KeywordIds.Guard, (_, _) => new PlainKeywordComponent(KeywordIds.Guard), isBattleKeyword: true);
+
+        // 批 5 新增一枚——冲击（标记型；无行为面；打对战词条标——wiki『属于对战词条』；
+        // 行为面＝免反击（C5 判定器条款——现势读取）＋消耗（攻击执行段尾部词条移除链）承载——见 CommandManager）。
+        Register(KeywordIds.Shock, (_, _) => new PlainKeywordComponent(KeywordIds.Shock), isBattleKeyword: true);
+
+        // 批 4 数据化：词条效果绑定声明（词条 → 数据壳效果清单；试点：闪击/动员）——
+        // 装载期实例化（授予链）与装配期核验（KeywordEffectAssembly）的查询源；键常量登记于 KeywordEffectAssembly。
+        DeclareEffectBindings(KeywordIds.Blitz, new[]
+        {
+            new KeywordEffectBinding(KeywordEffectAssembly.BlitzDeploySetPrefabId, KeywordEffectAssembly.BlitzDeploySetEffectName),
+        });
+        DeclareEffectBindings(KeywordIds.Mobilize, new[]
+        {
+            new KeywordEffectBinding(KeywordEffectAssembly.MobilizeAccrualPrefabId, KeywordEffectAssembly.MobilizeAccrualEffectName),
+            new KeywordEffectBinding(KeywordEffectAssembly.MobilizeLossPrefabId, KeywordEffectAssembly.MobilizeLossEffectName),
+        });
     }
 
     /// <summary>
@@ -90,7 +115,8 @@ public static class KeywordRegistry
         }
     }
 
-    /// <summary>注销词条（测试清理/装配维护用；未注册＝false 无操作、不抛错）。注销生产内建属误用（定义校验/装载 fail-fast）。</summary>
+    /// <summary>注销词条（测试清理/装配维护用；未注册＝false 无操作、不抛错）。注销生产内建属误用（定义校验/装载 fail-fast）。
+    /// 批 4：效果绑定随注销一并清理。</summary>
     public static bool Unregister(string keyword)
     {
         if (string.IsNullOrWhiteSpace(keyword))
@@ -107,7 +133,107 @@ public static class KeywordRegistry
 
             Order.Remove(keyword);
             BattleKeywords.Remove(keyword);
+            EffectBindings.Remove(keyword); // 批 4：绑定声明随词条注销清理（测试隔离/装配维护）
             return true;
+        }
+    }
+
+    /// <summary>
+    /// 声明词条效果绑定（批 4 加性·数据化；词条 → 数据壳效果清单——登记一次性、重复拒绝）：
+    /// 装载期实例化（授予链装载期实例化点）与装配期核验（<see cref="KeywordEffectAssembly"/>）的查询源。
+    /// 「注册先于绑定」：词条须已注册（未注册＝明确拒绝）；声明内 PrefabId / EffectName 校验（非空白、两两不重复）。
+    /// 绑定只影响声明之后的装载（已装载实例不追溯）；注销（<see cref="Unregister"/>）随词条一并清理。
+    /// </summary>
+    /// <param name="keyword">词条标识（须已注册）。</param>
+    /// <param name="bindings">数据壳效果清单（声明序＝装载序；至少一项）。</param>
+    /// <exception cref="ArgumentException">keyword 为 null/空白；bindings 为空集；项 PrefabId / EffectName 空白或重复。</exception>
+    /// <exception cref="ArgumentNullException">bindings 或其项为 null。</exception>
+    /// <exception cref="InvalidOperationException">词条未注册（注册先于绑定）；或同词条重复声明（拒绝）。</exception>
+    public static void DeclareEffectBindings(string keyword, IEnumerable<KeywordEffectBinding> bindings)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        ArgumentNullException.ThrowIfNull(bindings);
+
+        var list = new List<KeywordEffectBinding>();
+        var prefabIds = new HashSet<string>(StringComparer.Ordinal);
+        var effectNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in bindings)
+        {
+            if (binding is null)
+            {
+                throw new ArgumentNullException(nameof(bindings), "绑定清单不能包含 null 元素。");
+            }
+
+            if (string.IsNullOrWhiteSpace(binding.PrefabId))
+            {
+                throw new ArgumentException("绑定 PrefabId 不能为空白。", nameof(bindings));
+            }
+
+            if (string.IsNullOrWhiteSpace(binding.EffectName))
+            {
+                throw new ArgumentException("绑定 EffectName 不能为空白。", nameof(bindings));
+            }
+
+            if (!prefabIds.Add(binding.PrefabId))
+            {
+                throw new ArgumentException($"绑定清单含重复 PrefabId '{binding.PrefabId}'。", nameof(bindings));
+            }
+
+            if (!effectNames.Add(binding.EffectName))
+            {
+                throw new ArgumentException($"绑定清单含重复 EffectName '{binding.EffectName}'。", nameof(bindings));
+            }
+
+            list.Add(binding);
+        }
+
+        if (list.Count == 0)
+        {
+            throw new ArgumentException("绑定清单至少须一项（空集拒绝——声明意图不明确）。", nameof(bindings));
+        }
+
+        lock (Gate)
+        {
+            if (!Factories.ContainsKey(keyword))
+            {
+                throw new InvalidOperationException(
+                    $"词条标识 '{keyword}' 未注册（注册先于绑定——绑定声明被拒绝）。");
+            }
+
+            if (!EffectBindings.TryAdd(keyword, list))
+            {
+                throw new InvalidOperationException(
+                    $"词条标识 '{keyword}' 的效果绑定已声明（重复声明被拒绝——注册即配置）。");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 读取词条效果绑定（装载期实例化查询源；未声明 / null / 空白＝空列表——不抛错、快速路径）。
+    /// </summary>
+    internal static IReadOnlyList<KeywordEffectBinding> GetEffectBindings(string keyword)
+        => !string.IsNullOrWhiteSpace(keyword)
+            && EffectBindings.TryGetValue(keyword, out var bindings)
+                ? bindings
+                : Array.Empty<KeywordEffectBinding>();
+
+    /// <summary>
+    /// 枚举全部词条效果绑定（装配期核验查询源；登记序快照——词条 + 绑定逐项）。
+    /// </summary>
+    internal static IReadOnlyList<(string Keyword, KeywordEffectBinding Binding)> EnumerateEffectBindings()
+    {
+        lock (Gate)
+        {
+            var result = new List<(string, KeywordEffectBinding)>();
+            foreach (var (keyword, bindings) in EffectBindings)
+            {
+                foreach (var binding in bindings)
+                {
+                    result.Add((keyword, binding));
+                }
+            }
+
+            return result;
         }
     }
 
@@ -199,3 +325,12 @@ public static class KeywordRegistry
         return component;
     }
 }
+
+/// <summary>
+/// 词条效果绑定项（批 4 数据化；词条 → 数据壳效果的关联声明——<see cref="KeywordRegistry.DeclareEffectBindings"/>）：
+/// <see cref="PrefabId"/>＝词条效果库中的效果预制体标识（库键）；<see cref="EffectName"/>＝实例化效果名
+/// （卡容器效果检索面契约——「效果名契约」保持项）。
+/// </summary>
+/// <param name="PrefabId">效果预制体标识（库键）。</param>
+/// <param name="EffectName">效果名（实例化时随数据壳装载）。</param>
+public sealed record KeywordEffectBinding(string PrefabId, string EffectName);

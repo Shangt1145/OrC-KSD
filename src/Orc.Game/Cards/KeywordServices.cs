@@ -126,7 +126,7 @@ public static class InhibitRules
 
 /// <summary>
 /// 动员服务（Q&A-6；批 1 效果化后的保留壳）：原「受伤害直调」成员（<c>OnUnitDamagedAsync</c>）已退役——
-/// 「受到实际伤害（净伤害＞0）后失去动员」由动员效果（<see cref="MobilizeLossEffect"/>）监听
+/// 「受到实际伤害（净伤害＞0）后失去动员」由动员效果（<see cref="MobilizeLossEffect"/>——批 4 数据化行为引用目标）监听
 /// <see cref="GameUpdates.CardDamaged"/> 信号自我撤销承载（受伤害门户不再感知动员——直调路径删除，
 /// 均为本批迁移范围内的内部专用面处置）；其余读取能力经既有词条读取面（<see cref="KeywordRules"/>）承担。
 /// 类保留为 public 面无成员壳（本批不做公共面删除、不夹带替代成员）。

@@ -21,4 +21,10 @@
     <None Update="EffectParsing/Lexicon/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 词条效果库（批 4 数据化）：词条效果的数据壳制品（*.prefab.json）随程序集输出（沿效果解析资产先例）。 -->
+  <ItemGroup>
+    <None Update="Cards/KeywordPrefabs/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+
 </Project>

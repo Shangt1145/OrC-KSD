@@ -109,6 +109,43 @@ public class EffectParsingTests
     }
 
     [Fact]
+    public void Dsl_Op_Field_RoundTrips_Faithfully()
+    {
+        // 缺陷修复（批 0 遗留）：OpDto.Field（目标字段——仅 aura）序列化往返补全——
+        // ToDto/FromDto 此前皆未携带 ⇒ 补全并断言往返保真（null 与非 null 两态；不改变既有序列化行为）。
+        var withField = new DslEffectInstance(
+            "deploy_basic",
+            new Dictionary<string, DslSlotFill>(StringComparer.Ordinal)
+            {
+                ["on_deploy"] = new(new[]
+                {
+                    new DslOp("aura", new DslSelector("all", side: "friendly"), amount: 2, field: "attack"),
+                }),
+            });
+
+        var json = DslJson.Serialize(withField);
+        Assert.Contains("\"field\":\"attack\"", json, StringComparison.Ordinal);
+        var back = DslJson.Deserialize(json);
+        var op = Assert.Single(Assert.Single(back.Fills).Value.Ops);
+        Assert.Equal("aura", op.Op);
+        Assert.Equal("attack", op.Field);
+        Assert.Equal(2, op.Amount);
+
+        // null 态：字段省略（WhenWritingNull 既有口径）、往返后 Field 为 null（显式 0/未提供口径不受影响）。
+        var withoutField = new DslEffectInstance(
+            "deploy_basic",
+            new Dictionary<string, DslSlotFill>(StringComparer.Ordinal)
+            {
+                ["on_deploy"] = new(new[] { new DslOp("draw", count: 1) }),
+            });
+
+        var json2 = DslJson.Serialize(withoutField);
+        Assert.DoesNotContain("\"field\"", json2, StringComparison.Ordinal);
+        var back2 = DslJson.Deserialize(json2);
+        Assert.Null(Assert.Single(Assert.Single(back2.Fills).Value.Ops).Field);
+    }
+
+    [Fact]
     public void Dsl_Rejects_Missing_Template()
     {
         var ok = DslJson.TryDeserialize("""{ "fills": {} }""", out var instance, out var error);
