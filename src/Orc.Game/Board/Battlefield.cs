@@ -7,7 +7,7 @@ namespace Orc.Game.Board;
 /// （<see cref="BattleLine"/>；容量 5/5/5）。
 /// 归属固定（对象稳定、不随回合滚动；"我方/敌方"为调用方视图概念，战场不做滚动）；前线不属于任何一方。
 /// HQ 初始占位（2A 槽位化；W3-3 受控变更：占位者由「对应玩家引用」改为「玩家总部实体」<see cref="Players.Hq"/>——
-/// 独立 HQ 实体占支援线固定槽位（<see cref="HqSlotIndex"/>＝2，居中），Player 持 HQ 引用；
+/// 独立 HQ 实体初始占支援线槽位（<see cref="HqSlotIndex"/>＝2，居中），Player 持 HQ 引用；
 /// 布局语义〔占容量格/邻位/守护/轰炸机拦截基准〕不变）：
 /// 支援线各含 HQ 占位（槽 2）＋左右各 2 格初始为空；前线初始全空。
 /// 〔W3-4 受控变更：原为「支援线槽 0＝HQ、容量 4」——总部贴在支援线最左端，单位只能落在它右侧，
@@ -17,7 +17,7 @@ namespace Orc.Game.Board;
 /// </summary>
 public sealed class Battlefield
 {
-    /// <summary>总部在支援线中的固定占位索引（居中：其左、其右各有 2 格可放单位）。</summary>
+    /// <summary>总部初始占位索引。阵型插入后位置可变，规则应读取 Hq.Position。</summary>
     public const int HqSlotIndex = 2;
 
     /// <summary>创建战场（构造期即含 HQ 占位：玩家A / 玩家B 支援线槽 <see cref="HqSlotIndex"/>＝各自总部实体）。</summary>

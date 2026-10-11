@@ -268,6 +268,12 @@ public sealed class Match
     /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
     public JudicatorRegistry Judicators => RequireReady(_judicators);
 
+    /// <summary>Optional frontend state provider. Invoked synchronously; must be read-only.</summary>
+    public Func<Player, ActionInteractionState?>? InteractionStateReader { get; set; }
+
+    public bool CanAcceptInput(Player player, Entity? actor = null, Entity? target = null)
+        => CombatJudicatorInvoker.InvokeBool(Judicators.Resolve(JudicatorNames.ActionInput), player, actor!, target!);
+
     // ---------- 构筑外判定（W1-1 G12 加性面） ----------
 
     /// <summary>
@@ -507,6 +513,8 @@ public sealed class Match
         // （『初始化内创建＋注入』范式）；装配期注册段经创建参数一次性执行（注册动作返回条目等价句柄、供注册方持有）；
         // 时点＝卡加载之前（远早于洗切与加载段——就绪由装配链位置保证：「装配期已注册条目在卡加载阶段即可被解析调用」）。
         _judicators = new JudicatorRegistry();
+        _judicators.Register(JudicatorNames.ActionInput,
+            new ActionInputJudicator(player => InteractionStateReader?.Invoke(player)));
 
         // J2 加性（合法性验证替换）：内置注册段（固定、无条件执行）——注册默认验证判定器（费用/反制）：
         // 「默认名恒可解析、默认判定器无条件可用」（不依赖外部装配段传入）。
@@ -663,7 +671,8 @@ public sealed class Match
             // K3：leg 资格（move/attack）与推进前置判定通道——经条目句柄（固定内置注册段注册所得；可用性/复验四调用点同源）。
             (unit, position) => LegJudicatorInvoker.InvokeLeg(moveLegEligibilityEntry, unit, position),
             unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
-            owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner));
+            owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner),
+            CanAcceptInput);
         TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
         TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
@@ -722,7 +731,7 @@ public sealed class Match
         _turnManager.ActionStateRefresher = _commandManager.RefreshActionStates;
         // 打出管理器（2B 加性：随管理器群生成——打出链服务与交互入口；回合管理器为反制「仅己方回合」真源；
         // 后置项 B 加性：注入对局生命周期——终局门禁）
-        _playManager = new PlayManager(Engine, _targeterManager, _battlefieldManager.Battlefield, _turnManager, _lifecycle);
+        _playManager = new PlayManager(Engine, _targeterManager, _battlefieldManager.Battlefield, _turnManager, _lifecycle, CanAcceptInput);
 
         // A1 加性：换牌管理器（开局换牌相位承载——特制槽位交互＋换牌执行；双方确认＝执行先手第 1 回合＋置"进行"）
         var turnManager = _turnManager!;
@@ -832,6 +841,8 @@ public sealed class Match
         // 动作作用域（UI 消费桥接）：结束回合链产生的事件聚合为一段。
         await using var _actionScope = Engine.BeginAction();
 
+        if (!CanAcceptInput(CurrentPlayer, CurrentPlayer.Hq))
+            throw new InvalidOperationException("InteractionBlocked");
         await TurnManager.EndTurn(ct);
     }
 

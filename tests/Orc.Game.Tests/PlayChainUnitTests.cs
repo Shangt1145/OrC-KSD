@@ -11,7 +11,7 @@ namespace Orc.Game.Tests;
 /// <summary>
 /// 2B 验收①②（单位）：预打出（合法性/交互成功/取消；拒绝不发起请求、不进入交互、不发更新）、
 /// 出链（验证/部署/单位化/扣费；仅部署扣费）、复验失败（零副作用＋留痕）、直接驱动防御（占槽/重复单位化）、
-/// 未加载卡 fail-fast。断言对象＝被选中的空槽位（槽位对象断言）。
+/// 未加载卡 fail-fast。候选断言＝被选中的阵型空隙；结果断言＝引擎重排后的实际占用槽。
 /// </summary>
 public class PlayChainUnitTests
 {
@@ -79,15 +79,15 @@ public class PlayChainUnitTests
         var task = match.PlayManager.BeginUnitPrePlayAsync(unit);
         var (description, responder) = await bridge.WaitForNextBeginAsync();
 
-        // 候选＝己方支援线空槽位（邻位规则计算；初始＝HQ 两侧邻位槽 [1, 3]）；单选槽。
-        Assert.Equal(new[] { line[1].Ref, line[3].Ref }, description.AllowedTargets);
+        // 候选＝己方支援阵型插入空隙（初始＝HQ 两侧）；单选空隙。
+        Assert.Equal(line.GetInsertionGaps().Select(gap => gap.Ref), description.AllowedTargets);
         Assert.Equal(SelectorNames.Slot, description.Slots[0].Name);
         Assert.Equal(1, description.Slots[0].Min);
         Assert.Equal(1, description.Slots[0].Max);
 
-        // 确认（选中空槽位）→ 自动衔接打出链。
+        // 确认（选中左侧阵型空隙）→ 自动衔接打出链。
         var target = line[1];
-        Assert.True(responder.Complete(description.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, target.Ref)));
+        Assert.True(responder.Complete(description.RequestId, TargeterTestKit.Selection(TargetSlot.DefaultName, line.GetInsertionGaps()[0].Ref)));
         var result = await task;
 
         Assert.Equal(PlayResultStatus.Success, result.Status);

@@ -56,6 +56,10 @@ public enum PlayFailureReason
 
     /// <summary>非"进行"相位（相位门禁：准备／换牌相位下打出链各入口拒绝——零副作用、状态不推进）。</summary>
     PhaseBlocked,
+    InteractionBlocked,
+    NonOwnerTurn,
+    CardNotInHand,
+    FormationGapUnavailable,
 }
 
 /// <summary>

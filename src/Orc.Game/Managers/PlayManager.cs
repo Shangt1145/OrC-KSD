@@ -10,8 +10,8 @@ namespace Orc.Game.Managers;
 /// <summary>
 /// 打出管理器（2B 打出链服务与交互入口）：
 /// ①单位预打出（<see cref="BeginUnitPrePlayAsync"/>）——开始＝触发预打出触发器（内含指挥点合法性验证；不足＝拒绝）
-///   ＋候选检查（候选＝己方支援线空槽位〔邻位规则计算〕；为空＝拒绝、不进入交互）；
-///   交互＝targeter 请求（候选＝空槽位引用）；确认（前端/mock 经交互完成路径提交选中槽位）＝自动衔接打出链；
+///   ＋候选检查（候选＝己方支援阵型全部插入空隙（含总部边界）；为空＝拒绝、不进入交互）；
+///   交互＝targeter 请求（候选＝FormationGap 引用）；确认（前端/mock 经交互完成路径提交选中空隙）＝自动衔接打出链；
 ///   取消（经交互取消路径）＝终止预打出（零副作用——不发更新、卡留手、无费用扣除、无槽位/组件变化）。
 ///   「开始/取消/确认」形态：开始＝本入口；取消/确认＝交互完成路径（桥接 Complete/Cancel 驱动，等价于前端拖回/释放手势）。
 /// ②单位打出链直接驱动（<see cref="PlayUnitAsync"/>）：外层复验＋部署链＋收尾扣费（部署路径）。
@@ -34,11 +34,12 @@ public sealed class PlayManager
     private readonly Battlefield _battlefield;
     private readonly TurnManager? _turnManager;
     private readonly MatchLifecycle? _lifecycle;
+    private readonly Func<Player, Entity?, Entity?, bool> _inputAllowed;
 
     /// <summary>创建打出管理器。</summary>
     /// <param name="engine">对局引擎（发射更新 / 触发子触发器）。</param>
     /// <param name="targeterManager">目标选择管理器（单位预打出交互）。</param>
-    /// <param name="battlefield">战场（部署候选＝己方支援线空槽位的计算源）。</param>
+    /// <param name="battlefield">战场（部署候选＝己方支援阵型插入空隙的计算源）。</param>
     /// <param name="turnManager">回合管理器（反制「仅己方回合」的当前行动方真源；可空——缺省＝独立构造场景，反制使用抛明确异常）。</param>
     /// <param name="lifecycle">对局生命周期（终局门禁——后置项 B；缺省＝null＝独立构造场景无门禁）。</param>
     /// <exception cref="ArgumentNullException">engine / targeterManager / battlefield 为 null。</exception>
@@ -47,7 +48,8 @@ public sealed class PlayManager
         TargeterManager targeterManager,
         Battlefield battlefield,
         TurnManager? turnManager = null,
-        MatchLifecycle? lifecycle = null)
+        MatchLifecycle? lifecycle = null,
+        Func<Player, Entity?, Entity?, bool>? inputAllowed = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(targeterManager);
@@ -58,15 +60,16 @@ public sealed class PlayManager
         _battlefield = battlefield;
         _turnManager = turnManager;
         _lifecycle = lifecycle;
+        _inputAllowed = inputAllowed ?? ((_, _, _) => true);
     }
 
     // ---------- ① 单位预打出（开始→交互→确认/取消；一次调用链） ----------
 
     /// <summary>
     /// 单位预打出（一次调用链：开始 → 交互 → 确认/取消 →〔确认时〕自动衔接打出链）：
-    /// ①开始：触发预打出触发器（内含指挥点验证——不足＝拒绝〔预打出阶段〕）；候选检查（己方支援线空槽位〔邻位规则〕——为空＝拒绝）；
-    /// ②交互：发起 targeter 请求（候选＝空槽位引用；单选）；等待结局（前端/mock 经桥接完成或取消）；
-    /// ③确认：取出选中槽位 → 自动衔接 <see cref="PlayUnitAsync"/>；取消：终止（零副作用）。
+    /// ①开始：触发预打出触发器（内含指挥点验证——不足＝拒绝〔预打出阶段〕）；候选检查（己方支援阵型插入空隙——为空＝拒绝）；
+    /// ②交互：发起 targeter 请求（候选＝FormationGap 引用；单选）；等待结局（前端/mock 经桥接完成或取消）；
+    /// ③确认：取出选中空隙 → 自动衔接 <see cref="PlayUnitAsync"/>；取消：终止（零副作用）。
     /// </summary>
     /// <exception cref="ArgumentNullException">card 为 null。</exception>
     /// <exception cref="InvalidOperationException">卡牌未加载归属（装配性错误、fail-fast）。</exception>
@@ -74,6 +77,8 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+        if (CheckAdmission(card, true) is { } admission) return PlayResult.Failure(admission);
+
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（不触发预打出、不发起 targeter 请求、零副作用）
         if (_lifecycle is not null)
@@ -113,20 +118,20 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.PlayChainFault);
         }
 
-        // ① 候选：己方支援线空槽位（邻位规则计算）——为空＝预打出不可开始（不进入交互）。
-        var candidates = _battlefield.GetSupportLine(owner).GetAdjacentEmptySlots();
+        // Engine-owned insertion gaps: before, between and after all units and HQ.
+        var candidates = _battlefield.GetSupportLine(owner).GetInsertionGaps();
         if (candidates.Count == 0)
         {
             return PlayResult.Failure(PlayFailureReason.PrePlayNoAvailableSlots);
         }
 
-        // ② 交互：targeter 请求（候选＝空槽位引用；候选由后端给出——Q19＝a）。
-        Slot? selectedSlot = null;
+        // ② 交互：targeter 请求（候选＝FormationGap 引用；候选由后端给出——Q19＝a）。
+        FormationGap? selectedGap = null;
         var result = await _targeterManager.RunAsync(async flow =>
         {
             var step = await flow.Step(
                 SelectorTemplates.Slot,
-                new ReferenceSetParameter(candidates.Select(slot => slot.Ref), 1, 1));
+                new ReferenceSetParameter(candidates.Select(gap => gap.Ref), 1, 1));
 
             // 非法选择＝同一选择器重入（Q8a）。
             while (step.IsFailed && step.Failure == SelectorFailureReason.InvalidSelection)
@@ -144,8 +149,8 @@ public sealed class PlayManager
                 return TargeterResult.FromSelectorFailure(step.Failure);
             }
 
-            selectedSlot = step.Value?.Value as Slot;
-            return selectedSlot is null
+            selectedGap = step.Value?.Value as FormationGap;
+            return selectedGap is null
                 ? TargeterResult.Failed(TargeterFailureReason.InvalidSelection)
                 : TargeterResult.Ok();
         });
@@ -160,13 +165,13 @@ public sealed class PlayManager
             return PlayResult.Failure(PlayFailureReason.TargetingFailed, result);
         }
 
-        // ③ 确认：选中空槽位（身份可判）→ 自动衔接打出链。
-        if (selectedSlot is null)
+        // ③ 确认：选中阵型空隙（身份及占用快照复验）→ 自动衔接打出链。
+        if (selectedGap is null)
         {
             return PlayResult.Failure(PlayFailureReason.TargetingFailed, result);
         }
 
-        return await PlayUnitAsync(card, selectedSlot, ct);
+        return await PlayUnitAsync(card, selectedGap, ct);
     }
 
     // ---------- ② 单位打出链（直接驱动；部署路径） ----------
@@ -183,6 +188,8 @@ public sealed class PlayManager
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(target);
         var owner = RequireOwner(card);
+        if (CheckAdmission(card, false) is { } admission) return PlayResult.Failure(admission);
+
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
         if (_lifecycle is not null)
@@ -227,6 +234,64 @@ public sealed class PlayManager
             ExecutionOutcome.ValidationRejected => PlayResult.Failure(PlayFailureReason.PlayVerificationRejected),
             _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
         };
+    }
+
+    /// <summary>Canonical deployment portal. Rejects stale/foreign gaps before any game side effect.</summary>
+    public async Task<PlayResult> PlayUnitAsync(UnitCard card, FormationGap gap, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(card); ArgumentNullException.ThrowIfNull(gap);
+        var owner = RequireOwner(card);
+        if (CheckAdmission(card, true) is { } admission) return PlayResult.Failure(admission);
+        if (card.TryGetData<UnitStateData>(out _)) return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
+        if (!ReferenceEquals(gap.Line, _battlefield.GetSupportLine(owner)) || !gap.IsCurrent)
+            return PlayResult.Failure(PlayFailureReason.FormationGapUnavailable);
+        await using var scope = _engine.BeginAction();
+        var stream = await card.PlayTrigger.InvokeAsync(_engine, new Dictionary<string, object?>
+        {
+            [GameUpdates.PayloadCard] = card, [GameUpdates.PayloadPlayer] = owner,
+            [nameof(CardTriggerView.FormationGap)] = gap,
+        }, ct);
+        return stream.Outcome switch
+        {
+            ExecutionOutcome.Normal => PlayResult.Success(),
+            ExecutionOutcome.ValidationRejected => PlayResult.Failure(PlayFailureReason.PlayVerificationRejected),
+            _ => PlayResult.Failure(PlayFailureReason.PlayChainFault),
+        };
+    }
+
+    /// <summary>Pure entry availability. Executes the same native validation judicators;
+    /// effect-specific selections and revalidation still happen in the play chain.</summary>
+    public bool CanPlay(CardBase card)
+    {
+        if (CheckAdmission(card, true) is not null) return false;
+        return card switch
+        {
+            UnitCard unit => !unit.TryGetData<UnitStateData>(out _)
+                && unit.PrePlayTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid
+                && _battlefield.GetSupportLine(unit.Owner!).GetInsertionGaps().Count > 0,
+            CommandCard command => command.PrePlayTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid,
+            CounterCard counter => counter.UseCounterTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid,
+            _ => false,
+        };
+    }
+
+    public IReadOnlyList<FormationGap> GetDeploymentGaps(UnitCard card) => CanPlay(card)
+        ? _battlefield.GetSupportLine(card.Owner!).GetInsertionGaps() : Array.Empty<FormationGap>();
+
+    private PlayFailureReason? CheckAdmission(CardBase card, bool requireHand)
+    {
+        if (_lifecycle?.IsEnded == true) return PlayFailureReason.GameEnded;
+        if (_lifecycle is not null && !_lifecycle.IsActionAllowed) return PlayFailureReason.PhaseBlocked;
+        var owner = card.Owner;
+        if (owner is null) return PlayFailureReason.CardNotInHand;
+        // Full match user entrances require native ownership/hand membership. Standalone fixtures
+        // keep their established low-level semantics; JoinUnitAsync never reads frontend state.
+        if (requireHand && _turnManager is not null)
+        {
+            if (!ReferenceEquals(_turnManager.CurrentPlayer, owner)) return PlayFailureReason.NonOwnerTurn;
+            if (!owner.Hand.Contains(card)) return PlayFailureReason.CardNotInHand;
+        }
+        return _inputAllowed(owner, card, null) ? null : PlayFailureReason.InteractionBlocked;
     }
 
     // ---------- ③ 加入路径 ----------
@@ -316,6 +381,8 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+        if (CheckAdmission(card, true) is { } admission) return PlayResult.Failure(admission);
+
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（零副作用、状态不推进）
         if (_lifecycle is not null)
@@ -362,6 +429,8 @@ public sealed class PlayManager
             return PlayResult.Cancelled();
         }
 
+        if (CheckAdmission(card, true) is { } commitAdmission) return PlayResult.Failure(commitAdmission);
+
         // ② 打出段：复验＋宣告＋主动 handler 集＋收尾；捕获结果自动移交为 object? 参数。
         var playStream = await card.PlayTrigger.InvokeAsync(
             _engine,
@@ -395,6 +464,8 @@ public sealed class PlayManager
     {
         ArgumentNullException.ThrowIfNull(card);
         var owner = RequireOwner(card);
+        if (CheckAdmission(card, false) is { } admission) return PlayResult.Failure(admission);
+
 
         // 终局门禁（后置项 B）：对局已结束＝入口拒绝（激活/取消均拒绝；零副作用、状态不推进）
         if (_lifecycle is not null)

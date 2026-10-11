@@ -260,10 +260,12 @@ public static class GameHooks
         PayloadKiller,
     };
 
-    // ---------- 判定器名（21 条；转发引用 JudicatorNames） ----------
+    // ---------- 判定器名（22 条；转发引用 JudicatorNames） ----------
 
     /// <summary>判定器名：费用检查（<c>validation.cost.check</c>）。</summary>
     public const string JudicatorCostCheck = JudicatorNames.CostCheck;
+
+    public const string JudicatorActionInput = JudicatorNames.ActionInput;
 
     /// <summary>判定器名：反制使用检查（<c>validation.counter.use</c>）。</summary>
     public const string JudicatorCounterUse = JudicatorNames.CounterUse;
@@ -325,10 +327,10 @@ public static class GameHooks
     /// <summary>判定器名：失去点数的数字包裹（<c>resource.point.lose</c>；E1-25 后续）。</summary>
     public const string JudicatorPointLose = JudicatorNames.PointLose;
 
-    /// <summary>判定器名全量（21 条；稳定序＝定义序）。</summary>
+    /// <summary>判定器名全量（22 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> JudicatorNameList { get; } = new[]
     {
-        JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
+        JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck, JudicatorActionInput,
         JudicatorDeckTopTag, JudicatorTargetCandidateEligibility,
         JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
         JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
@@ -338,11 +340,11 @@ public static class GameHooks
         JudicatorPointGain, JudicatorPointLose,
     };
 
-    /// <summary>判定器名装配面：20 条内置（4 条验证类＋6 条交战类＋3 条动作资格类＋1 条效果选靶类＋5 条资源类
+    /// <summary>判定器名装配面：21 条内置（5 条验证类＋6 条交战类＋3 条动作资格类＋1 条效果选靶类＋5 条资源类
     /// ＋1 条目标候选合法性〔S2 提入生产装配〕）由 <c>Match.Initialize</c> 固定注册段注册；1 条示范类（DeckTopTag）经外部装配段（<c>judicatorAssembly</c>）可选注入。</summary>
     public static IReadOnlyList<string> BuiltInJudicatorNames { get; } = new[]
     {
-        JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck,
+        JudicatorCostCheck, JudicatorCounterUse, JudicatorMoveRecheck, JudicatorAttackRecheck, JudicatorActionInput,
         JudicatorCombatTargetLegal, JudicatorCombatRange, JudicatorCombatGuardEligibility, JudicatorCombatInterception,
         JudicatorCombatCounterEligibility, JudicatorCombatAmbushCondition,
         JudicatorMoveLegEligibility, JudicatorAttackLegEligibility, JudicatorMoveFrontlineEnemy,

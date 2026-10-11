@@ -56,6 +56,7 @@ public enum CommandFailureReason
 
     /// <summary>发起拒绝：非"进行"相位（准备／换牌相位下指挥入口拒绝——零副作用、状态不推进）。</summary>
     PhaseBlocked,
+    InteractionBlocked,
 }
 
 /// <summary>
@@ -85,6 +86,7 @@ public enum CommandBlockReason
     /// <summary>被压制（A2 加性）：被压制单位不能移动或攻击（行动合法性消费面读「被压制」标记——
     /// 施加即时生效；「额外压制一回」只影响持续、不改变本阻断）。</summary>
     Suppressed,
+    InteractionBlocked,
 }
 
 /// <summary>

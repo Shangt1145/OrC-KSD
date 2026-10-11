@@ -29,6 +29,10 @@ public class CardTriggerView
     [Read]
     public virtual Slot? Position { get; set; }
 
+    [Optional]
+    [Read]
+    public virtual FormationGap? FormationGap { get; set; }
+
     /// <summary>预打出捕获箱（可选；2B 加性扩展）：指令预打出 handler 经此提交捕获值（由打出链创建并随触发数据注入）。</summary>
     [Optional]
     [Read]

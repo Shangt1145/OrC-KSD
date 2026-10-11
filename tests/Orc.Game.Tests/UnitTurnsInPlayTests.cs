@@ -76,7 +76,7 @@ public class UnitTurnsInPlayTests
         Assert.True(responder.Complete(
             description.RequestId,
             TargeterTestKit.Selection(
-                TargeterTestKit.PrimarySlot(description), match.Battlefield.PlayerASupportLine[1].Ref)));
+                TargeterTestKit.PrimarySlot(description), match.Battlefield.PlayerASupportLine.GetInsertionGaps()[0].Ref)));
         var deployed = await task;
 
         Assert.Equal(PlayResultStatus.Success, deployed.Status);

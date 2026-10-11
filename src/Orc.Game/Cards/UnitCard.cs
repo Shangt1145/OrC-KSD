@@ -142,11 +142,17 @@ public class UnitCard : CardBase
     /// <summary>打出链（外层；仅部署路径）：card.played → 部署链 → 收尾（扣费 → 离手）。</summary>
     private async Task HandlePlayChainAsync(CardTriggerView view, Context ctx, CancellationToken ct)
     {
-        if (view.Card is not UnitCard unit || view.Player is not Player player || view.Position is not { } slot)
+        if (view.Card is not UnitCard unit || view.Player is not Player player)
         {
-            ctx.Interrupt(); // 载荷缺失（结构性错误）：链中止、收尾不发生
+            ctx.Interrupt();
             return;
         }
+        var slot = view.Position;
+        if (view.FormationGap is { } gap)
+        {
+            if (!gap.Line.TryOpenGap(gap, out slot)) { ctx.Interrupt(); return; }
+        }
+        if (slot is null) { ctx.Interrupt(); return; }
 
         // ① 打出宣告（card.played；W4-1 升级版载荷＝{ Card, Player }——被使用卡实例＋使用方）
         await GameUpdates.EmitCardPlayed(_chainEngine, unit, player, ct);

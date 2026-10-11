@@ -79,6 +79,7 @@ public sealed class CommandManager
     private readonly IReadOnlyList<Player> _players;
     private readonly Func<Player?> _currentPlayerProvider;
     private readonly MatchLifecycle? _lifecycle;
+    private readonly Func<Player, Entity?, Entity?, bool> _inputAllowed;
     private readonly RetriggerSystem? _retrigger; // A4：再触发服务（亡计结算执行面/防护的统一入口；可空＝独立构造降级）
     private readonly Func<string, JudicatorBinding>? _validationJudicatorResolver; // J2：验证判定器解析器（复验绑定解析——对局＝注册表；缺省＝内置默认）
     private readonly Func<UnitCard, Ref<Entity>, bool> _combatTargetLegal; // K1：目标合法性判定通道（（攻击者, 目标引用）→ bool——对局＝combat.target.legal 条目句柄；缺省＝内置默认）
@@ -140,7 +141,8 @@ public sealed class CommandManager
         Func<UnitCard, UnitCard, bool>? combatAmbushCondition = null,
         Func<UnitCard, Slot?, LegEligibilityFailure?>? moveLegEligibility = null,
         Func<UnitCard, LegEligibilityFailure?>? attackLegEligibility = null,
-        Func<Player, bool>? moveFrontlineEnemy = null)
+        Func<Player, bool>? moveFrontlineEnemy = null,
+        Func<Player, Entity?, Entity?, bool>? inputAllowed = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -157,6 +159,7 @@ public sealed class CommandManager
         _players = players;
         _currentPlayerProvider = currentPlayerProvider ?? (() => null);
         _lifecycle = lifecycle;
+        _inputAllowed = inputAllowed ?? ((_, _, _) => true);
         _retrigger = retrigger;
         _validationJudicatorResolver = validationJudicatorResolver;
 
@@ -616,6 +619,11 @@ public sealed class CommandManager
         ArgumentNullException.ThrowIfNull(unit);
         RequireUnitized(unit);
 
+        if (unit.Owner is { } inputOwner && !_inputAllowed(inputOwner, unit, null))
+            return new CommandAvailability(CommandBlockReason.InteractionBlocked,
+                CommandActionAvailability.Blocked(CommandBlockReason.InteractionBlocked),
+                CommandActionAvailability.Blocked(CommandBlockReason.InteractionBlocked));
+
         // K3：leg 资格先行（共享条件源——可用性与复验四调用点同源）；移动的位置参数＝当前位置（仅推进语义）。
         var moveLegFailure = _moveLegEligibility(unit, unit.GetData<UnitStateData>().Position);
         var attackLegFailure = _attackLegEligibility(unit);
@@ -669,7 +677,7 @@ public sealed class CommandManager
             return CommandActionAvailability.Blocked(MapLegFailure(failure));
         }
 
-        var candidates = CollectAttackCandidates(unit);
+        var candidates = CollectAttackCandidates(unit).Where(r => _inputAllowed(unit.Owner!, unit, r.Value)).ToList();
         return candidates.Count == 0
             ? CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates)
             : CommandActionAvailability.Available(candidates);
@@ -983,6 +991,8 @@ public sealed class CommandManager
         var owner = unit.Owner;
         var enemy = owner is null ? null : EnemyOf(owner);
         var selectedEntity = selected.Value;
+        if (owner is not null && !_inputAllowed(owner, unit, selectedEntity))
+        { box.Result = CommandResult.Failure(CommandFailureReason.InteractionBlocked); return; }
 
         // 分派：选中敌方 HQ 实体引用 / 敌方单位 → 攻击触发器；选中空槽 → 移动触发器
         // （X1：触发者随指挥链透传）。W3-3：HQ 目标以实体引用承载——不再有「槽位→HQ」分派
@@ -1666,6 +1676,7 @@ public sealed class CommandManager
         CommandBlockReason.NonOwnerTurn => CommandFailureReason.NonOwnerTurn,
         CommandBlockReason.OwnerInvalid => CommandFailureReason.OwnerInvalid,
         CommandBlockReason.UnitDead => CommandFailureReason.UnitDead,
+        CommandBlockReason.InteractionBlocked => CommandFailureReason.InteractionBlocked,
         _ => CommandFailureReason.CommandFlowFault,
     };
 
