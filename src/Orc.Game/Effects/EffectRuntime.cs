@@ -781,15 +781,15 @@ public sealed partial class EffectRuntime
 
         if (filter.Faction is { } faction
             && (beneficiary is not CardBase factionCard
-                || !Enum.TryParse<Faction>(faction, ignoreCase: true, out var parsedFaction)
-                || factionCard.Definition.Faction != parsedFaction))
+                || !Faction.TryNormalize(faction, out var parsedFaction)
+                || !string.Equals(factionCard.Definition.Faction, parsedFaction, StringComparison.Ordinal)))
         {
             return false;
         }
 
         if (filter.UnitType is { } unitType
             && (beneficiary is not UnitCard unit
-                || !Enum.TryParse<UnitType>(unitType, ignoreCase: true, out var parsedType)
+                || !UnitType.TryNormalize(unitType, out var parsedType)
                 || !unit.GetData<UnitStateData>().UnitTypes.Contains(parsedType)))
         {
             return false;

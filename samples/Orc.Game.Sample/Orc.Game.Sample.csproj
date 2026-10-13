@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Orc.Game\Orc.Game.csproj" />
+    <!-- 资产化 S12c：内置判定器经内置插件包提供（宿主/样例负责装载；Match 自身＝空目录）。 -->
+    <ProjectReference Include="..\..\src\Orc.Plugins.BuiltIn\Orc.Plugins.BuiltIn.csproj" />
   </ItemGroup>
 
 </Project>

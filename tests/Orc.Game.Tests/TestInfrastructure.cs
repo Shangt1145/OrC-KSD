@@ -50,7 +50,8 @@ internal static class GameTestData
                 MaxPointSlots = options?.MaxPointSlots ?? ResourceManager.DefaultMaxPointSlots,
                 SkipMulligan = skipMulligan,
             },
-            targeterBridge);
+            targeterBridge,
+            packageActivator: TestHost.Activator);
 }
 
 /// <summary>更新记录器：经 <see cref="LogicEngine.Subscribe"/> 挂接（测试订阅渠道），记录更新类型与载荷（注册序）。</summary>

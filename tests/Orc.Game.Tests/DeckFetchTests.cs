@@ -101,7 +101,8 @@ public class DeckFetchTests
             CommandTestKit.CreateDefinitions().Concat(new[] { FetchHostDefinition }),
             seed: 42,
             options: new MatchOptions { SkipMulligan = true },
-            effectRegistry: registry);
+            effectRegistry: registry,
+            packageActivator: TestHost.Activator);
 
         // 效果快照注册（initialize 前——随卡牌加载链装载；csx 求值器由 Initialize 默认装配）。
         match.Engine.Prefabs.RegisterPrefab(new EffectSnapshot(new EffectPrefab(

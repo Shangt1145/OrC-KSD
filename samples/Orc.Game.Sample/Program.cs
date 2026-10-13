@@ -27,6 +27,8 @@ using Orc.Game.Cards;
 using Orc.Game.Collections;
 using Orc.Game.Players;
 using Orc.Game.Targeting;
+using Orc.Packages;
+using Orc.Plugins.BuiltIn;
 
 namespace Orc.Game.Sample;
 
@@ -46,6 +48,9 @@ internal static class Program
         Console.WriteLine("=== Orc.Game 示例对局 ===");
         Console.WriteLine($"模式＝{(interactive ? "交互（手动应答）" : "自动演示")}；种子＝{seed}");
 
+        // 资产化 批次 2：宿主启动时装配插件的**进程级**资产（词条等静态注册面）——须早于任何对局。
+        BuiltInPlugin.RegisterProcessDefaults();
+
         // ① 建局：调用方提供数据（双方卡组＋定义集），Match 负责装配
         var bridge = new DemoTargeterBridge(interactive);
         var match = new Match(
@@ -53,7 +58,8 @@ internal static class Program
             new CardList(Enumerable.Repeat(InfantryId, 10)),
             CreateDefinitions(),
             seed: seed,
-            targeterBridge: bridge);
+            targeterBridge: bridge,
+            packageActivator: new SnapshotPackageActivator(BuiltInPluginPackage.CreateSnapshot()));
         bridge.Match = match; // 桥接需读对局状态（候选收集／交互）
 
         // ⑦ 观察面之一：即时更新订阅（UI 非阻塞反馈；示例直接打印到控制台）

@@ -56,6 +56,8 @@ public sealed class Match
     private MatchCardService? _cardService; // S9：对局卡牌服务（服务面——卡牌工厂＋放置面；对局装配期创建）
     private MatchHistoryService? _historyService; // S10：对局历史读取服务（最小历史读取面；对局装配期创建）
     private EffectRuntime? _effectRuntime; // E1：效果运行时门面（csx 唯一游戏层受控入口；对局装配期创建）
+    private AssetServiceRegistry? _assetServices; // 资产化 S12c：资产服务注册表（对局级；与判定器注册表并列）
+    private readonly Orc.Game.Plugins.IMatchPackageActivator? _packageActivator; // 资产化 S12c：对局包激活器（快照 → 对局级注册面；null＝空目录）
 
     /// <summary>
     /// 创建对局（准备态；内部新建 LogicEngine 并公开）。装配校验：卡组名单非 null、非空、不含 null/空白 id；
@@ -87,7 +89,8 @@ public sealed class Match
         CardEffectRegistry? effectRegistry = null,
         PlayerDeckConfiguration? deckConfigForPlayerA = null,
         PlayerDeckConfiguration? deckConfigForPlayerB = null,
-        Action<JudicatorRegistry>? judicatorAssembly = null)
+        Action<JudicatorRegistry>? judicatorAssembly = null,
+        Orc.Game.Plugins.IMatchPackageActivator? packageActivator = null)
     {
         ArgumentNullException.ThrowIfNull(deckForPlayerA);
         ArgumentNullException.ThrowIfNull(deckForPlayerB);
@@ -153,6 +156,7 @@ public sealed class Match
         _deckConfigForPlayerA = deckConfigForPlayerA;
         _deckConfigForPlayerB = deckConfigForPlayerB;
         _judicatorAssembly = judicatorAssembly;
+        _packageActivator = packageActivator;
         Engine = new LogicEngine();
     }
 
@@ -268,9 +272,10 @@ public sealed class Match
     /// <exception cref="InvalidOperationException">对局尚未进入"进行"态。</exception>
     public JudicatorRegistry Judicators => RequireReady(_judicators);
 
-    /// <summary>Optional frontend state provider. Invoked synchronously; must be read-only.</summary>
+    /// <summary>A.20：可选前端状态提供器（同步、只读）。null＝无头引擎运行（原生规则照常）。</summary>
     public Func<Player, ActionInteractionState?>? InteractionStateReader { get; set; }
 
+    /// <summary>A.20：行动输入准入查询（每次读取前端状态；前端限制只能**收窄**原生合法性）。</summary>
     public bool CanAcceptInput(Player player, Entity? actor = null, Entity? target = null)
         => CombatJudicatorInvoker.InvokeBool(Judicators.Resolve(JudicatorNames.ActionInput), player, actor!, target!);
 
@@ -317,6 +322,12 @@ public sealed class Match
         MatchState.Ended => throw new InvalidOperationException("对局已结束（终局），卡牌服务对外取用被拒绝。"),
         _ => throw new InvalidOperationException("对局尚未进入'进行'态：卡牌服务对外取用不可用（须先成功完成 Initialize）。"),
     };
+
+    /// <summary>
+    /// 对局级**投影注册面**（前端资产迁移 S7）：插件在装配期注册 provider 工厂；
+    /// 前端运行期以 artLookup 构造 provider 并**每帧**拉取整盘视图（运行期隔离：投影抛错保留上一帧）。
+    /// </summary>
+    public Orc.Game.Ui.UiProjectionRegistry UiProjections { get; } = new();
 
     // ---------- 对局历史读取服务（S10 G14补） ----------
 
@@ -481,7 +492,9 @@ public sealed class Match
             (card, slot, ct) => _playManager?.JoinUnitAsync(card, slot, ct)
                 ?? throw new InvalidOperationException("卡牌服务阵线放置不可用：打出管理器尚未创建（装配链时序错误）。"),
             (player, ct) => ShuffleDeckAsync(player, ct),
-            () => _lifecycle.State);
+            () => _lifecycle.State,
+            // 前端资产迁移 S4：运行期卡注册需登记效果声明（卡 → 预制体 id）。
+            _effectRegistry);
         foreach (var player in _playerManager.Players)
         {
             player.ConfigureCardService(_cardService);
@@ -513,104 +526,47 @@ public sealed class Match
         // （『初始化内创建＋注入』范式）；装配期注册段经创建参数一次性执行（注册动作返回条目等价句柄、供注册方持有）；
         // 时点＝卡加载之前（远早于洗切与加载段——就绪由装配链位置保证：「装配期已注册条目在卡加载阶段即可被解析调用」）。
         _judicators = new JudicatorRegistry();
+        // A.20：行动输入准入判定器（无状态；每次查询/提交现读前端状态）。
         _judicators.Register(JudicatorNames.ActionInput,
             new ActionInputJudicator(player => InteractionStateReader?.Invoke(player)));
 
-        // J2 加性（合法性验证替换）：内置注册段（固定、无条件执行）——注册默认验证判定器（费用/反制）：
-        // 「默认名恒可解析、默认判定器无条件可用」（不依赖外部装配段传入）。
-        // （K3 随改：复验两条注册迁移至 K3 段——构造注入共享 leg/推进前置条目句柄；条目名/绑定语义不变。）
-        _judicators.Register(JudicatorNames.CostCheck, new CostCheckJudicator());
-        _judicators.Register(JudicatorNames.CounterUse, new CounterUseJudicator());
+        // 资产化 S12c：内置判定器**不再硬编码于装配中枢**——改由（可选）资产目录快照经激活器装配
+        // （内置插件 `orc.builtin.core` 提供；`null`＝**空目录**＝无任何判定器——P8=i）。
+        // 语义、注册序与条目构造与迁移前逐字保持一致（迁至 Orc.Plugins.BuiltIn.BuiltInPlugin.Register）。
+        _assetServices = new AssetServiceRegistry();
 
-        // K1 加性（A 档 C1-C4：交战合法性判定族）：内置注册段追加 4 条固定注册——
-        // 组合器 combat.target.legal（（攻击者, 目标引用）→ bool；编排六重＝归属→存活/在场→烟幕→守护资格→拦截→范围）
-        // ＋三条子规则（范围/资格/拦截——独立成器、便于单点 moding；组合器经条目句柄消费——子规则改写穿透编排）。
-        // 调用点接入：候选链（CollectAttackCandidates 逐候选过滤）与复验链（IsAttackTargetLegal 转发壳）——
-        // 经条目句柄注入 CommandManager（可用性/复验同源保持、无第二真源）。
-        var combatRangeEntry = _judicators.Register(
-            JudicatorNames.CombatRange,
-            new CombatRangeJudicator(
-                _battlefieldManager.Battlefield,
-                owner => _commandManager?.EnemyOfPlayer(owner)));
-        var combatGuardEligibilityEntry = _judicators.Register(
-            JudicatorNames.CombatGuardEligibility,
-            new CombatGuardEligibilityJudicator());
-        var combatInterceptionEntry = _judicators.Register(
-            JudicatorNames.CombatInterception,
-            new CombatInterceptionJudicator(
-                _battlefieldManager.Battlefield,
-                owner => _commandManager?.EnemyOfPlayer(owner)));
-        var combatTargetLegalEntry = _judicators.Register(
-            JudicatorNames.CombatTargetLegal,
-            new CombatTargetLegalJudicator(
-                enemyOf: owner => _commandManager?.EnemyOfPlayer(owner),
-                isUnitGuarded: unit => _commandManager?.IsUnitGuarded(unit) ?? false,
-                isHqGuarded: hq => _commandManager?.IsHqGuarded(hq) ?? false,
-                rangeRule: (attacker, targetSlot) => CombatJudicatorInvoker.InvokeBool(combatRangeEntry, attacker, targetSlot),
-                guardEligibilityRule: attacker => CombatJudicatorInvoker.InvokeBool(combatGuardEligibilityEntry, attacker),
-                interceptionRule: (attacker, targetSlot, targetIsFighter) => CombatJudicatorInvoker.InvokeBool(combatInterceptionEntry, attacker, targetSlot, targetIsFighter)));
-
-        // K2 加性（A 档 C5/C6：反击豁免与伏击条件）：内置注册段追加 2 条固定注册——
-        // 反击资格判定 combat.counter.eligibility（（攻击者, 目标）→ bool；五条款、豁免优先——原 CounterAttackRules 语义）＋
-        // 伏击条件判定 combat.ambush.condition（（被攻击单位, 攻击者）→ bool；严格大于比较）。
-        // 调用点接入：默认互伤区（CommandManager.HandleDefaultAttackDamageAsync——经条目句柄注入）＋
-        // 伏击效果（资格→C5、条件→C6——经 KeywordLoadContext 判定器通道注入）；单源、无第二真源。
-        var combatCounterEligibilityEntry = _judicators.Register(
-            JudicatorNames.CombatCounterEligibility,
-            new CombatCounterEligibilityJudicator());
-        var combatAmbushConditionEntry = _judicators.Register(
-            JudicatorNames.CombatAmbushCondition,
-            new CombatAmbushConditionJudicator());
-
-        // K3 加性（A 档 C7/C8：复验消重）：内置注册段追加——共享 leg 条目（move/attack 分区、一份逻辑×两条目）＋
-        // 推进前置条目（move.frontline-enemy）＋复验两条重建注册（J2 两条随迁——构造注入共享 leg/推进前置条目句柄；
-        // 条目名/绑定语义不变；注册顺序无关语义——条目按名索引、moding 按条目独立）。
-        var moveLegEligibilityEntry = _judicators.Register(
-            JudicatorNames.MoveLegEligibility,
-            new LegEligibilityJudicator(() => _turnManager?.CurrentPlayer, _battlefieldManager.Battlefield, isMove: true));
-        var attackLegEligibilityEntry = _judicators.Register(
-            JudicatorNames.AttackLegEligibility,
-            new LegEligibilityJudicator(() => _turnManager?.CurrentPlayer, battlefield: null, isMove: false));
-        var moveFrontlineEnemyEntry = _judicators.Register(
-            JudicatorNames.MoveFrontlineEnemy,
-            new MoveFrontlineEnemyJudicator(
-                _battlefieldManager.Battlefield,
-                owner => _commandManager?.EnemyOfPlayer(owner)));
-        _judicators.Register(JudicatorNames.MoveRecheck, new MoveRevalidationJudicator(
-            _lifecycle,
-            (unit, position) => LegJudicatorInvoker.InvokeLeg(moveLegEligibilityEntry, unit, position),
+        var matchServices = new Orc.Game.Plugins.MatchServices(
             _battlefieldManager.Battlefield,
-            owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner)));
-        _judicators.Register(JudicatorNames.AttackRecheck, new AttackRevalidationJudicator(
             _lifecycle,
-            unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
-            (attacker, targetRef) => _commandManager?.IsAttackTargetLegal(attacker, targetRef) ?? false));
+            () => _turnManager?.CurrentPlayer,
+            owner => _commandManager?.EnemyOfPlayer(owner),
+            () => _effectRuntime,
+            unit => _commandManager?.IsUnitGuarded(unit) ?? false,
+            hq => _commandManager?.IsHqGuarded(hq) ?? false,
+            (attacker, targetRef) => _commandManager?.IsAttackTargetLegal(attacker, targetRef) ?? false);
+
+        if (_packageActivator is not null)
+        {
+            var activation = _packageActivator.Activate(
+                Orc.Core.AssetActivationPhase.PreCommand,
+                matchServices,
+                bindingServices: null,
+                _assetServices,
+                _judicators,
+                Engine.Prefabs,
+                uiServices: new Orc.Game.Ui.UiPluginServices(UiProjections));
+            foreach (var failure in activation.Failures)
+            {
+                Engine.RootStream.WriteLog(
+                    "包激活（前）", failure, Orc.Core.LogLevel.Error, new[] { "package", "activation" });
+            }
+        }
 
         // E1-34（DSL 可运行）：默认装配脚本求值器——csx 处理器（效果解析器产物）需要它才能编译执行；
         // 内核零依赖口径不变（接口倒置），实现由 satellite（Orc.Script）提供；宿主已装配＝不覆盖。
         Engine.ScriptEvaluator ??= new Orc.Script.CSharpScriptEvaluator();
 
-        // S2 加性（隐蔽机制·判定器接线）：目标候选合法性判定（J3 示范②）**提入生产内置段**——
-        // 「默认名恒可解析、默认判定器无条件可用」；默认规则＝在场单位可选且**隐蔽单位不可选**
-        // （指令效果索敌统一经本判定器获取「可被指令指向/影响」的单位；原「示范类经外部装配段」归属随 S2 提入生产装配）。
-        _judicators.Register(JudicatorNames.TargetCandidateEligibility, new TargetEligibilityJudicator());
-
-        // E1 加性（效果运行期）：无头选靶判定器（csx handler 的选择面——无头、不排队、不等 UI 桥）。
-        _judicators.Register(
-            JudicatorNames.EffectTargetResolve,
-            new EffectTargetResolveJudicator(
-                _battlefieldManager.Battlefield,
-                card => MatchRandomService.ResolveFor(card)));
-
-        // E1-25 加性（指挥点槽事件改进）：资源判定器（内置固定注册段）——
-        // 回合开始的槽递增（默认 1）＋ 额外获得/失去数字包裹（默认恒等）；
-        // ResourceManager 经延迟读取 lambda 消费（资源管理器创建时点早于本段，延迟求值保证就绪）。
-        _judicators.Register(JudicatorNames.PointSlotIncrement, new PointSlotIncrementJudicator());
-        _judicators.Register(JudicatorNames.PointSlotGain, new PointSlotGainAmountJudicator());
-        _judicators.Register(JudicatorNames.PointSlotLose, new PointSlotLoseAmountJudicator());
-        // E1-25 后续（指挥点事件改造）：点数数字包裹判定器两条（默认恒等）。
-        _judicators.Register(JudicatorNames.PointGain, new PointGainAmountJudicator());
-        _judicators.Register(JudicatorNames.PointLose, new PointLoseAmountJudicator());
+        // 资产化 S12c：目标候选合法性 / 无头选靶 / 资源判定器同属内置判定器——已随内置插件迁出（见上）。
 
         // E1 加性：效果运行时门面（csx 的**唯一**游戏层受控入口——消灭[死亡链]/伤害/属性修饰/词条/抽牌/无头选靶/槽加·减）；
         // 协作者以延迟读取 lambda 注入（指挥管理器创建较晚）；并注入各玩家（「卡 → 玩家 → 服务」读取路径的玩家环节）。
@@ -653,6 +609,14 @@ public sealed class Match
         // ＋注册为底层触发器（进注册表、分层可查询）；创建时点＝卡牌加载之前（词条装载依赖「造成攻击伤害」就绪）。
         // 后置项 B 加性：注入对局生命周期（终局门禁＋HQ≤0 胜者记录）。
         // A4 加性：注入再触发服务（死亡链的亡计结算统一执行面——单源＋重入防护）。
+        // 资产化 S12c：判定条目句柄一经解析持有（快照激活后、卡加载前就绪；与迁移前"注册所得句柄"等价——同一可寻址锚）。
+        var combatTargetLegalEntry = _judicators.Resolve(JudicatorNames.CombatTargetLegal);
+        var combatCounterEligibilityEntry = _judicators.Resolve(JudicatorNames.CombatCounterEligibility);
+        var combatAmbushConditionEntry = _judicators.Resolve(JudicatorNames.CombatAmbushCondition);
+        var moveLegEligibilityEntry = _judicators.Resolve(JudicatorNames.MoveLegEligibility);
+        var attackLegEligibilityEntry = _judicators.Resolve(JudicatorNames.AttackLegEligibility);
+        var moveFrontlineEnemyEntry = _judicators.Resolve(JudicatorNames.MoveFrontlineEnemy);
+
         _commandManager = new CommandManager(
             Engine,
             _battlefieldManager.Battlefield,
@@ -672,11 +636,28 @@ public sealed class Match
             (unit, position) => LegJudicatorInvoker.InvokeLeg(moveLegEligibilityEntry, unit, position),
             unit => LegJudicatorInvoker.InvokeLeg(attackLegEligibilityEntry, unit, null),
             owner => CombatJudicatorInvoker.InvokeBool(moveFrontlineEnemyEntry, owner),
-            CanAcceptInput);
-        TriggerRegistry.Register(_commandManager.CommandTrigger, TriggerLayer.LowLevel);
-        TriggerRegistry.Register(_commandManager.UnitMoveTrigger, TriggerLayer.LowLevel);
-        TriggerRegistry.Register(_commandManager.UnitAttackTrigger, TriggerLayer.LowLevel);
-        TriggerRegistry.Register(_commandManager.AttackDamageTrigger, TriggerLayer.LowLevel);
+            // A.20：行动输入准入通道——查询与提交每次读取前端状态（末位位置参数绑定 inputAllowed）。
+            CanAcceptInput,
+            // 前端资产迁移 S5：**冻结本局词条快照**（运行期"覆盖"只改引擎持有引用，不影响进行中的对局）。
+            keywordSnapshot: Orc.Game.Cards.KeywordRegistry.Snapshot());
+        // 资产化 P11（甲）：四类内置流程触发器登记**不再硬编码**——由内置插件声明、在本相经绑定面执行。
+        if (_packageActivator is not null)
+        {
+            var binding = new Orc.Game.Plugins.MatchBindingServices(() => _commandManager, TriggerRegistry, Engine);
+            var activation = _packageActivator.Activate(
+                Orc.Core.AssetActivationPhase.PostCommand,
+                matchServices,
+                binding,
+                _assetServices,
+                _judicators,
+                Engine.Prefabs,
+                uiServices: new Orc.Game.Ui.UiPluginServices(UiProjections));
+            foreach (var failure in activation.Failures)
+            {
+                Engine.RootStream.WriteLog(
+                    "包激活（后）", failure, Orc.Core.LogLevel.Error, new[] { "package", "activation" });
+            }
+        }
 
         // A2 加性：HQ 词条面的装载上下文提供器注入（延迟读取——与卡牌侧同构；HQ 免疫等词条运行时授予的
         // 上下文来源；对 HQ 归零改写器挂载非必需〔不经上下文〕——注入保持与卡牌侧一致的可扩展性）。
@@ -705,7 +686,8 @@ public sealed class Match
         // 不变量：正常对局初始化后，任何词条装载时行为引用与库键均已就绪/可解析；库文件层失败＝隔离记录、
         // 不阻断（报告＋总流留痕）；绑定层缺失＝装配期 fail-fast（初始化失败）。幂等以生命周期结构达成
         // （Initialize 恰一次——重复被拒绝；每对局＝新引擎实例、各自装配，多对局天然隔离）。
-        KeywordEffectAssembly.Assemble(Engine);
+        // 资产化 P11（甲）：词条效果生产装配**不再硬编码**——由内置插件声明、在 postCommand 相经绑定面执行
+        // （见上「包激活（后）」段）；时点不变（管理器群装配收尾、卡牌加载之前）。
 
         // 双方卡组洗切（初始化内自动；W4-1 G14 收尾：经统一「洗切动作」面——每副各发恰一条 deck.shuffled 信号〔就地打乱之后〕；
         // 固定顺序＝玩家索引升序，保证可复现；G8：随机源＝对局随机服务——洗切与效果取样共用同一流〔单流〕）
@@ -841,6 +823,7 @@ public sealed class Match
         // 动作作用域（UI 消费桥接）：结束回合链产生的事件聚合为一段。
         await using var _actionScope = Engine.BeginAction();
 
+        // A.20：结束回合亦受行动输入准入约束（前端"忙碌/过渡中"不得推进回合）。
         if (!CanAcceptInput(CurrentPlayer, CurrentPlayer.Hq))
             throw new InvalidOperationException("InteractionBlocked");
         await TurnManager.EndTurn(ct);
@@ -895,10 +878,10 @@ public sealed class Match
                 "玩家构筑配置须成对（主国＋盟国）——缺失其一被拒绝（请齐备提供或整体缺省）。", paramName);
         }
 
-        if (!Enum.IsDefined(mainFaction))
+        if (!Orc.Game.Cards.Faction.IsDefined(mainFaction))
         {
             throw new ArgumentOutOfRangeException(
-                paramName, mainFaction, "主国为未定义枚举值（创建期 fail-fast 拒绝）。");
+                paramName, mainFaction, "主国为未定义标识（创建期 fail-fast 拒绝）。");
         }
 
         if (!FactionRules.IsMajorFaction(mainFaction))
@@ -907,10 +890,10 @@ public sealed class Match
                 paramName, mainFaction, "主国非五大主国（德/苏/美/英/日——创建期 fail-fast 拒绝）。");
         }
 
-        if (!Enum.IsDefined(allyFaction))
+        if (!Orc.Game.Cards.Faction.IsDefined(allyFaction))
         {
             throw new ArgumentOutOfRangeException(
-                paramName, allyFaction, "盟国为未定义枚举值（创建期 fail-fast 拒绝）。");
+                paramName, allyFaction, "盟国为未定义标识（创建期 fail-fast 拒绝）。");
         }
 
         if (allyFaction == Faction.Neutral)

@@ -50,13 +50,13 @@ public sealed class CardDefinition
                 "卡牌定义缺少 tagData 组件（稀有度为必填槽位——缺失＝定义期 fail-fast 拒绝）。",
                 nameof(components));
 
-        if (!Enum.IsDefined(factionCost.Faction))
+        if (!Orc.Game.Cards.Faction.IsDefined(factionCost.Faction))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(components), factionCost.Faction, "国籍为未定义枚举值（配置错误在定义期被拒绝）。");
+                nameof(components), factionCost.Faction, "国籍为未定义标识（配置错误在定义期被拒绝）。");
         }
 
-        if (!Enum.IsDefined(tagData.Rarity))
+        if (!Orc.Game.Cards.Rarity.IsDefined(tagData.Rarity))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(components), tagData.Rarity, "稀有度为未定义枚举值（配置错误在定义期被拒绝）。");
@@ -76,7 +76,7 @@ public sealed class CardDefinition
         Tags = tagData.Tags;
 
         Category = typeCategory?.Category ?? CardCategory.Unit;
-        UnitTypes = typeCategory?.UnitTypes ?? Array.Empty<UnitType>();
+        UnitTypes = typeCategory?.UnitTypes ?? Array.Empty<string>();
 
         OperateCost = battleStats?.OperateCost ?? 0;
         Attack = battleStats?.Attack ?? 0;
@@ -104,12 +104,12 @@ public sealed class CardDefinition
         int operateCost,
         int attack,
         int defense,
-        CardCategory category = CardCategory.Unit,
+        string category = CardCategory.Unit,
         IEnumerable<KeywordDeclaration>? keywords = null,
-        IEnumerable<UnitType>? unitTypes = null,
+        IEnumerable<string>? unitTypes = null,
         bool isGuard = false,
-        Faction? faction = null,
-        Rarity? rarity = null,
+        string? faction = null,
+        string? rarity = null,
         IEnumerable<string>? tags = null,
         string? becomesVeteran = null,
         string? veteranOf = null)
@@ -122,44 +122,44 @@ public sealed class CardDefinition
 
     /// <summary>兼容构造 → 组件定义集（校验先于构造：配置错误在此明确拒绝）。</summary>
     private static IReadOnlyList<ICardDataComponentDefinition> BuildComponents(
-        CardCategory category,
+        string category,
         int deployCost,
         int operateCost,
         int attack,
         int defense,
         IEnumerable<KeywordDeclaration>? keywords,
-        IEnumerable<UnitType>? unitTypes,
-        Faction? faction,
-        Rarity? rarity,
+        IEnumerable<string>? unitTypes,
+        string? faction,
+        string? rarity,
         IEnumerable<string>? tags,
         string? becomesVeteran,
         string? veteranOf)
     {
-        if (!Enum.IsDefined(category))
+        if (!Orc.Game.Cards.CardCategory.IsDefined(category))
         {
             throw new ArgumentOutOfRangeException(nameof(category), category, "未定义的卡牌类别（配置错误在定义期被拒绝）。");
         }
 
-        if (faction is null)
+        if (string.IsNullOrWhiteSpace(faction))
         {
             throw new ArgumentException(
                 "未提供国籍（国籍为必填槽位——新定义卡必须显式提供；缺失＝定义期 fail-fast 拒绝）。", nameof(faction));
         }
 
-        if (!Enum.IsDefined(faction.Value))
+        if (!Orc.Game.Cards.Faction.IsDefined(faction))
         {
-            throw new ArgumentOutOfRangeException(nameof(faction), faction, "国籍为未定义枚举值（配置错误在定义期被拒绝）。");
+            throw new ArgumentOutOfRangeException(nameof(faction), faction, "国籍为未定义标识（配置错误在定义期被拒绝）。");
         }
 
-        if (rarity is null)
+        if (string.IsNullOrWhiteSpace(rarity))
         {
             throw new ArgumentException(
                 "未提供稀有度（稀有度为必填槽位——新定义卡必须显式提供；缺失＝定义期 fail-fast 拒绝）。", nameof(rarity));
         }
 
-        if (!Enum.IsDefined(rarity.Value))
+        if (!Orc.Game.Cards.Rarity.IsDefined(rarity))
         {
-            throw new ArgumentOutOfRangeException(nameof(rarity), rarity, "稀有度为未定义枚举值（配置错误在定义期被拒绝）。");
+            throw new ArgumentOutOfRangeException(nameof(rarity), rarity, "稀有度为未定义标识（配置错误在定义期被拒绝）。");
         }
 
         var resolvedKeywords = ResolveKeywords(keywords);
@@ -188,7 +188,7 @@ public sealed class CardDefinition
         var list = new List<ICardDataComponentDefinition>
         {
             new TypeCategoryDefinition(category, resolvedUnitTypes),
-            new FactionCostDefinition(faction.Value, deployCost),
+            new FactionCostDefinition(faction, deployCost),
         };
 
         if (category == CardCategory.Unit)
@@ -196,7 +196,7 @@ public sealed class CardDefinition
             list.Add(new BattleStatsDefinition(operateCost, attack, defense));
         }
 
-        list.Add(new TagDataDefinition(rarity.Value, resolvedTags));
+        list.Add(new TagDataDefinition(rarity, resolvedTags));
 
         // S1：VeteranOf 正式承载同样产出「老兵」标记（单一真源——与数据体路径一致：随内容成立）。
         var assembledKeywords = veteranOf is null
@@ -248,21 +248,21 @@ public sealed class CardDefinition
         return list.ToArray();
     }
 
-    /// <summary>单位类型清单校验与拷贝（fail-fast：未定义枚举值 / 重复项均被拒绝；登记序保留）。</summary>
-    private static IReadOnlyList<UnitType> ResolveUnitTypes(IEnumerable<UnitType>? unitTypes)
+    /// <summary>单位类型清单校验与拷贝（fail-fast：未定义标识 / 重复项均被拒绝；登记序保留）。</summary>
+    private static IReadOnlyList<string> ResolveUnitTypes(IEnumerable<string>? unitTypes)
     {
         if (unitTypes is null)
         {
-            return Array.Empty<UnitType>();
+            return Array.Empty<string>();
         }
 
-        var list = new List<UnitType>();
+        var list = new List<string>();
         foreach (var unitType in unitTypes)
         {
-            if (!Enum.IsDefined(unitType))
+            if (!Orc.Game.Cards.UnitType.IsDefined(unitType))
             {
                 throw new ArgumentOutOfRangeException(
-                    nameof(unitTypes), unitType, "单位类型清单含未定义枚举值（配置错误在定义期被拒绝）。");
+                    nameof(unitTypes), unitType, "单位类型清单含未定义标识（配置错误在定义期被拒绝）。");
             }
 
             if (list.Contains(unitType))
@@ -328,7 +328,7 @@ public sealed class CardDefinition
     public IReadOnlyList<ICardDataComponentDefinition> Components { get; }
 
     /// <summary>卡牌类别（派生自 <c>typeCategory</c> 组件；缺省＝单位）。</summary>
-    public CardCategory Category { get; }
+    public string Category { get; }
 
     /// <summary>部署费初始值（派生自 <c>factionCost</c> 组件）。</summary>
     public int DeployCost { get; }
@@ -366,16 +366,16 @@ public sealed class CardDefinition
     public string? VeteranOf { get; }
 
     /// <summary>单位类型清单（派生自 <c>typeCategory</c> 组件；登记序；空＝零类型）。</summary>
-    public IReadOnlyList<UnitType> UnitTypes { get; }
+    public IReadOnlyList<string> UnitTypes { get; }
 
     /// <summary>守护者标记（代码注册路径加性面；数据体路径恒 false）。</summary>
     public bool IsGuard { get; }
 
     /// <summary>国籍（派生自 <c>factionCost</c> 组件终值；实例侧只读）。</summary>
-    public Faction Faction { get; }
+    public string Faction { get; }
 
     /// <summary>稀有度（派生自 <c>tagData</c> 组件终值；实例侧只读）。</summary>
-    public Rarity Rarity { get; }
+    public string Rarity { get; }
 
     /// <summary>开放 tag 清单（派生自 <c>tagData</c> 组件；登记序；空＝无开放 tag）。</summary>
     public IReadOnlyList<string> Tags { get; }

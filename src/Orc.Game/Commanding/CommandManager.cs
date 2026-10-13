@@ -142,7 +142,8 @@ public sealed class CommandManager
         Func<UnitCard, Slot?, LegEligibilityFailure?>? moveLegEligibility = null,
         Func<UnitCard, LegEligibilityFailure?>? attackLegEligibility = null,
         Func<Player, bool>? moveFrontlineEnemy = null,
-        Func<Player, Entity?, Entity?, bool>? inputAllowed = null)
+        Func<Player, Entity?, Entity?, bool>? inputAllowed = null,
+        KeywordSnapshot? keywordSnapshot = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(battlefield);
@@ -215,7 +216,9 @@ public sealed class CommandManager
         KeywordLoadContext = new KeywordLoadContext(
             engine, AttackDamageTrigger, _targeterManager, _battlefield, _pincers, _currentPlayerProvider,
             _combatCounterEligibility, _combatAmbushCondition,
-            keywordChangeObserver: MaintainGuardState);
+            keywordChangeObserver: MaintainGuardState,
+            // S5：注入本局词条快照——授予链/绑定查询读快照，运行期覆盖不影响进行中对局。
+            keywordSnapshot: keywordSnapshot);
 
         // 守护维护：由位置/入场/死亡/升级更新驱动（凡影响占用布局或守护者身份的变动均等效触达——
         // 批 4 加性：升级可能经词条集替换改变守护者身份，unit.upgraded 纳入订阅；词条授予-移除-复装
@@ -1657,7 +1660,7 @@ public sealed class CommandManager
         return null;
     }
 
-    private static bool HasUnitType(UnitCard unit, UnitType type)
+    private static bool HasUnitType(UnitCard unit, string type)
         => unit.TryGetData<UnitStateData>(out var state) && state.UnitTypes.Contains(type);
 
     // K1：原 HasAnyLineRange / CountsAsBombard（类型组判定）已迁至 CombatTypeGroups（C2/C3/C4 共表——单源定义处）。

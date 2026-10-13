@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- 批次 2：测试程序集以 ModuleInitializer 触发内置插件的进程级装配（测试基础设施用途；
+         分析器 CA2255 面向可发布库，本例为测试宿主，显式豁免并注释理由）。 -->
+    <NoWarn>$(NoWarn);CA2255</NoWarn>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
     <Nullable>enable</Nullable>
@@ -18,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Orc.Plugins.BuiltIn\Orc.Plugins.BuiltIn.csproj" />
     <ProjectReference Include="..\..\src\Orc.Game\Orc.Game.csproj" />
     <!-- 效果解析器的 csx 真编译校验（E1-C）：仅测试侧引入脚本求值器，生产侧不依赖 Orc.Script。 -->
     <ProjectReference Include="..\..\src\Orc.Script\Orc.Script.csproj" />

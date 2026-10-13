@@ -330,7 +330,7 @@ public static class GameUpdates
     /// </summary>
     /// <exception cref="ArgumentNullException">engine / unit 为 null。</exception>
     public static Task EmitUnitTypesChanged(
-        LogicEngine engine, Card unit, Cards.UnitType addedType, CancellationToken ct = default)
+        LogicEngine engine, Card unit, string addedType, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(unit);

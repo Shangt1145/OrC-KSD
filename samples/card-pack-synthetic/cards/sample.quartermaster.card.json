@@ -1,0 +1,11 @@
+{
+ "schemaVersion": 1,
+ "id": "sample.quartermaster",
+ "name": "示例军需官",
+ "components": [
+  { "component": "typeCategory", "type": ["infantry"] },
+  { "component": "factionCost", "faction": "germany", "kredits": 2 },
+  { "component": "battleStats", "operationCost": 1, "attack": 1, "defense": 4 },
+  { "component": "tagData", "rarity": "limited" }
+ ]
+}

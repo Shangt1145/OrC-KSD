@@ -130,7 +130,8 @@ internal static class CommandTestKit
             firstPlayerIndex: null,
             options: new MatchOptions { SkipMulligan = skipMulligan },
             targeterBridge: bridge,
-            effectRegistry: effectRegistry);
+            effectRegistry: effectRegistry,
+            packageActivator: TestHost.Activator);
 
     /// <summary>实例化＋加载一张定制卡（归属＝player；可选放入手牌）。</summary>
     public static async Task<UnitCard> InstantiateLoadedAsync(Match match, Player player, string id = InfantryId, bool toHand = false)

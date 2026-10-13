@@ -15,15 +15,15 @@ namespace Orc.Game;
 public sealed class PlayerDeckConfiguration
 {
     /// <summary>创建玩家构筑配置（主国＋盟国；值域校验由对局创建期执行——见类型注释）。</summary>
-    public PlayerDeckConfiguration(Faction? mainFaction, Faction? allyFaction)
+    public PlayerDeckConfiguration(string? mainFaction, string? allyFaction)
     {
         MainFaction = mainFaction;
         AllyFaction = allyFaction;
     }
 
     /// <summary>主国（五主国之一；未指定＝null——该形态由对局创建期按成对口径拒绝）。</summary>
-    public Faction? MainFaction { get; }
+    public string? MainFaction { get; }
 
     /// <summary>盟国（余下 4 个主国＋5 个盟国；未指定＝null——该形态由对局创建期按成对口径拒绝）。</summary>
-    public Faction? AllyFaction { get; }
+    public string? AllyFaction { get; }
 }

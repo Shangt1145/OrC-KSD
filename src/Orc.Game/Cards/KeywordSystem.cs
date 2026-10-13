@@ -160,7 +160,8 @@ public sealed class KeywordLoadContext
         Func<Player?>? currentPlayerProvider = null,
         Func<UnitCard, UnitCard, bool>? counterEligibility = null,
         Func<UnitCard, UnitCard, bool>? ambushCondition = null,
-        Action? keywordChangeObserver = null)
+        Action? keywordChangeObserver = null,
+        KeywordSnapshot? keywordSnapshot = null)
     {
         Engine = engine;
         AttackDamageTrigger = attackDamageTrigger;
@@ -171,10 +172,18 @@ public sealed class KeywordLoadContext
         CounterEligibility = counterEligibility;
         AmbushCondition = ambushCondition;
         KeywordChangeObserver = keywordChangeObserver;
+        Keywords = keywordSnapshot;
     }
 
     /// <summary>对局引擎（发射更新 / 触发子触发器所需）。</summary>
     public LogicEngine Engine { get; }
+
+    /// <summary>
+    /// 本局**词条快照**（前端资产迁移 S5）：对局装配开始时由 <see cref="Match"/> 冻结并注入，
+    /// 此后授予链的组件构造与词条效果绑定查询一律读本快照——运行期"覆盖"不影响进行中的对局。
+    /// 独立构造（无对局）＝null ＝回退进程级静态面（既有行为）。
+    /// </summary>
+    public KeywordSnapshot? Keywords { get; }
 
     /// <summary>「造成攻击伤害」共享流程触发器（伏击/免疫/重甲效果的改写注册口；引擎侧创建、与对局同生）。</summary>
     public Trigger<AttackDamageTriggerView> AttackDamageTrigger { get; }

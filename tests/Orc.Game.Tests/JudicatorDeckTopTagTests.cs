@@ -150,7 +150,8 @@ public class JudicatorDeckTopTagTests
             new CardList(Enumerable.Repeat(PlainId, 10)),
             CreateDemoDefinitions(),
             seed: 42,
-            judicatorAssembly: registry => registry.Register(JudicatorNames.DeckTopTag, new DeckTopTagJudicator()));
+            judicatorAssembly: registry => registry.Register(JudicatorNames.DeckTopTag, new DeckTopTagJudicator()),
+            packageActivator: TestHost.Activator);
 
     private static IReadOnlyList<CardDefinitionEntry> CreateDemoDefinitions() => new[]
     {

@@ -22,7 +22,7 @@ namespace Orc.Game.Cards;
 /// </summary>
 public sealed class UnitStateData
 {
-    private readonly List<UnitType> _unitTypes = new();
+    private readonly List<string> _unitTypes = new();
 
     /// <summary>创建空组件（位置 null、未摧毁、类型列表空、实时值 0——初值请经 <see cref="CreateInitial"/> 或直接赋值装载）。</summary>
     public UnitStateData()
@@ -40,19 +40,19 @@ public sealed class UnitStateData
     /// 写路径唯一化（S9）：运行期增补经受控入口（<see cref="UnitCard.AddUnitTypeAsync"/>）、装配期填充经内部例外
     /// （<see cref="FillInitialTypes"/>——列明例外、静默）；集合外部直改不再可行。
     /// </summary>
-    public IReadOnlyList<UnitType> UnitTypes => _unitTypes;
+    public IReadOnlyList<string> UnitTypes => _unitTypes;
 
     /// <summary>
     /// 装配期填充（S9；列明例外——不经受控入口、不发信号；与三实时值「装配期填充＝列明例外」同族）：
     /// 单位化（部署/加入/转换入场）时从定义填充初始类型；调用点收口＝<see cref="UnitCard"/> 单位化段。
     /// </summary>
-    internal void FillInitialTypes(IEnumerable<UnitType> types) => _unitTypes.AddRange(types);
+    internal void FillInitialTypes(IEnumerable<string> types) => _unitTypes.AddRange(types);
 
     /// <summary>
     /// 运行期受控增补（S9；内部执行面——由 <see cref="UnitCard.AddUnitTypeAsync"/> 受控入口调用，为其唯一调用者）：
     /// 已含＝false（幂等无操作——不重复登记）；实际改变集合＝true（调用方负责变更信号发射）。
     /// </summary>
-    internal bool TryAddRuntimeType(UnitType type)
+    internal bool TryAddRuntimeType(string type)
     {
         if (_unitTypes.Contains(type))
         {

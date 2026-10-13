@@ -8,7 +8,7 @@ namespace Orc.Core;
 /// moding（逻辑替换）与全局生效（统一解析点）由注册表承载（<see cref="JudicatorRegistry"/>）——
 /// 判定器条目自带等价句柄产物（注册所得＝解析所得、同一可寻址锚；「不得存在无法被 moding 的注册项」）。
 /// </summary>
-public abstract class Judicator
+public abstract class Judicator : IUnifiedService
 {
     /// <summary>
     /// 统一主方法（同步；调用侧唯一入口）：接收载荷（null＝空载荷）、返回结果（null＝无返回）。
@@ -60,7 +60,7 @@ public abstract class Judicator
 /// 主方法覆写可复用本适配（如 Invoke ⇒ Adapt(默认逻辑)(载荷)），亦可自行书写——等价。
 /// </summary>
 /// <typeparam name="TDelegate">子类声明的强类型 delegate（该判定器的签名）。</typeparam>
-public abstract class Judicator<TDelegate> : Judicator
+public abstract class Judicator<TDelegate> : Judicator, IStrongTypedService<TDelegate>
     where TDelegate : Delegate
 {
     /// <summary>
@@ -70,4 +70,7 @@ public abstract class Judicator<TDelegate> : Judicator
     /// <param name="handler">强类型替换逻辑（子类声明的 delegate 类型）。</param>
     /// <returns>统一签名（同步）的等效逻辑。</returns>
     protected internal abstract Func<object[]?, object[]?> Adapt(TDelegate handler);
+
+    /// <inheritdoc />
+    Func<object[]?, object[]?> IStrongTypedService<TDelegate>.Adapt(TDelegate handler) => Adapt(handler);
 }

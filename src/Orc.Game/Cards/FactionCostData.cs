@@ -12,7 +12,7 @@ namespace Orc.Game.Cards;
 /// 部署费修改＝修改基准值（本体）——经既有数据改变管线传播（链重跑＋集中触发；复用既有
 /// <see cref="GameUpdates.CardStatChanged"/>、不新增信号）；非法修改 fail-fast、不产生半改（原子——
 /// 值域校验先于落值）。
-/// 值域：国籍＝已定义枚举值（11 值）；部署费＝非负整数（0 合法）。
+/// 值域：国籍＝已定义标识（<see cref="Faction"/>.All，11 值）；部署费＝非负整数（0 合法）。
 /// 单一真源（硬约束）：本组件之外不保留第二份数据/第二读面——旧独立花费组件（CommandPointCostData）退役、
 /// 旧 TagData 国籍槽位移出（一次性重构、无过渡期、不保留兼容读面）。
 /// 装配：构造期按定义注入（全类别：单位 / 指令 / 反制——对齐既有「花费＝全类别构造期装配」先例）；
@@ -25,15 +25,15 @@ public sealed class FactionCostData
     /// 创建组件（国籍＋部署费初始值——从定义注入）；初始值经受控值域同一校验
     /// （装配期非法输入 fail-fast 拒绝——与运行期受控写面同一口径）。
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">faction 为未定义枚举值；或 deployCost 为负。</exception>
-    public FactionCostData(Faction faction, int deployCost)
+    /// <exception cref="ArgumentOutOfRangeException">faction 为未定义标识；或 deployCost 为负。</exception>
+    public FactionCostData(string faction, int deployCost)
     {
         SetFactionCore(faction);
         SetDeployCostCore(deployCost);
     }
 
     /// <summary>国籍（读面；运行期修改经受控写面——<see cref="SetFactionCore"/>，静默）。</summary>
-    public Faction Faction { get; private set; }
+    public string Faction { get; private set; } = string.Empty;
 
     /// <summary>
     /// 部署费基准值（定义静态值——修饰链起点；读面。运行期修改经受控写面——<see cref="SetDeployCostCore"/>，
@@ -45,13 +45,13 @@ public sealed class FactionCostData
     /// 受控写：设置国籍（内部执行面——由卡侧门户 <see cref="CardBase.SetFaction"/> 调用；本类型内初始装配共用）。
     /// 值域＝已定义枚举值（11 值）；非法值＝明确拒绝（fail-fast、值不变）；修改为静默数据变更（不发射/不通知）。
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">faction 为未定义枚举值。</exception>
-    internal void SetFactionCore(Faction faction)
+    /// <exception cref="ArgumentOutOfRangeException">faction 为未定义标识。</exception>
+    internal void SetFactionCore(string faction)
     {
-        if (!Enum.IsDefined(faction))
+        if (!Orc.Game.Cards.Faction.IsDefined(faction))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(faction), faction, "国籍为未定义枚举值（受控写面拒绝——fail-fast、不产生半改）。");
+                nameof(faction), faction, "国籍为未定义标识（受控写面拒绝——fail-fast、不产生半改）。");
         }
 
         Faction = faction;

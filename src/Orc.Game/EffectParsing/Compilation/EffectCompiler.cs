@@ -268,11 +268,11 @@ public sealed class EffectCompiler
             "tag" =>
                 $"{card} is {{ }} actorEventTagCard && actorEventTagCard.TryGetData<{TagDataType}>(out var actorEventTags)"
                 + $" && actorEventTags.ContainsTag({CsStringLiteral(value)})",
-            "category" => EnumValue<Orc.Game.Cards.CardCategory>(value) is { } category
-                ? $"{card} is {{ }} actorEventCategoryCard && actorEventCategoryCard.Definition.Category == {category}"
+            "category" => Orc.Game.Cards.CardCategory.TryNormalize(value, out var categoryId)
+                ? $"{card} is {{ }} actorEventCategoryCard && actorEventCategoryCard.Definition.Category == {CsStringLiteral(categoryId)}"
                 : "false /* TODO 未知卡类型 */",
-            "faction" => EnumValue<Orc.Game.Cards.Faction>(value) is { } faction
-                ? $"{card} is {{ }} actorEventFactionCard && actorEventFactionCard.Definition.Faction == {faction}"
+            "faction" => Orc.Game.Cards.Faction.TryNormalize(value, out var factionId)
+                ? $"{card} is {{ }} actorEventFactionCard && actorEventFactionCard.Definition.Faction == {CsStringLiteral(factionId)}"
                 : "false /* TODO 未知阵营 */",
             "name" =>
                 $"{card} is {{ }} actorEventNameCard && string.Equals(actorEventNameCard.Name, {CsStringLiteral(value)}, System.StringComparison.Ordinal)",

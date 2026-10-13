@@ -30,7 +30,8 @@ public class JudicatorAssemblyTests
             GameTestData.CreateDeck(),
             GameTestData.CreateDefinitions(),
             seed: 42,
-            judicatorAssembly: assembly);
+            judicatorAssembly: assembly,
+            packageActivator: TestHost.Activator);
 
     // ---------- 装配闭环：注册段→对局内可达（解析/调用）；注册所得＝解析所得 ----------
 

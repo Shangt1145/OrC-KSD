@@ -189,5 +189,6 @@ public class JudicatorTargetSelectionTests
             CommandTestKit.CreateDefinitions(),
             seed: 42,
             options: new MatchOptions { SkipMulligan = true },
-            targeterBridge: bridge);
+            targeterBridge: bridge,
+            packageActivator: TestHost.Activator);
 }

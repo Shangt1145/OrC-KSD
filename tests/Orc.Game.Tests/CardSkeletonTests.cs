@@ -41,7 +41,7 @@ public class CardSkeletonTests
         var legacyStyle = new CardDefinition("旧式", 1, 1, 1, 1, faction: Faction.Germany, rarity: Rarity.Standard);
         Assert.Equal(CardCategory.Unit, legacyStyle.Category);
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new CardDefinition("坏类别", 1, 1, 1, 1, (CardCategory)99, faction: Faction.Germany, rarity: Rarity.Standard));
+            () => new CardDefinition("坏类别", 1, 1, 1, 1, "未定义类别", faction: Faction.Germany, rarity: Rarity.Standard));
     }
 
     [Fact]

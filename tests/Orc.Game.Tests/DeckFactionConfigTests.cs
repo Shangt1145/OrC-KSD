@@ -42,7 +42,8 @@ public class DeckFactionConfigTests
             GameTestData.CreateDefinitions().Concat(extraDefinitions ?? Enumerable.Empty<CardDefinitionEntry>()),
             seed: 42,
             deckConfigForPlayerA: configA,
-            deckConfigForPlayerB: configB);
+            deckConfigForPlayerB: configB,
+            packageActivator: TestHost.Activator);
 
     // ---------- ①1 配置载入与可读面 ----------
 
@@ -91,11 +92,11 @@ public class DeckFactionConfigTests
     [Fact]
     public void Deck_Configuration_Undefined_Enum_Values_Are_Rejected_At_Creation()
     {
-        // 未定义枚举值（主国 / 盟国两向）
+        // 未定义标识（主国 / 盟国两向）
         Assert.Throws<ArgumentOutOfRangeException>(() => CreateMatch(
-            new PlayerDeckConfiguration((Faction)99, Faction.Finland)));
+            new PlayerDeckConfiguration("未定义阵营", Faction.Finland)));
         Assert.Throws<ArgumentOutOfRangeException>(() => CreateMatch(
-            new PlayerDeckConfiguration(Faction.Germany, (Faction)99)));
+            new PlayerDeckConfiguration(Faction.Germany, "未定义阵营")));
 
         // 对局保持不可达：异常在创建期抛出（对局未创建＝无残留）
     }
@@ -158,7 +159,7 @@ public class DeckFactionConfigTests
         }
 
         // 「主国空军」＝ 国籍==主国 AND 类型==空军（组合筛选——跨组件读取：合并组件〔国籍〕＋标签组件〔空军 tag〕）
-        static List<CardBase> FilterMainFactionAir(IEnumerable<CardBase> cards, Faction? mainFaction)
+        static List<CardBase> FilterMainFactionAir(IEnumerable<CardBase> cards, string? mainFaction)
             => cards.Where(card =>
             {
                 var factionCost = card.GetData<FactionCostData>();

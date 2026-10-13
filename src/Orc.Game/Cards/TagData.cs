@@ -1,67 +1,126 @@
 namespace Orc.Game.Cards;
 
 /// <summary>
-/// 国籍 / 阵营枚举（KARDS 已知国家全量 11 值；W1-1 G12 引入）。
-/// 成员清单与来源数据（docs/kards官方卡牌.json）faction 字段一致——Germany / Soviet / USA / Britain / Japan /
-/// France / Italy / Poland / Finland / Anzac / Neutral；五大主国（德国/苏联/美国/英国/日本）在内。
+/// 国籍 / 阵营标识（**字符串常量类**；资产化 S4：由 <c>enum</c> 改为 string 常量——真源＝资产服务，
+/// 本类＝内置项可读符号；标识字面＝对外数据契约基线）。
+/// 成员清单与来源数据（docs/kards官方卡牌.json）faction 字段一致（规范 id 为小写）——germany / soviet / usa / britain / japan /
+/// france / italy / poland / finland / anzac / neutral；五大主国（德国/苏联/美国/英国/日本）在内。
 /// 用途：卡牌定义的必填槽位值域（<see cref="CardDefinition.Faction"/>）；「主国牌」「日本精英空军」式组合筛选的维度之一。
 /// S10 起：作为卡牌实例「国籍」的读取面承载于【阵营〔国籍〕＋部署费】合并组件（<see cref="FactionCostData"/>）——
 /// 不再经 <see cref="TagData"/> 承载（国籍槽位自 TagData 移出；单一真源）。
 /// </summary>
-public enum Faction
+public static class Faction
 {
     /// <summary>德国。</summary>
-    Germany = 0,
+    public const string Germany = "germany";
 
     /// <summary>苏联。</summary>
-    Soviet = 1,
+    public const string Soviet = "soviet";
 
     /// <summary>美国。</summary>
-    USA = 2,
+    public const string USA = "usa";
 
     /// <summary>英国。</summary>
-    Britain = 3,
+    public const string Britain = "britain";
 
     /// <summary>日本。</summary>
-    Japan = 4,
+    public const string Japan = "japan";
 
     /// <summary>法国。</summary>
-    France = 5,
+    public const string France = "france";
 
     /// <summary>意大利。</summary>
-    Italy = 6,
+    public const string Italy = "italy";
 
     /// <summary>波兰。</summary>
-    Poland = 7,
+    public const string Poland = "poland";
 
     /// <summary>芬兰。</summary>
-    Finland = 8,
+    public const string Finland = "finland";
 
     /// <summary>澳新联军（Anzac；来源数据的合法阵营归属）。</summary>
-    Anzac = 9,
+    public const string Anzac = "anzac";
 
     /// <summary>中立（来源数据的合法阵营归属）。</summary>
-    Neutral = 10,
+    public const string Neutral = "neutral";
+
+    /// <summary>内置阵营标识清单（登记序＝来源数据序）。</summary>
+    public static IReadOnlyList<string> All { get; } = new[]
+    {
+        Germany, Soviet, USA, Britain, Japan, France, Italy, Poland, Finland, Anzac, Neutral,
+    };
+
+    /// <summary>是否为已定义阵营标识（null/空白＝false、不抛错）。</summary>
+    public static bool IsDefined(string? value)
+        => value is not null && All.Contains(value, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 归一到规范阵营标识（大小写不敏感——官方语料用 PascalCase 如 <c>Germany</c>，规范 id 为小写
+    /// <c>germany</c>；**映射表＝大小写归一 ＋ 定义校验**，无特殊映射项）；未定义＝false。
+    /// </summary>
+    public static bool TryNormalize(string? value, out string canonical)
+    {
+        canonical = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var lowered = value.Trim().ToLowerInvariant();
+        if (!All.Contains(lowered, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        canonical = lowered;
+        return true;
+    }
 }
 
 /// <summary>
-/// 稀有度枚举（KARDS；W1-1 G12 引入）。
+/// 稀有度标识（**字符串常量类**；资产化 批次 4：由 <c>enum</c> 改为 string 常量；真源＝资产服务，本类＝内置符号）。
 /// 中文语义对照：基础＝Standard、限定＝Limited、特殊＝Special、精英＝Elite；
-/// 与来源数据 rarity 字段四值一一对应。用途：卡牌定义的必填槽位值域（<see cref="CardDefinition.Rarity"/>）。
+/// 与来源数据 rarity 字段四值一一对应（规范 id 为小写）。用途：卡牌定义的必填槽位值域（<see cref="CardDefinition.Rarity"/>）。
 /// </summary>
-public enum Rarity
+public static class Rarity
 {
     /// <summary>基础（Standard）。</summary>
-    Standard = 0,
+    public const string Standard = "standard";
 
     /// <summary>限定（Limited）。</summary>
-    Limited = 1,
+    public const string Limited = "limited";
 
     /// <summary>特殊（Special）。</summary>
-    Special = 2,
+    public const string Special = "special";
 
     /// <summary>精英（Elite）。</summary>
-    Elite = 3,
+    public const string Elite = "elite";
+
+    /// <summary>内置稀有度标识清单（登记序）。</summary>
+    public static IReadOnlyList<string> All { get; } = new[] { Standard, Limited, Special, Elite };
+
+    /// <summary>是否为已定义稀有度标识（null/空白＝false、不抛错）。</summary>
+    public static bool IsDefined(string? value)
+        => value is not null && All.Contains(value, StringComparer.Ordinal);
+
+    /// <summary>归一到规范标识（大小写不敏感——官方语料用 PascalCase，规范 id 为小写）；未定义＝false。</summary>
+    public static bool TryNormalize(string? value, out string canonical)
+    {
+        canonical = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var lowered = value.Trim().ToLowerInvariant();
+        if (!All.Contains(lowered, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        canonical = lowered;
+        return true;
+    }
 }
 
 /// <summary>
@@ -95,9 +154,10 @@ public sealed class TagSlot<TTag>
 
 /// <summary>
 /// 卡牌标签数据组件（W1-1 G12；以引擎数据组件形态挂载——加载时装配、<c>GetData&lt;T&gt;</c> 读取）：
-/// ① 必填强类型槽位：稀有度（<see cref="TagSlot{T}"/> of <see cref="Rarity"/>）——恒有值且实例侧只读
+/// ① 必填稀有度（<see cref="Rarity"/> 规范标识）——恒有值且实例侧只读
 ///    （随定义声明固定；本批不支持运行时修改）。S10 起：国籍槽位自本组件移出——国籍承载于
-///    【阵营〔国籍〕＋部署费】合并组件（<see cref="FactionCostData"/>；可修改形态）；本组件槽位集＝稀有度。
+///    【阵营〔国籍〕＋部署费】合并组件（<see cref="FactionCostData"/>；可修改形态）；本组件字段集＝稀有度 ＋ 开放 tag。
+///    资产化 批次 4：稀有度由枚举槽位改为 string。
 /// ② 开放 tag 集合（子类别：海军 / T-34 / 谢尔曼等）：平等的一组开放 tag 值（单一「子类别」性质集合、不另立命名维度）；
 ///    完全开放值域（任意非空白字符串可增删、无受控清单）；支持运行时增删（作用于目标卡牌实例、不影响定义与同定义的其它实例）；
 ///    增删为静默数据变更（不产生任何更新 / 通知——无消费方，读取与筛选随动即观测面）。
@@ -108,18 +168,21 @@ public sealed class TagData
 {
     private readonly List<string> _tags = new();
 
-    /// <summary>创建标签数据（槽位值经 <see cref="TagSlot{T}"/> 装配与校验；开放 tag 初始为空——后续经 <see cref="AddTag"/> 登记）。</summary>
-    /// <exception cref="ArgumentOutOfRangeException">rarity 为未定义枚举值。</exception>
-    public TagData(Rarity rarity)
+    /// <summary>创建标签数据（稀缺度为必填标识；开放 tag 初始为空——后续经 <see cref="AddTag"/> 登记）。</summary>
+    /// <exception cref="ArgumentOutOfRangeException">rarity 为未定义标识。</exception>
+    public TagData(string rarity)
     {
-        RaritySlot = new TagSlot<Rarity>(rarity);
+        if (!Orc.Game.Cards.Rarity.IsDefined(rarity))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rarity), rarity, "稀有度为未定义标识（配置错误在定义期被拒绝）。");
+        }
+
+        Rarity = rarity;
     }
 
-    /// <summary>稀有度槽位（必填、只读；槽位值经 <see cref="TagSlot{T}.Value"/> 读取）。</summary>
-    public TagSlot<Rarity> RaritySlot { get; }
-
-    /// <summary>稀有度便捷读面（＝<see cref="RaritySlot"/>.Value）。</summary>
-    public Rarity Rarity => RaritySlot.Value;
+    /// <summary>稀有度（必填、只读；规范标识——资产化 批次 4：由枚举槽位改为 string）。</summary>
+    public string Rarity { get; }
 
     /// <summary>开放 tag 枚举（只读面；登记序；空列表＝无开放 tag）。</summary>
     public IReadOnlyList<string> Tags => _tags;

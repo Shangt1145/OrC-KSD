@@ -17,7 +17,7 @@ namespace Orc.Game.Tests;
 /// </summary>
 public class FactionCostComponentTests
 {
-    private static UnitCard CreateUnitCard(LogicEngine engine, Faction faction = Faction.Germany, int deployCost = 3)
+    private static UnitCard CreateUnitCard(LogicEngine engine, string faction = Faction.Germany, int deployCost = 3)
         => new(engine, new CardDefinition(
             "单位", deployCost, 1, 2, 4, CardCategory.Unit, faction: faction, rarity: Rarity.Standard));
 
@@ -84,7 +84,7 @@ public class FactionCostComponentTests
         Assert.Empty(recorder.Updates);
 
         // 非法修改（未定义枚举值）：明确拒绝、不产生半改（值保持修改前）
-        Assert.Throws<ArgumentOutOfRangeException>(() => card.SetFaction((Faction)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => card.SetFaction("未定义阵营"));
         Assert.Equal(Faction.Italy, card.GetData<FactionCostData>().Faction);
         Assert.Empty(recorder.Updates); // 拒绝路径零发射
     }

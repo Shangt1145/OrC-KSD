@@ -236,7 +236,8 @@ public class JudicatorValidationTests
             GameTestData.CreateDeck(),
             GameTestData.CreateDefinitions(),
             seed: 42,
-            judicatorAssembly: registry => registry.Register("test.validation.custom", new AlwaysInvalidJudicator()));
+            judicatorAssembly: registry => registry.Register("test.validation.custom", new AlwaysInvalidJudicator()),
+            packageActivator: TestHost.Activator);
         await match.Initialize();
 
         // 自定义名经装配段（追加/定制通道）注册 → 可解析、可绑定、行为生效；改写经注册表 moding 同步生效。

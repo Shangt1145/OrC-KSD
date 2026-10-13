@@ -596,7 +596,7 @@ public class CardDataRoundTripTests
             $"{cardId}：字段 '{field}' 词条列表不等值——期望 [{DescribeKeywords(expected)}]，实际 [{DescribeKeywords(actual)}]。");
 
     private static void AssertUnitTypeList(
-        string cardId, string field, IReadOnlyList<UnitType> expected, IReadOnlyList<UnitType> actual)
+        string cardId, string field, IReadOnlyList<string> expected, IReadOnlyList<string> actual)
         => Assert.True(
             expected.SequenceEqual(actual),
             $"{cardId}：字段 '{field}' 单位类型列表不等值——期望 [{string.Join(", ", expected)}]，实际 [{string.Join(", ", actual)}]。");

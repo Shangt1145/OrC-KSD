@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.UI.Contracts</AssemblyName>
+    <RootNamespace>Orc.UI.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    中立 UI 契约（前端资产迁移 S1）：只承载"投影"值对象，**零引擎依赖**——
+    位于 `Orc` 之上、`Orc.Game` 之下，供引擎侧插件（Orc.UI 投影提供者）与前端共同引用。
+    前端经 csproj 全局 `Using Include` 引用本程序集，从而保持 `proto/ui/**` 源码零改动。
+  -->
+</Project>

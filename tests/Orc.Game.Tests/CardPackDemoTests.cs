@@ -287,7 +287,8 @@ public class CardPackDemoTests
             CommandTestKit.CreateDefinitions().Concat(pack.Definitions),
             seed: 42,
             options: new MatchOptions { SkipMulligan = true },
-            effectRegistry: registry);
+            effectRegistry: registry,
+            packageActivator: TestHost.Activator);
 
         foreach (var snapshot in pack.Prefabs)
         {

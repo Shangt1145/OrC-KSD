@@ -33,57 +33,9 @@ public static class KeywordRegistry
     private static readonly HashSet<string> BattleKeywords = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, IReadOnlyList<KeywordEffectBinding>> EffectBindings = new(StringComparer.Ordinal);
 
-    static KeywordRegistry()
-    {
-        // 生产内建十九枚（经注册面装配——合法标识集来源＝本面内容；S2 起含隐蔽、批 4 起含守护、批 5 起含冲击——「十八枚」旧口径随本行同步）。
-        // 既有四枚（2C-A1 迁移）——均属对战词条（打标）。
-        Register(KeywordIds.Blitz, (_, _) => new BlitzKeywordComponent(), isBattleKeyword: true);
-        Register(KeywordIds.Fury, (_, _) => new FuryKeywordComponent(), isBattleKeyword: true);
-        Register(KeywordIds.SmokeScreen, (_, _) => new PlainKeywordComponent(KeywordIds.SmokeScreen), isBattleKeyword: true);
-        Register(KeywordIds.Ambush, (_, _) => new AmbushKeywordComponent(), isBattleKeyword: true);
-
-        // A2 新增十枚——重甲为对战词条（打标）；其余不打标（wiki 无「属于对战词条」标注）。
-        Register(KeywordIds.Suppressed, (_, value) => new SuppressedKeywordComponent(value));
-        Register(KeywordIds.Inhibited, (_, _) => new PlainKeywordComponent(KeywordIds.Inhibited));
-        Register(KeywordIds.Mobilize, (_, _) => new MobilizeKeywordComponent());
-        Register(KeywordIds.Pincer, (_, _) => new PincerKeywordComponent());
-        Register(KeywordIds.Forecast, (_, _) => new PlainKeywordComponent(KeywordIds.Forecast));
-        Register(KeywordIds.Immune, (_, _) => new ImmuneKeywordComponent());
-        Register(KeywordIds.Armor, (_, value) => new ArmorKeywordComponent(value), isBattleKeyword: true);
-        Register(KeywordIds.Intelligence, (_, value) => new IntelligenceKeywordComponent(value));
-        Register(KeywordIds.CannotBeSuppressed, (_, _) => new PlainKeywordComponent(KeywordIds.CannotBeSuppressed));
-        Register(KeywordIds.CannotBeInhibited, (_, _) => new PlainKeywordComponent(KeywordIds.CannotBeInhibited));
-
-        // A4 新增一枚——亡计（内容型；不打对战词条标——Q&A-6 第 4 点；内容经运行时授予通道的「内容装载点」注入）。
-        Register(KeywordIds.Deathrattle, (_, _) => new DeathrattleKeywordComponent());
-
-        // S1 新增一枚——老兵（标记型；无行为面；不打对战词条标——纯内容标记，读取面经 VeteranRules.IsVeteran）。
-        Register(KeywordIds.Veteran, (_, _) => new PlainKeywordComponent(KeywordIds.Veteran));
-
-        // S2 新增一枚——隐蔽（标记型；无行为面；不打对战词条标——纯内容标记，读取面经 CovertRules.IsCovert；
-        // 豁免剔除经判定器默认规则/剔除点承载、揭示经 CovertRules.RevealAsync 承载）。
-        Register(KeywordIds.Covert, (_, _) => new PlainKeywordComponent(KeywordIds.Covert));
-
-        // 批 4 新增一枚——守护（标记型；无行为面；打对战词条标——wiki『属于对战词条』；
-        // 行为面＝守护维护链读点（双通道：IsGuard 代码通道 / 本词条）承载——维护重算见 CommandManager）。
-        Register(KeywordIds.Guard, (_, _) => new PlainKeywordComponent(KeywordIds.Guard), isBattleKeyword: true);
-
-        // 批 5 新增一枚——冲击（标记型；无行为面；打对战词条标——wiki『属于对战词条』；
-        // 行为面＝免反击（C5 判定器条款——现势读取）＋消耗（攻击执行段尾部词条移除链）承载——见 CommandManager）。
-        Register(KeywordIds.Shock, (_, _) => new PlainKeywordComponent(KeywordIds.Shock), isBattleKeyword: true);
-
-        // 批 4 数据化：词条效果绑定声明（词条 → 数据壳效果清单；试点：闪击/动员）——
-        // 装载期实例化（授予链）与装配期核验（KeywordEffectAssembly）的查询源；键常量登记于 KeywordEffectAssembly。
-        DeclareEffectBindings(KeywordIds.Blitz, new[]
-        {
-            new KeywordEffectBinding(KeywordEffectAssembly.BlitzDeploySetPrefabId, KeywordEffectAssembly.BlitzDeploySetEffectName),
-        });
-        DeclareEffectBindings(KeywordIds.Mobilize, new[]
-        {
-            new KeywordEffectBinding(KeywordEffectAssembly.MobilizeAccrualPrefabId, KeywordEffectAssembly.MobilizeAccrualEffectName),
-            new KeywordEffectBinding(KeywordEffectAssembly.MobilizeLossPrefabId, KeywordEffectAssembly.MobilizeLossEffectName),
-        });
-    }
+    // 资产化 批次 2：生产内建十九枚的**注册内容已迁出**——见 `Orc.Plugins.BuiltIn.BuiltInPlugin.RegisterProcessDefaults()`
+    // （内置插件在程序集加载时经本注册面装配；本面＝纯注册机制，不含内置内容）。
+    // 合法标识集来源仍＝本面内容；S2 起含隐蔽、批 4 起含守护、批 5 起含冲击（原「十八枚」旧口径）。
 
     /// <summary>
     /// 注册词条（标识 → 组件工厂；工厂每次创建全新组件实例——加载装配/每次授予各自持数据与效果实例）。
@@ -115,8 +67,55 @@ public static class KeywordRegistry
         }
     }
 
-    /// <summary>注销词条（测试清理/装配维护用；未注册＝false 无操作、不抛错）。注销生产内建属误用（定义校验/装载 fail-fast）。
-    /// 批 4：效果绑定随注销一并清理。</summary>
+    /// <summary>
+    /// **注册或覆盖**词条（前端资产迁移 S5·D5：运行期**只允许新注册与覆盖、不允许注销**）：
+    /// 已存在＝**替换工厂与打标**，并**清空该词条的效果绑定**（调用方随后重新 <see cref="DeclareEffectBindings"/>）。
+    /// 覆盖只影响**引擎持有的引用**——已冻结快照的对局（见 <see cref="Snapshot"/>）不受影响。
+    /// </summary>
+    /// <exception cref="ArgumentException">keyword 为 null/空白。</exception>
+    /// <exception cref="ArgumentNullException">factory 为 null。</exception>
+    public static void RegisterOrReplace(string keyword, Func<Card, int?, KeywordComponent> factory, bool isBattleKeyword = false)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        ArgumentNullException.ThrowIfNull(factory);
+
+        lock (Gate)
+        {
+            if (!Factories.ContainsKey(keyword))
+            {
+                Order.Add(keyword);
+            }
+
+            Factories[keyword] = factory;
+            if (isBattleKeyword)
+            {
+                BattleKeywords.Add(keyword);
+            }
+            else
+            {
+                BattleKeywords.Remove(keyword);
+            }
+
+            // 覆盖＝旧绑定作废（同标识重建行为须重新声明；否则旧效果会挂到新实现上）。
+            EffectBindings.Remove(keyword);
+        }
+    }
+
+    /// <summary>
+    /// **冻结词条快照**（S5·D5）：对局在装配开始时取一次，此后授予链/装载期实例化/效果绑定查询一律读该快照
+    /// ⇒ 运行期"覆盖"只作用于**引擎持有引用**，**进行中的对局不受影响**（新快照只影响之后新建的对局）。
+    /// </summary>
+    public static KeywordSnapshot Snapshot()
+    {
+        lock (Gate)
+        {
+            return new KeywordSnapshot(Factories, BattleKeywords, EffectBindings);
+        }
+    }
+
+    /// <summary>注销词条（**仅装配维护/测试清理**用；S5·D5 起**不对运行时开放**——运行期只允许
+    /// <see cref="Register"/>／<see cref="RegisterOrReplace"/>，需要真注销＝冷重启进程）。
+    /// 未注册＝false 无操作、不抛错。批 4：效果绑定随注销一并清理。</summary>
     public static bool Unregister(string keyword)
     {
         if (string.IsNullOrWhiteSpace(keyword))
@@ -334,3 +333,63 @@ public static class KeywordRegistry
 /// <param name="PrefabId">效果预制体标识（库键）。</param>
 /// <param name="EffectName">效果名（实例化时随数据壳装载）。</param>
 public sealed record KeywordEffectBinding(string PrefabId, string EffectName);
+
+/// <summary>
+/// 词条注册面的**冻结快照**（S5·D5）：对局在装配开始时冻结一次，装载/授予链只读本快照
+/// ⇒ 运行期的"覆盖"不会作用到已开局的对局（与 <see cref="KeywordRegistry"/> 的引擎持有引用隔离）。
+/// </summary>
+public sealed class KeywordSnapshot
+{
+    private readonly Dictionary<string, Func<Card, int?, KeywordComponent>> _factories;
+    private readonly HashSet<string> _battleKeywords;
+    private readonly Dictionary<string, IReadOnlyList<KeywordEffectBinding>> _bindings;
+    private readonly string[] _order;
+
+    internal KeywordSnapshot(
+        Dictionary<string, Func<Card, int?, KeywordComponent>> factories,
+        HashSet<string> battleKeywords,
+        Dictionary<string, IReadOnlyList<KeywordEffectBinding>> bindings)
+    {
+        _factories = new Dictionary<string, Func<Card, int?, KeywordComponent>>(factories, StringComparer.Ordinal);
+        _battleKeywords = new HashSet<string>(battleKeywords, StringComparer.Ordinal);
+        _bindings = new Dictionary<string, IReadOnlyList<KeywordEffectBinding>>(bindings, StringComparer.Ordinal);
+        _order = [.. factories.Keys];
+    }
+
+    /// <summary>冻结时点的已注册标识清单（登记序近似——字典序展开，仅诊断用）。</summary>
+    public IReadOnlyList<string> Registered => _order;
+
+    /// <summary>标识是否在快照内注册。</summary>
+    public bool IsDefined(string keyword)
+        => !string.IsNullOrWhiteSpace(keyword) && _factories.ContainsKey(keyword);
+
+    /// <summary>标识是否为对战词条（快照时点的打标）。</summary>
+    public bool IsBattleKeyword(string keyword)
+        => !string.IsNullOrWhiteSpace(keyword) && _battleKeywords.Contains(keyword);
+
+    /// <summary>按快照构造词条组件（未注册/工厂返回 null/标识不一致＝fail-fast，同静态面口径）。</summary>
+    internal KeywordComponent Create(Card card, string keyword, int? value)
+    {
+        if (!_factories.TryGetValue(keyword, out var factory))
+        {
+            throw new InvalidOperationException(
+                $"词条标识 '{keyword}' 不在本局词条快照内（快照为唯一来源——fail-fast）。");
+        }
+
+        var component = factory(card, value)
+            ?? throw new InvalidOperationException($"词条标识 '{keyword}' 的工厂返回 null（配置错误——fail-fast）。");
+        if (!string.Equals(component.Keyword, keyword, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"词条标识 '{keyword}' 的工厂返回了标识为 '{component.Keyword}' 的组件（标识不一致——配置错误、fail-fast）。");
+        }
+
+        return component;
+    }
+
+    /// <summary>快照时点的词条效果绑定（未声明＝空）。</summary>
+    internal IReadOnlyList<KeywordEffectBinding> GetEffectBindings(string keyword)
+        => !string.IsNullOrWhiteSpace(keyword) && _bindings.TryGetValue(keyword, out var bindings)
+            ? bindings
+            : Array.Empty<KeywordEffectBinding>();
+}

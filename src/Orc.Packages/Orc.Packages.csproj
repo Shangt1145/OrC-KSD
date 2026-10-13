@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Packages</AssemblyName>
+    <RootNamespace>Orc.Packages</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 宿主/编排层（资产化 S5）：依赖方向 Orc.Plugins.BuiltIn → Orc.Packages → Orc.Game → Orc.Script → Orc（单向）。 -->
+    <ProjectReference Include="..\Orc\Orc.csproj" />
+    <ProjectReference Include="..\Orc.Script\Orc.Script.csproj" />
+    <ProjectReference Include="..\Orc.Game\Orc.Game.csproj" />
+  </ItemGroup>
+
+</Project>

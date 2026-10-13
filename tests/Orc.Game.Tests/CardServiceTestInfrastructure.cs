@@ -141,7 +141,7 @@ internal sealed class CardServiceSceneEffect : ActiveEffect<CardServiceCastView>
     public CardBase? Source { get; set; }
 
     /// <summary>增补类型（AddUnitType）。</summary>
-    public UnitType AddedType { get; set; } = UnitType.Tank;
+    public string AddedType { get; set; } = UnitType.Tank;
 
     /// <summary>选取策略（ToAdjacent；缺省＝取首个候选——策略由调用方定）。</summary>
     public Func<IReadOnlyList<Slot>, Slot?> SlotSelector { get; set; } = slots => slots[0];

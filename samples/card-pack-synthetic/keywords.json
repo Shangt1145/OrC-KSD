@@ -1,0 +1,10 @@
+[
+ {
+  "id": "sample.entrench",
+  "label": "固守",
+  "battle": false,
+  "bindings": [
+   { "prefabId": "sample.entrench.effect", "effectName": "sample.entrench" }
+  ]
+ }
+]

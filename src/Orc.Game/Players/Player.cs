@@ -242,10 +242,10 @@ public sealed class Player
     /// 主国（S10 读取面；只读转发构筑配置——未配置＝null、不抛错）。值域＝五主国（德/苏/美/英/日）；
     /// 「主国牌」筛选＝卡牌国籍==本值（读取消费在筛选侧组合——不新增机制级筛选 API）。
     /// </summary>
-    public Faction? MainFaction => DeckConfiguration?.MainFaction;
+    public string? MainFaction => DeckConfiguration?.MainFaction;
 
     /// <summary>盟国（S10 读取面；只读转发构筑配置——未配置＝null、不抛错）。值域＝余下 4 个主国＋5 个盟国（9 值）。</summary>
-    public Faction? AllyFaction => DeckConfiguration?.AllyFaction;
+    public string? AllyFaction => DeckConfiguration?.AllyFaction;
 
     /// <summary>
     /// 装配期注入玩家构筑配置（S10；由对局装配路径调用——一次性注入；重复注入＝明确拒绝（fail-fast）。

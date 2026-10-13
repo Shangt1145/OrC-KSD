@@ -144,14 +144,17 @@ public class UnitCard : CardBase
     {
         if (view.Card is not UnitCard unit || view.Player is not Player player)
         {
-            ctx.Interrupt();
+            ctx.Interrupt(); // 载荷缺失（结构性错误）：链中止、收尾不发生
             return;
         }
+
+        // A.20：阵型空隙（FormationGap）＝部署主入口的落点；提交的是"空隙身份"而非物理空槽。
         var slot = view.Position;
         if (view.FormationGap is { } gap)
         {
             if (!gap.Line.TryOpenGap(gap, out slot)) { ctx.Interrupt(); return; }
         }
+
         if (slot is null) { ctx.Interrupt(); return; }
 
         // ① 打出宣告（card.played；W4-1 升级版载荷＝{ Card, Player }——被使用卡实例＋使用方）
@@ -621,15 +624,15 @@ public class UnitCard : CardBase
     /// 生效即时（判定读点动态读取当前实例类型集——无需修改读点代码）；实例级（仅作用于本实例、不写回定义；
     /// 不迁移同定义其他实例）；转换产生的静态新实例不携带本增补（新实例＝从定义重建）。
     /// </summary>
-    /// <param name="type">单位类型（须为已定义枚举值；非法值＝拒绝）。</param>
-    /// <exception cref="ArgumentOutOfRangeException">type 为未定义枚举值（非法值——明确拒绝）。</exception>
+    /// <param name="type">单位类型标识（须为已定义标识；非法值＝拒绝）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">type 为未定义标识（非法值——明确拒绝）。</exception>
     /// <exception cref="InvalidOperationException">尚未单位化（缺单位数据组件——装配性错误）。</exception>
-    public async Task AddUnitTypeAsync(UnitType type, CancellationToken ct = default)
+    public async Task AddUnitTypeAsync(string type, CancellationToken ct = default)
     {
-        if (!Enum.IsDefined(type))
+        if (!UnitType.IsDefined(type))
         {
             throw new ArgumentOutOfRangeException(
-                nameof(type), type, "未定义的单位类型枚举值（非法值——明确拒绝）。");
+                nameof(type), type, "未定义的单位类型标识（非法值——明确拒绝）。");
         }
 
         var state = RequireUnitState();

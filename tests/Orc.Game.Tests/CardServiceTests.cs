@@ -579,7 +579,7 @@ public class CardServiceTests
         Assert.DoesNotContain(UnitType.Bomber, unit.Definition.UnitTypes);
 
         // 校验分层：未定义枚举值＝拒绝；未单位化（无单位数据）＝明确异常
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => unit.AddUnitTypeAsync((UnitType)999));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => unit.AddUnitTypeAsync("未定义兵种"));
         var loose = await CommandTestKit.InstantiateLoadedAsync(match, playerA, CommandTestKit.InfantryId, toHand: true);
         await Assert.ThrowsAsync<InvalidOperationException>(() => loose.AddUnitTypeAsync(UnitType.Tank));
     }

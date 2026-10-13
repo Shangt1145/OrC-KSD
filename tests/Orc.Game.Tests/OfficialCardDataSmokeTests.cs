@@ -76,7 +76,8 @@ public class OfficialCardDataSmokeTests
             firstPlayerIndex: null,
             options: new MatchOptions { SkipMulligan = true },
             targeterBridge: null,
-            effectRegistry: effectRegistry);
+            effectRegistry: effectRegistry,
+            packageActivator: TestHost.Activator);
 
         await match.Initialize();
 

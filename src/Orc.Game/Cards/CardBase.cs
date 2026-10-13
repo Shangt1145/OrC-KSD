@@ -154,7 +154,7 @@ public abstract class CardBase : Orc.Cards.Card
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">faction 为未定义枚举值（非法修改被拒绝）。</exception>
     /// <exception cref="KeyNotFoundException">合并组件缺失（未装配实例取件＝明确错误）。</exception>
-    public void SetFaction(Faction faction) => GetData<FactionCostData>().SetFactionCore(faction);
+    public void SetFaction(string faction) => GetData<FactionCostData>().SetFactionCore(faction);
 
     /// <summary>
     /// 门户：设置部署费基准值（S10 受控变更面——修改合并组件部署费「本体」（基准值）的唯一合规入口）：

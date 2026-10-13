@@ -25,7 +25,8 @@ public class MatchOpeningConfigTests
             GameTestData.CreateDefinitions(),
             seed: 42,
             firstPlayerIndex: null,
-            options: options);
+            options: options,
+            packageActivator: TestHost.Activator);
 
     // ---------- ① 缺省断言（属性级） ----------
 

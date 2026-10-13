@@ -1,8 +1,10 @@
 using Orc.Core;
 using Orc.Game;
 using Orc.Game.Cards;
+using Orc.Game.Cards.Data;
 using Orc.Game.Collections;
 using Orc.Game.Players;
+using Orc.Game.Triggers;
 using Xunit;
 
 namespace Orc.Game.Tests;
@@ -91,7 +93,8 @@ public class CardTagDataTests
             new CardList(Enumerable.Repeat(JpStdAirId, 10)),
             new CardList(Enumerable.Repeat(JpStdAirId, 10)),
             CreateDefinitions(),
-            seed: 42);
+            seed: 42,
+            packageActivator: TestHost.Activator);
 
     /// <summary>实例化＋加载一张样本卡（归属＝player）。</summary>
     private static async Task<CardBase> InstantiateLoadedAsync(Match match, Player player, string id)
@@ -129,10 +132,10 @@ public class CardTagDataTests
     {
         var data = new TagData(Rarity.Elite);
 
-        // 必填槽位恒有值：稀有度经强类型槽位与便捷读面可读（只读——无写面）
+        // 必填字段恒有值：稀有度可读（只读——无写面）
         // S10 随改：国籍槽位自 TagData 移出——国籍读取面迁至「阵营〔国籍〕＋部署费」合并组件
         // （FactionCostData；跨组件的国籍/花费读数与受控写面完整验证见 FactionCostComponentTests）。
-        Assert.Equal(Rarity.Elite, data.RaritySlot.Value);
+        // 资产化 批次 4 随改：稀有度由枚举槽位改为 string（真源＝资产服务；TagSlot 仍为泛型枚举槽位机制）。
         Assert.Equal(Rarity.Elite, data.Rarity);
 
         // 开放 tag 初始为空（合法——开放维可零值；槽位不可零值）
@@ -174,24 +177,27 @@ public class CardTagDataTests
     [Fact]
     public void TagSlot_Rejects_Undefined_Enum_Values_And_Accepts_All_Registered_Values()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<Faction>((Faction)99));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<Rarity>((Rarity)(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<TriggerLayer>((TriggerLayer)99));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TagSlot<CardComponentPhase>((CardComponentPhase)(-1)));
 
-        // 泛型槽位机制：国籍枚举全量域（11 值，含 Neutral/Anzac）与稀有度四值均可入槽
-        // （S10 随改注：国籍槽位不再由 TagData 承载〔读面迁至合并组件 FactionCostData——受控写面〕；
-        // 本段保留为泛型槽位机制的值域覆盖——「任意枚举值域可入槽、未定义值拒绝」不随承载迁移而消失）。
-        foreach (var faction in Enum.GetValues<Faction>())
+        // 泛型槽位机制：枚举值域全量入槽覆盖
+        // （资产化 S4／批次 4 随改注：国籍／稀有度／卡类别均由枚举改为 string 常量类〔真源＝资产服务〕，
+        // 不再是枚举、不能入 TagSlot；本段以仍为枚举的 TriggerLayer／CardComponentPhase 承载
+        // 「任意枚举值域可入槽、未定义值拒绝」的机制覆盖——不随承载迁移而消失）。
+        foreach (var layer in Enum.GetValues<TriggerLayer>())
         {
-            Assert.Equal(faction, new TagSlot<Faction>(faction).Value);
+            Assert.Equal(layer, new TagSlot<TriggerLayer>(layer).Value);
         }
 
-        foreach (var rarity in Enum.GetValues<Rarity>())
+        foreach (var phase in Enum.GetValues<CardComponentPhase>())
         {
-            Assert.Equal(rarity, new TagSlot<Rarity>(rarity).Value);
+            Assert.Equal(phase, new TagSlot<CardComponentPhase>(phase).Value);
         }
 
-        Assert.Equal(11, Enum.GetValues<Faction>().Length);
-        Assert.Equal(new[] { Rarity.Standard, Rarity.Limited, Rarity.Special, Rarity.Elite }, Enum.GetValues<Rarity>());
+        Assert.Equal(2, Enum.GetValues<TriggerLayer>().Length);
+        Assert.Equal(
+            new[] { CardComponentPhase.Construction, CardComponentPhase.Load },
+            Enum.GetValues<CardComponentPhase>());
     }
 
     // ==========================================================
@@ -214,9 +220,9 @@ public class CardTagDataTests
     public void Definition_Rejects_Undefined_Faction_And_Rarity_Values()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CardDefinition(
-            "怪国籍", 1, 1, 1, 1, faction: (Faction)99, rarity: Rarity.Standard));
+            "怪国籍", 1, 1, 1, 1, faction: "未定义阵营", rarity: Rarity.Standard));
         Assert.Throws<ArgumentOutOfRangeException>(() => new CardDefinition(
-            "怪稀有度", 1, 1, 1, 1, faction: Faction.Germany, rarity: (Rarity)99));
+            "怪稀有度", 1, 1, 1, 1, faction: Faction.Germany, rarity: "未定义稀有度"));
     }
 
     [Fact]

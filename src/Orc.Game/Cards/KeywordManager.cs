@@ -270,7 +270,10 @@ public sealed class KeywordManager
             return false; // 幂等：重复授予（含不同参值）＝无操作、参值保持
         }
 
-        var component = KeywordRegistry.Create(_card, keyword, value); // 构造失败＝fail-fast（未置位、无状态变更）
+        // S5：有对局快照＝按快照构造（运行期覆盖不影响本局）；无快照（独立构造）＝回退静态面。
+        var component = context?.Keywords is { } keywordSnapshot
+            ? keywordSnapshot.Create(_card, keyword, value)
+            : KeywordRegistry.Create(_card, keyword, value); // 构造失败＝fail-fast（未置位、无状态变更）
         component.AttachContent(content); // A4：内容载荷注入（内容型词条吸收；默认忽略）——失败＝fail-fast（未置位、无状态变更）
         _components.Add(keyword, component);
         _active.Add(component); // ① 存在性置位（数据面可见）
@@ -388,7 +391,10 @@ public sealed class KeywordManager
     /// </summary>
     private void AttachKeywordEffectPrefabs(KeywordComponent component, KeywordLoadContext? context)
     {
-        var bindings = KeywordRegistry.GetEffectBindings(component.Keyword);
+        // S5：有对局快照＝按快照查绑定（运行期覆盖不影响本局）；无快照＝回退静态面。
+        var bindings = context?.Keywords is { } keywords
+            ? keywords.GetEffectBindings(component.Keyword)
+            : KeywordRegistry.GetEffectBindings(component.Keyword);
         if (bindings.Count == 0)
         {
             return; // 无数据壳绑定（未迁移词条）：零行为变化

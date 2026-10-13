@@ -1,0 +1,11 @@
+{
+ "schemaVersion": 1,
+ "id": "sample.rifle",
+ "name": "示例步枪兵",
+ "components": [
+  { "component": "typeCategory", "type": ["infantry"] },
+  { "component": "factionCost", "faction": "germany", "kredits": 1 },
+  { "component": "battleStats", "operationCost": 1, "attack": 2, "defense": 3 },
+  { "component": "tagData", "rarity": "standard" }
+ ]
+}

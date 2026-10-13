@@ -15,10 +15,10 @@ namespace Orc.Game.Judicators;
 internal static class CombatTypeGroups
 {
     /// <summary>任意线组（炮/战/轰——C2 范围矩阵：任一命中＝任意线全组合允许）。</summary>
-    private static readonly UnitType[] AnyLineRangeTypes = { UnitType.Artillery, UnitType.Fighter, UnitType.Bomber };
+    private static readonly string[] AnyLineRangeTypes = { UnitType.Artillery, UnitType.Fighter, UnitType.Bomber };
 
     /// <summary>资格组（炮/轰——C3 被守护攻击资格：任一命中＝有资格；不含战斗机）；任意线组＝资格组＋战斗机（子集关系同处定义——「共表」）。</summary>
-    private static readonly UnitType[] GuardEligibilityTypes = { UnitType.Artillery, UnitType.Bomber };
+    private static readonly string[] GuardEligibilityTypes = { UnitType.Artillery, UnitType.Bomber };
 
     /// <summary>任意线组判定（存在性——含任一即适用）。</summary>
     public static bool HasAnyLineRange(UnitCard unit) => HasAnyType(unit, AnyLineRangeTypes);
@@ -35,7 +35,7 @@ internal static class CombatTypeGroups
     /// <summary>炮兵判定（反击豁免表——攻击者侧；K2 加性补充——消除原 CounterAttackRules 私有散落实现）。</summary>
     public static bool IsArtillery(UnitCard unit) => HasType(unit, UnitType.Artillery);
 
-    private static bool HasAnyType(UnitCard unit, UnitType[] types)
+    private static bool HasAnyType(UnitCard unit, string[] types)
     {
         if (!unit.TryGetData<UnitStateData>(out var state))
         {
@@ -53,6 +53,6 @@ internal static class CombatTypeGroups
         return false;
     }
 
-    private static bool HasType(UnitCard unit, UnitType type)
+    private static bool HasType(UnitCard unit, string type)
         => unit.TryGetData<UnitStateData>(out var state) && state.UnitTypes.Contains(type);
 }

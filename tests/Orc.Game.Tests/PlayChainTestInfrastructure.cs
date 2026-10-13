@@ -52,7 +52,8 @@ internal static class PlayChainTestKit
             seed,
             firstPlayerIndex: null,
             options: new MatchOptions { SkipMulligan = skipMulligan },
-            targeterBridge: bridge);
+            targeterBridge: bridge,
+            packageActivator: TestHost.Activator);
 
     /// <summary>实例化＋加载一张定制卡（归属＝player；可选放入手牌——离手/取消断言需要）。</summary>
     public static async Task<T> InstantiateLoadedAsync<T>(Match match, Player player, string id = UnitCheapId, bool toHand = true)

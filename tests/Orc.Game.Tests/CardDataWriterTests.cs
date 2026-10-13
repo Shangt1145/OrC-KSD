@@ -296,7 +296,7 @@ public class CardDataWriterTests
     [Fact]
     public void TypeCategory_Unit_Without_UnitTypes_Warns_And_Writes_Empty_Array()
     {
-        var definition = CodeCard(category: CardCategory.Unit, unitTypes: Array.Empty<UnitType>());
+        var definition = CodeCard(category: CardCategory.Unit, unitTypes: Array.Empty<string>());
 
         var json = CardDataJson.Serialize("unit-empty", definition, out var warnings);
 
@@ -827,8 +827,8 @@ public class CardDataWriterTests
         IEnumerable<KeywordDeclaration>? keywords = null,
         string? becomesVeteran = null,
         string? veteranOf = null,
-        CardCategory category = CardCategory.Unit,
-        IEnumerable<UnitType>? unitTypes = null,
+        string category = CardCategory.Unit,
+        IEnumerable<string>? unitTypes = null,
         bool isGuard = false)
         => new(
             name,
@@ -863,13 +863,13 @@ public class CardDataWriterTests
     }
 
     private static TypeCategoryDefinition CreateTypeCategoryDefinition(
-        CardCategory category,
-        IReadOnlyList<UnitType> unitTypes)
+        string category,
+        IReadOnlyList<string> unitTypes)
     {
         var constructor = typeof(TypeCategoryDefinition).GetConstructor(
             BindingFlags.Instance | BindingFlags.NonPublic,
             binder: null,
-            [typeof(CardCategory), typeof(IReadOnlyList<UnitType>)],
+            [typeof(string), typeof(IReadOnlyList<string>)],
             modifiers: null)
             ?? throw new InvalidOperationException("未找到 TypeCategoryDefinition 内部构造器。");
 

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Plugins.BuiltIn</AssemblyName>
+    <RootNamespace>Orc.Plugins.BuiltIn</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 依赖方向：Orc.Plugins.BuiltIn → Orc.Packages → Orc.Game → Orc.Script → Orc（单向）。 -->
+    <ProjectReference Include="..\Orc\Orc.csproj" />
+    <ProjectReference Include="..\Orc.Game\Orc.Game.csproj" />
+    <ProjectReference Include="..\Orc.Packages\Orc.Packages.csproj" />
+  </ItemGroup>
+
+  <!-- 物理插件包（资产化 S12b）：清单随程序集输出（plugins/orc.builtin.core/manifest.json）。 -->
+  <ItemGroup>
+    <None Update="package/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -8,13 +8,13 @@ public sealed class FactionCostDefinition : ICardDataComponentDefinition
     /// <summary>数据体组件类型名。</summary>
     public const string DefinitionName = "factionCost";
 
-    /// <summary>数据体字段：国籍（官方 <c>faction</c> 字面值）。</summary>
-    public Faction Faction { get; }
+    /// <summary>数据体字段：国籍（官方 <c>faction</c> 字面值；规范 id＝小写——读侧大小写归一）。</summary>
+    public string Faction { get; }
 
     /// <summary>数据体字段：部署费（官方 <c>kredits</c>）。</summary>
     public int DeployCost { get; }
 
-    internal FactionCostDefinition(Faction faction, int deployCost)
+    internal FactionCostDefinition(string faction, int deployCost)
     {
         Faction = faction;
         DeployCost = deployCost;
@@ -23,16 +23,23 @@ public sealed class FactionCostDefinition : ICardDataComponentDefinition
     /// <inheritdoc />
     public string ComponentName => DefinitionName;
 
-    /// <summary>反序列化（国籍＝必填枚举字面值、部署费＝必填整数）。</summary>
+    /// <summary>反序列化（国籍＝必填标识字面值〔大小写归一〕、部署费＝必填整数）。</summary>
     public static FactionCostDefinition Read(JsonElement element)
-        => new(
-            ComponentText.RequireEnum<Faction>(element, "faction"),
-            ComponentText.RequireInt(element, "kredits"));
+    {
+        var raw = ComponentText.GetString(element, "faction")
+            ?? throw new FormatException("factionCost 组件缺少 faction（必填）。");
+        if (!Orc.Game.Cards.Faction.TryNormalize(raw, out var faction))
+        {
+            throw new FormatException($"factionCost 组件 faction 取值 '{raw}' 非已定义阵营标识（配置错误）。");
+        }
 
-    /// <summary>序列化（写方向对称）：国籍＝枚举字面值、部署费＝整数（规范字段序：faction → kredits）。</summary>
+        return new FactionCostDefinition(faction, ComponentText.RequireInt(element, "kredits"));
+    }
+
+    /// <summary>序列化（写方向对称）：国籍＝规范标识（小写）、部署费＝整数（规范字段序：faction → kredits）。</summary>
     public static void Write(FactionCostDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
     {
-        writer.WriteString("faction", definition.Faction.ToString());
+        writer.WriteString("faction", definition.Faction);
         writer.WriteNumber("kredits", definition.DeployCost);
     }
 }
@@ -87,13 +94,13 @@ public sealed class TagDataDefinition : ICardDataComponentDefinition
     /// <summary>数据体组件类型名。</summary>
     public const string DefinitionName = "tagData";
 
-    /// <summary>数据体字段：稀有度（官方 <c>rarity</c> 字面值）。</summary>
-    public Rarity Rarity { get; }
+    /// <summary>数据体字段：稀有度（官方 <c>rarity</c> 字面值；读侧大小写归一、写出规范小写 id）。</summary>
+    public string Rarity { get; }
 
     /// <summary>数据体字段：开放 tag（子类别；官方语料无对应，Orc 扩展）。</summary>
     public IReadOnlyList<string> Tags { get; }
 
-    internal TagDataDefinition(Rarity rarity, IReadOnlyList<string> tags)
+    internal TagDataDefinition(string rarity, IReadOnlyList<string> tags)
     {
         Rarity = rarity;
         Tags = tags;
@@ -102,16 +109,23 @@ public sealed class TagDataDefinition : ICardDataComponentDefinition
     /// <inheritdoc />
     public string ComponentName => DefinitionName;
 
-    /// <summary>反序列化（稀有度＝必填枚举字面值、tags＝可选字符串数组）。</summary>
+    /// <summary>反序列化（稀有度＝必填标识字面值〔大小写归一〕、tags＝可选字符串数组）。</summary>
     public static TagDataDefinition Read(JsonElement element)
-        => new(
-            ComponentText.RequireEnum<Rarity>(element, "rarity"),
-            ComponentText.GetStringArray(element, "tags"));
+    {
+        var raw = ComponentText.GetString(element, "rarity")
+            ?? throw new FormatException("tagData 组件缺少 rarity（必填）。");
+        if (!Orc.Game.Cards.Rarity.TryNormalize(raw, out var rarity))
+        {
+            throw new FormatException($"tagData 组件 rarity 取值 '{raw}' 非已定义稀有度标识（配置错误）。");
+        }
 
-    /// <summary>序列化（写方向对称）：稀有度＝枚举字面值（必写）、tags＝按序（空＝显式 <c>[]</c>；规范字段序：rarity → tags）。</summary>
+        return new TagDataDefinition(rarity, ComponentText.GetStringArray(element, "tags"));
+    }
+
+    /// <summary>序列化（写方向对称）：稀有度＝规范标识（小写）、tags＝按序（空＝显式 <c>[]</c>；规范字段序：rarity → tags）。</summary>
     public static void Write(TagDataDefinition definition, Utf8JsonWriter writer, IList<string> warnings)
     {
-        writer.WriteString("rarity", definition.Rarity.ToString());
+        writer.WriteString("rarity", definition.Rarity);
         ComponentText.WriteStringArray(writer, "tags", definition.Tags);
     }
 }
@@ -127,12 +141,12 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
     public const string DefinitionName = "typeCategory";
 
     /// <summary>解析出的卡牌类别。</summary>
-    public CardCategory Category { get; }
+    public string Category { get; }
 
     /// <summary>解析出的单位类型清单（登记序；非单位卡＝空）。</summary>
-    public IReadOnlyList<UnitType> UnitTypes { get; }
+    public IReadOnlyList<string> UnitTypes { get; }
 
-    internal TypeCategoryDefinition(CardCategory category, IReadOnlyList<UnitType> unitTypes)
+    internal TypeCategoryDefinition(string category, IReadOnlyList<string> unitTypes)
     {
         Category = category;
         UnitTypes = unitTypes;
@@ -151,8 +165,8 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
                 "typeCategory 组件缺少 type（必填、非空数组——无法确定卡牌类别）。");
         }
 
-        CardCategory? category = null;
-        var unitTypes = new List<UnitType>();
+        string? category = null;
+        var unitTypes = new List<string>();
 
         foreach (var token in tokens)
         {
@@ -164,7 +178,7 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
                     throw new FormatException($"type 列表含多个类别词（'{token}'——类别至多一个）。");
                 }
 
-                category = resolved.Value;
+                category = resolved;
                 continue;
             }
 
@@ -186,7 +200,7 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
                 throw new FormatException("类别词须独占 type 列表（不可与单位类型混用）。");
             }
 
-            return new TypeCategoryDefinition(category.Value, Array.Empty<UnitType>());
+            return new TypeCategoryDefinition(category, Array.Empty<string>());
         }
 
         return new TypeCategoryDefinition(CardCategory.Unit, unitTypes);
@@ -222,7 +236,7 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
             warnings.Add("组件 'typeCategory' 类别词与单位类型混用（读回必然被拒——已照写）。");
         }
 
-        var seen = new HashSet<UnitType>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var hasDuplicate = false;
         foreach (var unitType in definition.UnitTypes)
         {
@@ -231,7 +245,7 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
                 hasDuplicate = true;
             }
 
-            words.Add(unitType.ToString().ToLowerInvariant());
+            words.Add(unitType);
         }
 
         if (definition.Category is CardCategory.Unit && definition.UnitTypes.Count == 0)
@@ -247,23 +261,16 @@ public sealed class TypeCategoryDefinition : ICardDataComponentDefinition
         ComponentText.WriteStringArray(writer, "type", words);
     }
 
-    private static CardCategory? ResolveCategory(string token)
+    private static string? ResolveCategory(string token)
         => token.ToLowerInvariant() switch
         {
-            "order" => CardCategory.Command,
-            "countermeasure" => CardCategory.Counter,
+            "order" => Orc.Game.Cards.CardCategory.Command,
+            "countermeasure" => Orc.Game.Cards.CardCategory.Counter,
             _ => null,
         };
 
-    private static UnitType? ResolveUnitType(string token)
-    {
-        if (!Enum.TryParse<UnitType>(token, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
-        {
-            return null;
-        }
-
-        return parsed;
-    }
+    private static string? ResolveUnitType(string token)
+        => Orc.Game.Cards.UnitType.TryNormalize(token, out var canonical) ? canonical : null;
 }
 
 /// <summary>
@@ -596,94 +603,6 @@ public sealed class EffectsDefinition : ICardDataComponentDefinition
     }
 }
 
-/// <summary>
-/// 内置组件注册（S3；注册序即第一段加载顺序）：typeCategory → factionCost → battleStats → tagData → keywords → effects。
-/// 注册先于使用（对齐 <see cref="KeywordRegistry"/> 先例）；由 <see cref="CardComponentRegistry"/> 静态构造一次性执行。
-/// </summary>
-internal static class BuiltInCardComponents
-{
-    /// <summary>注册六个内置组件（重复调用＝注册面拒绝——本方法仅由注册面静态构造调用一次）。</summary>
-    internal static void Register()
-    {
-        // 构造期段（顺序：类别 → 阵营/花费 → 对战数值）。
-        CardComponentRegistry.Register(
-            TypeCategoryDefinition.DefinitionName,
-            CardComponentPhase.Construction,
-            static (_, _, _) => Task.CompletedTask, // 空操作：数据经 CardDefinition 派生读面消费（P4c）
-            TypeCategoryDefinition.Read,
-            isBuiltIn: true,
-            writer: TypeCategoryDefinition.Write);
-
-        CardComponentRegistry.Register(
-            FactionCostDefinition.DefinitionName,
-            CardComponentPhase.Construction,
-            static (card, definition, _) =>
-            {
-                var typed = (FactionCostDefinition)definition;
-                card.AddData(new FactionCostData(typed.Faction, typed.DeployCost));
-                return Task.CompletedTask;
-            },
-            FactionCostDefinition.Read,
-            isBuiltIn: true,
-            writer: FactionCostDefinition.Write);
-
-        CardComponentRegistry.Register(
-            BattleStatsDefinition.DefinitionName,
-            CardComponentPhase.Construction,
-            static (card, definition, _) =>
-            {
-                var typed = (BattleStatsDefinition)definition;
-                card.AddData(new BattleStatsData(typed.OperateCost, typed.Attack, typed.Defense));
-                return Task.CompletedTask;
-            },
-            BattleStatsDefinition.Read,
-            isBuiltIn: true,
-            writer: BattleStatsDefinition.Write);
-
-        // 加载期段（顺序：元数据 → 词条 → 效果）。
-        CardComponentRegistry.Register(
-            TagDataDefinition.DefinitionName,
-            CardComponentPhase.Load,
-            static (card, definition, _) =>
-            {
-                var typed = (TagDataDefinition)definition;
-                var data = new TagData(typed.Rarity);
-                foreach (var tag in typed.Tags)
-                {
-                    data.AddTag(tag);
-                }
-
-                card.AddData(data);
-                return Task.CompletedTask;
-            },
-            TagDataDefinition.Read,
-            isBuiltIn: true,
-            writer: TagDataDefinition.Write);
-
-        CardComponentRegistry.Register(
-            KeywordsDefinition.DefinitionName,
-            CardComponentPhase.Load,
-            static (card, definition, context) =>
-            {
-                var typed = (KeywordsDefinition)definition;
-                var loadContext = context.KeywordLoadContext;
-                foreach (var declaration in typed.Keywords)
-                {
-                    card.Keywords.GrantCore(declaration.Id, declaration.Value, loadContext);
-                }
-
-                return Task.CompletedTask;
-            },
-            KeywordsDefinition.Read,
-            isBuiltIn: true,
-            writer: KeywordsDefinition.Write);
-
-        CardComponentRegistry.Register(
-            EffectsDefinition.DefinitionName,
-            CardComponentPhase.Load,
-            static (_, _, _) => Task.CompletedTask, // 空操作：声明已在载入期转为效果注册项，装载走框架步骤
-            EffectsDefinition.Read,
-            isBuiltIn: true,
-            writer: EffectsDefinition.Write);
-    }
-}
+// 资产化 批次 2：六个内置组件的**注册内容已迁出**——见
+// `Orc.Plugins.BuiltIn.BuiltInPlugin.RegisterBuiltInCardComponents()`（内置插件在进程级装配时经
+// `CardComponentRegistry` 注册；本文件保留定义类型，注册序即第一段加载顺序）。

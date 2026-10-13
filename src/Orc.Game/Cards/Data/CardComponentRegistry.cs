@@ -48,11 +48,8 @@ public static class CardComponentRegistry
     private static readonly List<CardComponentEntry> Order = new();
     private static readonly Dictionary<string, CardComponentEntry> ByName = new(StringComparer.Ordinal);
 
-    /// <summary>静态构造：注册六个内置组件（注册先于使用——对齐 <c>KeywordRegistry</c> 先例）。</summary>
-    static CardComponentRegistry()
-    {
-        Components.BuiltInCardComponents.Register();
-    }
+    // 资产化 批次 2：内置六组件的注册内容已迁出至内置插件（`Orc.Plugins.BuiltIn.BuiltInPlugin.RegisterBuiltInCardComponents()`）
+    // ——本面＝纯注册机制，不含内置内容；注册先于使用（宿主/消费方须在建局前触发插件进程级装配）。
 
     /// <summary>
     /// 注册组件（类型名由调用方显式给出——与定义类型同处一地声明，避免反射）。

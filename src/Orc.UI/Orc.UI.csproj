@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.UI</AssemblyName>
+    <RootNamespace>Orc.UI</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    内置 UI 插件包（前端资产迁移 S6·D4）：一个包兼任两职——
+      ① `scope: process` 入口：注册**卡包生命周期观察者**，驱动卡包词条加载（S5/S7）；
+      ② `scope: match/preCommand` 入口：注册**投影提供者工厂**（S7），前端以 artLookup 构造 provider。
+    载体＝"合成 asm 描述符 + 本程序集代码入口"（照抄 Orc.Plugins.BuiltIn 先例）：绕开 csx 沙箱白名单与 asm 加载器缺口。
+    依赖方向：Orc ← Orc.UI.Contracts ← Orc.Game ← Orc.Packages ← Orc.UI（无环）。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Orc\Orc.csproj" />
+    <ProjectReference Include="..\Orc.UI.Contracts\Orc.UI.Contracts.csproj" />
+    <ProjectReference Include="..\Orc.Game\Orc.Game.csproj" />
+    <ProjectReference Include="..\Orc.Packages\Orc.Packages.csproj" />
+  </ItemGroup>
+
+  <!-- 包清单随输出复制（宿主按 <输出>/package/plugins 冷加载）。 -->
+  <ItemGroup>
+    <None Update="package/**/*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -183,7 +183,7 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
     private static bool MatchesKeyword(UnitCard unit, string? keyword) =>
         string.IsNullOrWhiteSpace(keyword) || unit.Keywords.Has(keyword);
 
-    /// <summary>兵种过滤：选择器给的是词表键（如 <c>infantry</c>），按 <see cref="UnitType"/> 枚举解析后比对单位类型清单。</summary>
+    /// <summary>兵种过滤：选择器给的是词表键（如 <c>infantry</c>），按 <see cref="UnitType"/> 标识归一后比对单位类型清单。</summary>
     private static bool MatchesUnitType(UnitCard unit, string? unitType)
     {
         if (string.IsNullOrWhiteSpace(unitType))
@@ -191,7 +191,7 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
             return true;
         }
 
-        if (!Enum.TryParse<UnitType>(unitType, ignoreCase: true, out var parsed))
+        if (!UnitType.TryNormalize(unitType, out var parsed))
         {
             return false; // 未知兵种词：不匹配（保守——不静默放行）
         }

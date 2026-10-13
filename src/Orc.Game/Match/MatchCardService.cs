@@ -136,7 +136,8 @@ public sealed class MatchCardService
         Func<Player, BattleLine>? supportLineProvider = null,
         Func<UnitCard, Slot, CancellationToken, Task<PlayResult>>? joinUnitAction = null,
         Func<Player, CancellationToken, Task>? shuffleDeckAction = null,
-        Func<MatchState>? stateProvider = null)
+        Func<MatchState>? stateProvider = null,
+        CardEffectRegistry? effectRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(library);
@@ -147,6 +148,41 @@ public sealed class MatchCardService
         _joinUnitAction = joinUnitAction;
         _shuffleDeckAction = shuffleDeckAction;
         _stateProvider = stateProvider;
+        _effectRegistry = effectRegistry;
+    }
+
+    private readonly CardEffectRegistry? _effectRegistry;
+
+    // ---------- 运行期卡注册（S4·R5/D7·对局级） ----------
+
+    /// <summary>
+    /// **对局级运行期卡注册**（只追加不覆盖）：登记定义、效果声明与内联预制体——此后
+    /// <see cref="CreateAsync"/> 即可按该 id 造卡（实例经对局级 ID 水位线判为"构筑之外"）。
+    /// 顺序不变量：预制体与声明**先于**任何实例化（否则该卡装载时无效果）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">registration 为 null。</exception>
+    /// <exception cref="ArgumentException">registration.Id 为 null/空白。</exception>
+    /// <exception cref="InvalidOperationException">对局态门禁（准备态/终局后）；或同 id 已注册（只追加不覆盖）。</exception>
+    public void RegisterCard(RuntimeCardRegistration registration)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(registration.Id);
+        EnsureInProgress();
+
+        // ① 预制体登记（内联）——先于声明与实例化。
+        foreach (var snapshot in registration.Prefabs)
+        {
+            _engine.Prefabs.RegisterPrefab(snapshot);
+        }
+
+        // ② 效果声明（卡 → 预制体 id）。
+        if (_effectRegistry is not null && registration.PrefabIds.Count > 0)
+        {
+            _effectRegistry.DeclarePrefab(registration.Id, registration.PrefabIds);
+        }
+
+        // ③ 定义登记（同 id 重复＝拒绝；library 自身即 fail-fast）。
+        _library.Register(registration.Id, registration.Definition);
     }
 
     // ---------- 创建（卡牌工厂） ----------
