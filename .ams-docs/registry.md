@@ -2,49 +2,49 @@
 
 | Agent ID | 标题 | 文档路径 | 父 Agent ID |
 |----------|------|----------|-------------|
-| 触发器引擎原型 | 需求 — 触发器引擎原型 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器引擎原型\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 触发器引擎原型 | 原型完成总结报告（用户离线期间自主推进成果） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器引擎原型\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 30496464-c5a9-4710-912b-4a0a2e9c5b68 | S1 核心运行时——需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\30496464-c5a9-4710-912b-4a0a2e9c5b68\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 252c4143-d365-45e6-8191-bb7890fec637 | S2 触发器与事件 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\252c4143-d365-45e6-8191-bb7890fec637\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 5f9717c8-9b57-4d46-b46e-3617ccdb70a9 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\5f9717c8-9b57-4d46-b46e-3617ccdb70a9\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 8b03d08d-9932-45bd-ab9b-3e97a4cc8eb7 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\8b03d08d-9932-45bd-ab9b-3e97a4cc8eb7\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| Lua-DIY | 需求 — 社区 DIY（Lua 动态 handler） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器引擎原型\Lua-DIY\需求-grill计划.md | 触发器引擎原型 |
+| Lua-DIY | Implementation — Lua 动态 handler（Orc.Lua） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器引擎原型\Lua-DIY\需求-grill计划.md | 触发器引擎原型 |
 | 8e3eda9a-0560-47fe-97d1-0863994cdbe1 | S3 总线与更新 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\8e3eda9a-0560-47fe-97d1-0863994cdbe1\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 180d7d31-3330-439e-b5a2-a807245239ed | Orc.Lua 动态 handler —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\180d7d31-3330-439e-b5a2-a807245239ed\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 8aa8c7aa-3a93-47e7-9a29-f7c4a7a00198 | S4 组件与效果 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\8aa8c7aa-3a93-47e7-9a29-f7c4a7a00198\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | a3fdac3d-1dd8-4d51-a52e-0dad8d164ecf | S5 数据序列化、输出与测试集 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\a3fdac3d-1dd8-4d51-a52e-0dad8d164ecf\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | a23cc2f2-c9f4-4e8f-bd12-998fc3b66fa0 | 未撰写 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\a23cc2f2-c9f4-4e8f-bd12-998fc3b66fa0\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| 游戏环境 | 需求 — 游戏环境第二批·后置项补全 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\游戏环境\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 游戏环境 | 需求 — 游戏环境第二批（卡牌与指挥） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\游戏环境\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | d4819185-df66-43bc-acef-1fbd93a2dc1b | 游戏环境第一批（对局骨架）— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\d4819185-df66-43bc-acef-1fbd93a2dc1b\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| 触发器验证与Targeter | 需求 Grill 计划 — 触发器验证与 Targeter（架构改进） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器验证与Targeter\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 触发器验证与Targeter | 需求 — 触发器验证与 Targeter（架构改进） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\触发器验证与Targeter\需求-grill计划.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | ffac8cc5-d756-4161-945c-21d8d7390dfa | 触发器合法性验证 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\ffac8cc5-d756-4161-945c-21d8d7390dfa\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 7de2bdc3-25a1-4f5d-ba81-0ad7073fb0b8 | Targeter 指示器 — 需求阐明记录（类/功能流程级） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\7de2bdc3-25a1-4f5d-ba81-0ad7073fb0b8\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51 | 2A 结构层 — 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\3872d7a7-dde1-4d6f-bf2c-5d82c47aaf51\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 84234bf1-17ce-4de2-9411-67bc15ea722e | 2B 打出链 —— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\84234bf1-17ce-4de2-9411-67bc15ea722e\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 67068e40-6143-4ca9-867d-f95843ac63b8 | 2C 指挥与词条（需求阐明记录） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\67068e40-6143-4ca9-867d-f95843ac63b8\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | 25692f82-88dc-4949-9202-e64e34b1f231 | 后置项补全（Orc.Game）—— 需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\25692f82-88dc-4949-9202-e64e34b1f231\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
-| 135c6dd2-072c-419b-a7ae-c84a32c9206c | 清理与术语统一（护盾删除 / 法术→指令 / BaseFlows 重命名）——需求阐明记录 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
+| 135c6dd2-072c-419b-a7ae-c84a32c9206c | 清理与术语统一 实现记录（G1 护盾删除 / G2 法术→指令 / G3 BaseFlows 重命名） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\需求文档.md | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 |
 | exp1 | 项目级业务规则 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\COMMUNICATION.md | isolate |
 | docs | kards-diy 可参考语料报告 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\docs\初始设计文档.md | exp1 |
 | kards-research | KARDS（The WWII Card Game）核心游戏规则与对局逻辑基线 | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\outputs\kards-research\KARDS核心规则基线.md | outputs |
 | web-research | All rights reserved. | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\135c6dd2-072c-419b-a7ae-c84a32c9206c\isolate\exp1\outputs\web-research\evaluate-readme.md | outputs |
 | 2de7063f-15d0-4a4d-b1db-5c16c71bf632 | 项目工作交接文档（OrC-KSD） | .ams-docs\2de7063f-15d0-4a4d-b1db-5c16c71bf632\工作交接.md | - |
-| 表达力缺口补全 | 表达力缺口补全记录（第 2 批） — Orc 引擎（表达手段层 10 项） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\表达力缺口补全\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 表达力缺口补全 | 实现 Grill 计划 — Orc 引擎表达力缺口补全（第 2 批） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\表达力缺口补全\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 07716feb-dad1-480e-bbd9-892373c9c0bf | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\07716feb-dad1-480e-bbd9-892373c9c0bf\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | ec8ea00b-448e-4127-a829-72e46954d7b8 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\ec8ea00b-448e-4127-a829-72e46954d7b8\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| bc8a820a-3ff0-429b-890a-5479c74c3083 | W1-1 G12 卡牌元数据维度 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\bc8a820a-3ff0-429b-890a-5479c74c3083\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| bc8a820a-3ff0-429b-890a-5479c74c3083 | W1-1 G12 卡牌元数据维度 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\bc8a820a-3ff0-429b-890a-5479c74c3083\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 47fd7a07-6aef-497f-bb8e-1c494581e4dc | 需求阐明记录 — G9＋X3 实施（W1-2） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\47fd7a07-6aef-497f-bb8e-1c494581e4dc\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 4017cf4e-c0b2-4ccd-9ada-e0e167726c2d | W2a G3 修饰机制核心 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\4017cf4e-c0b2-4ccd-9ada-e0e167726c2d\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | da863e4a-6e0c-45c7-bba3-c15224540960 | G3 接线完善（W2b）——需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\da863e4a-6e0c-45c7-bba3-c15224540960\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 4cfec9d9-6bcb-4524-8799-14f9ad37447e | W2c：X2 效果接线＋X1 触发者卡牌 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\4cfec9d9-6bcb-4524-8799-14f9ad37447e\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 40a7de60-0fe0-4442-940b-92fad97fd4f9 | G5 费用修饰与有效费用查询 —— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\40a7de60-0fe0-4442-940b-92fad97fd4f9\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 40a7de60-0fe0-4442-940b-92fad97fd4f9 | W3-2 修复轮记录（驳回项修复） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\40a7de60-0fe0-4442-940b-92fad97fd4f9\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | fda2ea8e-6f32-4e72-9070-d1d53dd02d7e | G11 HQ 实体化 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\fda2ea8e-6f32-4e72-9070-d1d53dd02d7e\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| e7ca7a70-0aa7-4aaa-a615-c879d36ccefe | W3-1 G4 持续/条件静态能力 —— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e7ca7a70-0aa7-4aaa-a615-c879d36ccefe\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| e7ca7a70-0aa7-4aaa-a615-c879d36ccefe | G4 持续/条件静态能力 —— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e7ca7a70-0aa7-4aaa-a615-c879d36ccefe\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 2182a63c-1836-4a58-bae2-9afdbe6232ee | G14 收尾（洗切信号与四场景）—— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\2182a63c-1836-4a58-bae2-9afdbe6232ee\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 01e56610-5c23-4ea6-9698-3a5e957c1f21 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\01e56610-5c23-4ea6-9698-3a5e957c1f21\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 843d4bcc-d63a-4857-a197-c6bb237b1781 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\843d4bcc-d63a-4857-a197-c6bb237b1781\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | d42076b1-fef7-4267-8f33-c1a5a1fe5574 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d42076b1-fef7-4267-8f33-c1a5a1fe5574\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| f6930901-71d9-4219-a340-f613843e4db6 | W1-B1 G8 效果级随机服务 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\f6930901-71d9-4219-a340-f613843e4db6\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| f4ef5b9a-ad3a-487f-bf52-76bea7299e39 | 测试证据 — G10 交互扩展（第 2 批·实施委托 C1） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\f4ef5b9a-ad3a-487f-bf52-76bea7299e39\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| f6930901-71d9-4219-a340-f613843e4db6 | W1-B1 需求阐明 — G8 效果级随机服务（第 2 批） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\f6930901-71d9-4219-a340-f613843e4db6\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| f4ef5b9a-ad3a-487f-bf52-76bea7299e39 | 需求阐明 — G10 交互扩展（Targeter 槽位类型族） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\f4ef5b9a-ad3a-487f-bf52-76bea7299e39\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 535dfcf2-fb9e-49b4-ad2c-2867bf9299dd | 需求阐明记录 — X4 handler moding（D1 实施委托） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\535dfcf2-fb9e-49b4-ad2c-2867bf9299dd\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | e0ce9413-3f8a-40d0-ad2c-84c50ae1c5ef | 需求阐明 — 词条组件化体系（第 2 批·A1） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e0ce9413-3f8a-40d0-ad2c-84c50ae1c5ef\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | d5fc77d4-2efc-4abe-8135-40f12651eaec | 弃置动作与 card.discarded 信号——需求阐明（S8） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
@@ -56,30 +56,30 @@
 | github | GitHub 同步工作 · 交接说明 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\github\交接说明.md | context |
 | orc-engine | OrcEngine（触发器引擎原型） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\orc-engine\CONTEXT.md | context |
 | targeter | Targeter 指示器（目标选择） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d5fc77d4-2efc-4abe-8135-40f12651eaec\verify-worktree\.ams\context\targeter\CONTEXT.md | context |
-| a2546c77-266e-483d-a1fe-ebc2209648ce | A3 运行时装载修复 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\a2546c77-266e-483d-a1fe-ebc2209648ce\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| dbf21999-39e4-452e-afcf-9c32192e2c50 | A2 新词条（9 项）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\dbf21999-39e4-452e-afcf-9c32192e2c50\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 392bd36e-3073-4d46-9d28-8bb32d93e263 | A4 亡计与再触发 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\392bd36e-3073-4d46-9d28-8bb32d93e263\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| a2546c77-266e-483d-a1fe-ebc2209648ce | A3 运行时装载修复 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\a2546c77-266e-483d-a1fe-ebc2209648ce\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| dbf21999-39e4-452e-afcf-9c32192e2c50 | A2 新词条（9 项）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\dbf21999-39e4-452e-afcf-9c32192e2c50\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 392bd36e-3073-4d46-9d28-8bb32d93e263 | A4 亡计与再触发 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\392bd36e-3073-4d46-9d28-8bb32d93e263\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 7757e1f5-be42-4099-830e-b85af393efb0 | S9 生成·复制·转换 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\7757e1f5-be42-4099-830e-b85af393efb0\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | d72d0827-b587-4abf-98f1-e6b671604137 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d72d0827-b587-4abf-98f1-e6b671604137\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 70100946-88a5-4eb3-a311-a8a3e72d571e | S10 元数据与历史（G12补+G14补）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\70100946-88a5-4eb3-a311-a8a3e72d571e\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 判定器机制 | 收编（A+B）— 基线调研报告（现状与切割建议） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\判定器机制\需求-grill计划.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 70100946-88a5-4eb3-a311-a8a3e72d571e | S10 实现记录（G12补+G14补 元数据与历史） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\70100946-88a5-4eb3-a311-a8a3e72d571e\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 判定器机制 | 工作记录 — 判定器机制（功能面） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\判定器机制\需求-grill计划.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 84455173-7bfc-4af6-a5e1-ee17aa27dd21 | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\84455173-7bfc-4af6-a5e1-ee17aa27dd21\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 25fd243c-166d-4ec8-832f-236741d40dbb | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\25fd243c-166d-4ec8-832f-236741d40dbb\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| c46716ca-2f4e-4d34-901e-c1827701decc | C2 开发/发现完整链 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\c46716ca-2f4e-4d34-901e-c1827701decc\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 082ac32b-a0ec-4a47-8226-8ac84c4acd77 | B1④ 补验（随机词条完整验证）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\082ac32b-a0ec-4a47-8226-8ac84c4acd77\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 022fa41a-a5ab-4028-b5b3-c2a22efa5996 | 判定器机制 J1（骨架＋moding 与全局生效）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\022fa41a-a5ab-4028-b5b3-c2a22efa5996\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 84868255-0010-42a1-b1c3-bc1dca67360a | 需求文档 — J2 合法性验证替换（判定器承载） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\84868255-0010-42a1-b1c3-bc1dca67360a\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 53025859-98aa-4809-aa78-22308b8f2571 | J3 两示范落地（判定器机制实施）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\53025859-98aa-4809-aa78-22308b8f2571\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| eeeac673-93a1-4042-b38e-4ae5ccd8c9f8 | 判定器机制实施 J4（验收核对＋全量回归＋记录）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\eeeac673-93a1-4042-b38e-4ae5ccd8c9f8\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| c46716ca-2f4e-4d34-901e-c1827701decc | C2 开发/发现完整链 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\c46716ca-2f4e-4d34-901e-c1827701decc\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 082ac32b-a0ec-4a47-8226-8ac84c4acd77 | B1④ 补验（随机词条完整验证）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\082ac32b-a0ec-4a47-8226-8ac84c4acd77\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 022fa41a-a5ab-4028-b5b3-c2a22efa5996 | 判定器机制 J1（骨架＋moding 与全局生效）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\022fa41a-a5ab-4028-b5b3-c2a22efa5996\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 84868255-0010-42a1-b1c3-bc1dca67360a | 判定器机制 J2（合法性验证替换）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\84868255-0010-42a1-b1c3-bc1dca67360a\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 53025859-98aa-4809-aa78-22308b8f2571 | 判定器机制 J3（两示范落地：卡组顶特点判定器＋判定器包装 Targeter）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\53025859-98aa-4809-aa78-22308b8f2571\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| eeeac673-93a1-4042-b38e-4ae5ccd8c9f8 | 验收核对记录 — J4（判定器机制） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\eeeac673-93a1-4042-b38e-4ae5ccd8c9f8\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
 | 5b0160d4-38b0-4919-a171-4fb8191814ee | 未撰写 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\5b0160d4-38b0-4919-a171-4fb8191814ee\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 9dd6b5d2-57ab-4a22-8211-d552b4eb37a3 | K0·B12 烧牌统一 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\9dd6b5d2-57ab-4a22-8211-d552b4eb37a3\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| e573308a-cb48-4434-8cf2-3d5776e16720 | 判定器收编（A+B）· K1（C1-C4 交战合法性判定族）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e573308a-cb48-4434-8cf2-3d5776e16720\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| d9824392-ed32-4326-89a1-85feb12b7970 | 判定器收编（A+B）· K2（C5+C6 反击/伏击）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d9824392-ed32-4326-89a1-85feb12b7970\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 76ab6fa5-52c4-4ee5-bd68-517f0541bf2b | K3 复验消重（C7+C8）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\76ab6fa5-52c4-4ee5-bd68-517f0541bf2b\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| c1b0ac07-996f-4568-b0cd-157a6c0eb237 | Requirements — 判定器收编 K4（B10 扣费写点统一＋B13 开局常量配置化） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\c1b0ac07-996f-4568-b0cd-157a6c0eb237\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 83367640-dab8-45d3-8f57-f1e4f7f80b54 | 需求阐明记录 — Kb·爆牌独立化与术语更名 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\83367640-dab8-45d3-8f57-f1e4f7f80b54\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 13ccd834-c9be-4a30-bed1-a454a392ae75 | K5·验收核对与收官 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\13ccd834-c9be-4a30-bed1-a454a392ae75\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
-| 老兵与隐蔽机制 | Requirements — 老兵与隐蔽（模板效果补全） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\老兵与隐蔽机制\需求-grill计划.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 9dd6b5d2-57ab-4a22-8211-d552b4eb37a3 | K0·B12 烧牌统一 — 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\9dd6b5d2-57ab-4a22-8211-d552b4eb37a3\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| e573308a-cb48-4434-8cf2-3d5776e16720 | 判定器收编（A+B）· K1（C1-C4 交战合法性判定族）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\e573308a-cb48-4434-8cf2-3d5776e16720\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| d9824392-ed32-4326-89a1-85feb12b7970 | 判定器收编 K2（C5+C6 反击/伏击）— 需求阐明记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\d9824392-ed32-4326-89a1-85feb12b7970\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 76ab6fa5-52c4-4ee5-bd68-517f0541bf2b | 判定器收编（A+B）· K3（C7+C8 复验消重）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\76ab6fa5-52c4-4ee5-bd68-517f0541bf2b\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| c1b0ac07-996f-4568-b0cd-157a6c0eb237 | 判定器收编（A+B）· K4（B10 扣费写点统一＋B13 开局常量配置化）— 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\c1b0ac07-996f-4568-b0cd-157a6c0eb237\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 83367640-dab8-45d3-8f57-f1e4f7f80b54 | Kb·爆牌独立化与术语更名 — 实现记录 | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\83367640-dab8-45d3-8f57-f1e4f7f80b54\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 13ccd834-c9be-4a30-bed1-a454a392ae75 | 验收核对记录 — K5（判定器收编 A+B） | .ams-docs\b18ac18d-c36b-4b3c-8d22-1b7376195f2a\13ccd834-c9be-4a30-bed1-a454a392ae75\需求文档.md | b18ac18d-c36b-4b3c-8d22-1b7376195f2a |
+| 老兵与隐蔽机制 | 需求 Grill 计划 — 老兵与隐蔽（模板效果补全） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\老兵与隐蔽机制\需求-grill计划.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 45217bee-09e5-4079-a85c-9a3c9b9256fa | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\45217bee-09e5-4079-a85c-9a3c9b9256fa\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 0b9a76f1-68fb-4b6a-93c8-a0bac411f3b7 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\0b9a76f1-68fb-4b6a-93c8-a0bac411f3b7\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 5742a9c8-a0f5-488d-b576-1ea144fdac79 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\5742a9c8-a0f5-488d-b576-1ea144fdac79\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
@@ -88,21 +88,21 @@
 | 933e2572-fd73-4c07-a175-9c3874ffe989 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\933e2572-fd73-4c07-a175-9c3874ffe989\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 808e6af9-8f29-4647-92be-f0eb99525107 | S2 隐蔽机制 —— 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\808e6af9-8f29-4647-92be-f0eb99525107\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 3552da53-8a9f-4c4e-88c0-a332583a292d | S3 解析层（词法／模板效果／op／样本）— 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\3552da53-8a9f-4c4e-88c0-a332583a292d\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 6b206377-14bd-4a8c-b9cc-58c4d9db06d7 | 词条效果化·批 0（前置机制）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6b206377-14bd-4a8c-b9cc-58c4d9db06d7\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| _work | 效果解析器·本机制样本报告（老兵／隐蔽） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6b206377-14bd-4a8c-b9cc-58c4d9db06d7\_work\随改预案.md | 6b206377-14bd-4a8c-b9cc-58c4d9db06d7 |
-| 4ba54525-a09a-4534-8929-5664fd09c4a9 | 批 1 词条效果化（A 档试点）— 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\4ba54525-a09a-4534-8929-5664fd09c4a9\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 115fcea7-292a-49c8-ab81-bd04fe238622 | 词条效果化·批 2（伏击/重甲/免疫）— 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\115fcea7-292a-49c8-ab81-bd04fe238622\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| d79d25ab-0b7a-4453-a90c-49af65aaddec | 闪击效果化迁移 — 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\d79d25ab-0b7a-4453-a90c-49af65aaddec\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 6b206377-14bd-4a8c-b9cc-58c4d9db06d7 | 词条效果化·批 0（前置机制）— 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6b206377-14bd-4a8c-b9cc-58c4d9db06d7\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| _work | 效果解析器覆盖率报告 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6b206377-14bd-4a8c-b9cc-58c4d9db06d7\_work\随改预案.md | 6b206377-14bd-4a8c-b9cc-58c4d9db06d7 |
+| 4ba54525-a09a-4534-8929-5664fd09c4a9 | 词条效果化·批 1（A 档试点）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\4ba54525-a09a-4534-8929-5664fd09c4a9\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 115fcea7-292a-49c8-ab81-bd04fe238622 | 词条效果化·批 2（伏击/重甲/免疫）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\115fcea7-292a-49c8-ab81-bd04fe238622\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| d79d25ab-0b7a-4453-a90c-49af65aaddec | 词条效果化·批 3（闪击效果化迁移）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\d79d25ab-0b7a-4453-a90c-49af65aaddec\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | ff257e58-a71f-433e-a900-36a014d0757d | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\ff257e58-a71f-433e-a900-36a014d0757d\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| bfeeb8b1-bd16-49d9-94b6-18be1bab5da0 | 支援线 HQ 居中·测试适配闭环 — 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\bfeeb8b1-bd16-49d9-94b6-18be1bab5da0\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| bfeeb8b1-bd16-49d9-94b6-18be1bab5da0 | 支援线 HQ 居中·测试适配闭环 — 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\bfeeb8b1-bd16-49d9-94b6-18be1bab5da0\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 37541365-aea7-400d-bde9-50143059344f | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\37541365-aea7-400d-bde9-50143059344f\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 9e44bf64-e4f0-4903-b5b7-309d1677fa80 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\9e44bf64-e4f0-4903-b5b7-309d1677fa80\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 634a65f2-b704-4aa2-ae80-9d9ceda6654f | 词条效果化·守护（guard）词条化 — 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\634a65f2-b704-4aa2-ae80-9d9ceda6654f\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 69d7b956-8458-4679-9cea-315ae11e3a70 | 词条效果化·冲击（shock）词条化 — 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\69d7b956-8458-4679-9cea-315ae11e3a70\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 9dffb3d8-9370-4fad-8cd2-41b2b9804289 | 实现记录 — 解析层词条行联动（词条效果化·批 4·序列③） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\9dffb3d8-9370-4fad-8cd2-41b2b9804289\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| a519ec74-57f2-45c9-acaa-6b0d21fbd8ec | 词条效果化·批 4 序列④（数据化 MVS·路线 A）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\a519ec74-57f2-45c9-acaa-6b0d21fbd8ec\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 6c2209d5-387f-4a9c-b967-b83cf49733b1 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6c2209d5-387f-4a9c-b967-b83cf49733b1\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
-| 831a6df8-b892-4398-8527-69f85152e6b8 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\831a6df8-b892-4398-8527-69f85152e6b8\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 634a65f2-b704-4aa2-ae80-9d9ceda6654f | 守护词条化 — 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\634a65f2-b704-4aa2-ae80-9d9ceda6654f\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 69d7b956-8458-4679-9cea-315ae11e3a70 | 冲击（shock）词条化 — 需求阐明记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\69d7b956-8458-4679-9cea-315ae11e3a70\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 9dffb3d8-9370-4fad-8cd2-41b2b9804289 | 需求阐明 — 解析层词条行联动（词条效果化·批 4·序列③） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\9dffb3d8-9370-4fad-8cd2-41b2b9804289\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| a519ec74-57f2-45c9-acaa-6b0d21fbd8ec | 需求阐明 — 词条效果化·批 4 序列④（数据化 MVS·路线 A） | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\a519ec74-57f2-45c9-acaa-6b0d21fbd8ec\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 6c2209d5-387f-4a9c-b967-b83cf49733b1 | 词条效果化·批 4·序列⑤（收尾清理·注释/表述同步）— 实现记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\6c2209d5-387f-4a9c-b967-b83cf49733b1\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
+| 831a6df8-b892-4398-8527-69f85152e6b8 | 词条效果化·序列⑤补：测试隔离修复（情报静态竞态）——实现与验证记录 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\831a6df8-b892-4398-8527-69f85152e6b8\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | a286785c-cb27-4d42-b87d-8846a2b0bcf0 | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\a286785c-cb27-4d42-b87d-8846a2b0bcf0\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | dcc3d74c-481c-497e-92ac-9381b3ddc70f | 未撰写 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\dcc3d74c-481c-497e-92ac-9381b3ddc70f\需求文档.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
 | 工具链调研 | 端到端创作卡牌工具链·现状调研 | .ams-docs\890b145c-1a6c-4a06-b05c-9285932d81dc\工具链调研\端到端创作卡牌工具链·现状调研.md | 890b145c-1a6c-4a06-b05c-9285932d81dc |
@@ -110,13 +110,13 @@
 | a67adcb9-a3e2-473b-9ef0-359a8be69026 | 端到端创作卡牌工具链（功能面） | .ams-docs\a67adcb9-a3e2-473b-9ef0-359a8be69026\端到端创作卡牌工具链.md | - |
 | 292e9c74-0f17-45dc-8a76-f7bbebe3d24a | 未撰写 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\292e9c74-0f17-45dc-8a76-f7bbebe3d24a\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 315072bb-6e9d-4027-aa2a-bd6850c8ddca | 未撰写 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\315072bb-6e9d-4027-aa2a-bd6850c8ddca\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 | 端到端创作卡牌工具链（功能面·接管会话） | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\端到端创作卡牌工具链.md | - |
-| 0cdfe8f8-6f55-4569-9029-440f51fa9d18 | 卡牌数据序列化写方向补全（批 1）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\0cdfe8f8-6f55-4569-9029-440f51fa9d18\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| a194dde7-c3d2-4a9b-8498-080962188653 | 效果侧落盘对称＋端到端全链路（批 2）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\a194dde7-c3d2-4a9b-8498-080962188653\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| 31d4a02b-8eac-490a-a514-00be011928f8 | 分发预检器（dry-run 校验器）（批 3）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\31d4a02b-8eac-490a-a514-00be011928f8\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 | 端到端创作卡牌工具链·交付总结 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\端到端创作卡牌工具链.md | - |
+| 0cdfe8f8-6f55-4569-9029-440f51fa9d18 | 卡牌数据序列化写方向补全（批 1）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\0cdfe8f8-6f55-4569-9029-440f51fa9d18\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| a194dde7-c3d2-4a9b-8498-080962188653 | 效果侧落盘对称＋端到端全链路（批 2）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\a194dde7-c3d2-4a9b-8498-080962188653\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| 31d4a02b-8eac-490a-a514-00be011928f8 | 分发预检器（dry-run 校验器）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\31d4a02b-8eac-490a-a514-00be011928f8\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 端到端创作卡牌工具链 | Requirements — 端到端创作卡牌工具链 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\端到端创作卡牌工具链\需求-grill计划.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| 3734515b-d073-4a46-9e46-65877e0f5cd3 | csx 动态效果能力（批 4）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\3734515b-d073-4a46-9e46-65877e0f5cd3\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| e853c440-88b4-45b0-8665-684585fb5d8b | 效果离线编译驱动（批 5·N2a）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\e853c440-88b4-45b0-8665-684585fb5d8b\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| 3734515b-d073-4a46-9e46-65877e0f5cd3 | 实现记录 — csx 动态效果能力（批 4） | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\3734515b-d073-4a46-9e46-65877e0f5cd3\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| e853c440-88b4-45b0-8665-684585fb5d8b | 效果离线编译驱动（批 5·N2a）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\e853c440-88b4-45b0-8665-684585fb5d8b\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 4388577f-872e-4fdd-a0db-19e8b14c94c5 | 卡组定向取卡（批 6）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\4388577f-872e-4fdd-a0db-19e8b14c94c5\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
-| 93fc1f33-904b-42d9-80b5-7dd968eefde2 | 示例卡包（批 7）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\93fc1f33-904b-42d9-80b5-7dd968eefde2\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+| 93fc1f33-904b-42d9-80b5-7dd968eefde2 | 示例卡包（批 7）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\93fc1f33-904b-42d9-80b5-7dd968eefde2\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 13e3e6f1-c26e-4b5b-848e-4f7f4468befe | 未撰写 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\13e3e6f1-c26e-4b5b-848e-4f7f4468befe\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
