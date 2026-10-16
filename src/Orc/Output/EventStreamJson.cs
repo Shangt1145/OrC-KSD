@@ -33,7 +33,7 @@ public static class EventStreamJson
     }
 
     /// <summary>写一个节点（递归子树）：id / entries（本地条目，写入时序）/ children（挂载时序）。</summary>
-    private static void WriteNode(Utf8JsonWriter writer, EventStream stream)
+    internal static void WriteNode(Utf8JsonWriter writer, EventStream stream)
     {
         writer.WriteStartObject();
         writer.WriteString("id", stream.Id);
@@ -57,7 +57,7 @@ public static class EventStreamJson
     }
 
     /// <summary>写一条条目：kind / timestamp / level / source / message / keywords / data。</summary>
-    private static void WriteEntry(Utf8JsonWriter writer, LogEntry entry)
+    internal static void WriteEntry(Utf8JsonWriter writer, LogEntry entry)
     {
         writer.WriteStartObject();
         writer.WriteString("kind", KindName(entry.Kind));

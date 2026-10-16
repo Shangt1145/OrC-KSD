@@ -117,11 +117,28 @@ public sealed class LogicEngine
     /// </summary>
     public IReadOnlyList<Card> Cards => _cards;
 
+    /// <summary>
+    /// 引擎托管引用表（引擎实例级）：以全 GUID 字符串（N 格式）为 key 的对象引用登记面。
+    /// 卡牌（含 HQ）**创建即登记、销毁即注销**（与 <see cref="Cards"/> 同生命周期）；
+    /// 无 GUID 对象（游戏层 Player、效果对象等）经 <see cref="EngineReferences.Assign"/> 分配键。
+    /// 用途＝外部（宿主/服务层）以稳定标识表达与解析对象引用（事件载荷、工具参数、观察输出）。
+    /// 多引擎实例各自独立；随引擎实例丢弃而清空。
+    /// </summary>
+    public EngineReferences References { get; } = new();
+
     /// <summary>登记卡牌（S5；卡牌构造时调用；内部使用）。</summary>
-    internal void RegisterCard(Card card) => _cards.Add(card);
+    internal void RegisterCard(Card card)
+    {
+        _cards.Add(card);
+        References.Register(card.Id, card);
+    }
 
     /// <summary>移除卡牌登记（S5；销毁清理响应调用；幂等——重复移除＝无操作；内部使用）。</summary>
-    internal void UnregisterCard(Card card) => _cards.Remove(card);
+    internal void UnregisterCard(Card card)
+    {
+        _cards.Remove(card);
+        References.Unregister(card.Id);
+    }
 
     /// <summary>
     /// 注册「卡牌效果装载完成动作」（S4 装载管线扩展点；加性面）：每次被动效果装载成功

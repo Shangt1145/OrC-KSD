@@ -24,6 +24,13 @@ public sealed class Player
     public const int InitialHqHealth = 20;
 
     /// <summary>
+    /// 引擎托管引用键（创建期由 <see cref="Orc.Core.LogicEngine.References"/> 分配；N 格式 GUID 字符串）。
+    /// 玩家不是 <see cref="Orc.Core.Entity"/>（无 <c>Id</c>），故其跨边界引用一律以本键表达。
+    /// **同一对局内稳定；重建对局后变化**——不得跨对局复用。
+    /// </summary>
+    public string ReferenceKey { get; internal set; } = string.Empty;
+
+    /// <summary>
     /// 手牌上限（9）。G7 起启用——回合抽牌链路超限裁决：满手时新抽的牌不经手牌、直爆（销毁＋
     /// <c>card.burned</c> 信号——KARDS 爆牌语义）；裁决点＝回合抽牌链路（起手装载不受裁决、维持静默）；
     /// 常量值与公开读面不变、超限判定为内部行为（不新增公开状态）。

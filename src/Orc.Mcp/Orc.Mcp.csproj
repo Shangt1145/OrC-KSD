@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Mcp</AssemblyName>
+    <RootNamespace>Orc.Mcp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Docs\**\*.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Orc\Orc.csproj" />
+    <ProjectReference Include="..\Orc.Game\Orc.Game.csproj" />
+    <ProjectReference Include="..\Orc.Script\Orc.Script.csproj" />
+    <ProjectReference Include="..\Orc.Packages\Orc.Packages.csproj" />
+    <ProjectReference Include="..\Orc.Plugins.BuiltIn\Orc.Plugins.BuiltIn.csproj" />
+    <ProjectReference Include="..\Orc.UI\Orc.UI.csproj" />
+  </ItemGroup>
+
+</Project>

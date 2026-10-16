@@ -194,6 +194,12 @@ public abstract class ServiceRegistry<TService, THandle, TModingHandle>
     public bool Contains(string name)
         => !string.IsNullOrWhiteSpace(name) && _entries.ContainsKey(name);
 
+    /// <summary>
+    /// 已注册条目名（只读诊断/工具面；顺序不保证）。
+    /// 注册面语义不变（仍为"注册即配置"——重复注册拒绝）。
+    /// </summary>
+    public IReadOnlyCollection<string> Names => _entries.Keys;
+
     /// <summary>按名调用（解析栈顶并执行；一次调用＝一次解析）。</summary>
     public object[]? Invoke(string name, object[]? args) => ResolveCore(name).Invoke(args);
 

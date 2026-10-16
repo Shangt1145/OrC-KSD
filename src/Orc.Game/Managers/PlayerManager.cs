@@ -125,8 +125,15 @@ public sealed class PlayerManager
             throw new InvalidOperationException("双玩家已创建（重复创建被拒绝）。");
         }
 
-        _players.Add(new Player(0, deckForPlayerA, _engine)); // W3-3：引擎注入——HQ 随 Player 创建（构造期绑定）
-        _players.Add(new Player(1, deckForPlayerB, _engine));
+        var playerA = new Player(0, deckForPlayerA, _engine); // W3-3：引擎注入——HQ 随 Player 创建（构造期绑定）
+        var playerB = new Player(1, deckForPlayerB, _engine);
+
+        // 引擎托管引用表：玩家无 Entity.Id ⇒ 由引用表分配引用键（同一对局内稳定）。
+        playerA.ReferenceKey = _engine.References.Assign(playerA);
+        playerB.ReferenceKey = _engine.References.Assign(playerB);
+
+        _players.Add(playerA);
+        _players.Add(playerB);
     }
 
     /// <summary>

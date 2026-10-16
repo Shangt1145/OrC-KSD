@@ -13,13 +13,13 @@ namespace Orc.Output;
 /// 递归深度上限 <see cref="MaxDepth"/>：超出 → {"$truncated": true}（防自引用环导致的无限递归）。
 /// 不抛异常（除写入器自身的外部故障）：任意值均产出确定表示，供消费方解析。
 /// </summary>
-internal static class JsonValueWriter
+public static class JsonValueWriter
 {
     /// <summary>字典/数组递归深度上限（防御性；超限输出截断标记，不报错）。</summary>
     internal const int MaxDepth = 32;
 
     /// <summary>写入一个任意值（顶层入口；深度从 0 起算）。</summary>
-    internal static void Write(Utf8JsonWriter writer, object? value) => Write(writer, value, 0);
+    public static void Write(Utf8JsonWriter writer, object? value) => Write(writer, value, 0);
 
     private static void Write(Utf8JsonWriter writer, object? value, int depth)
     {
