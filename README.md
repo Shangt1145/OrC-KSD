@@ -35,6 +35,7 @@
 | `src/Orc.Mcp` | `Orc.Mcp` | 面向 MCP 的协议无关服务层（工具目录、对局执行器、沙盒模式、资产管线、调试与文档读取） |
 | `tests/Orc.Mcp.Tests` | `Orc.Mcp.Tests` | 服务层契约断言与端到端闭环测试 |
 | `samples/Orc.Mcp.Stdio` | `Orc.Mcp.Stdio` | MCP stdio 适配示例（手写最小 JSON-RPC；零第三方依赖） |
+| `samples/Orc.Mcp.HostSample` | `Orc.Mcp.HostSample` | UI 宿主集成参考宿主（人机同局：投影/选靶仲裁/段消费/强类型动作面） |
 
 全部工程目标框架 `net8.0`、语言版本 C# 12。
 
@@ -65,6 +66,14 @@ dotnet run --project samples/Orc.Mcp.Stdio -- --mode authoring --sandbox ./.orc-
 - 门控：沙盒专属工具只在 `--mode authoring` 下存在；写入只允许落在 `--sandbox` 根内；产物提升（`--promote`）与 csx 编辑（`--csx`）默认关闭。
 - 服务层限制与工具清单可用 `service.info` / `service.tools` 查询；创作文档经 `docs.list` / `docs.read` 读取。
 - 客户端接入片段见 [`samples/Orc.Mcp.Stdio/README.md`](samples/Orc.Mcp.Stdio/README.md)。
+
+### 在真实 UI 里用人机同局
+
+```bash
+dotnet run --project samples/Orc.Mcp.HostSample
+```
+
+参考宿主演示 UI 侧接入的全部接线（服务层是唯一驱动真源：唯一桥、唯一门禁、唯一段取用点）：投影 provider 自建、待决选靶请求订阅与认领、段消费与喂回、强类型动作面。接入步骤与常见坑见 [`docs/mcp-ui-integration.md`](docs/mcp-ui-integration.md)。
 
 ## 目录结构
 
@@ -142,6 +151,7 @@ Solutions `OrcEngine.slnx` / `OrcEngine.sln` (both contain the same projects):
 | `src/Orc.Mcp` | `Orc.Mcp` | Protocol-agnostic MCP-facing service layer (tool catalog, match executor, sandbox mode, asset pipeline, diagnostics and docs reading) |
 | `tests/Orc.Mcp.Tests` | `Orc.Mcp.Tests` | Service-layer contract assertions and an end-to-end loop test |
 | `samples/Orc.Mcp.Stdio` | `Orc.Mcp.Stdio` | MCP stdio adapter sample (hand-written minimal JSON-RPC; no third-party dependencies) |
+| `samples/Orc.Mcp.HostSample` | `Orc.Mcp.HostSample` | UI host-integration reference host (human + agent in one match: projection, targeting arbitration, segment consumption, strongly-typed actions) |
 
 All projects target `net8.0` and C# 12.
 

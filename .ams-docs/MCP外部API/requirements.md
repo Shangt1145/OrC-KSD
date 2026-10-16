@@ -320,6 +320,50 @@
   - [ ] 读取不超出文档集读根与正式资产读根。
 - Terminology: [插件](../../CONTEXT.md)、[卡包](../../CONTEXT.md)。
 
+### R9: UI 宿主集成（形态 A2 —— 进程内共享服务层，人机同局可输入）
+- Status: Confirmed（R9a~R9d 已交付，见 `implementation.md`「第二批」）
+- 背景：本地旧宿主桥（`.ams-docs/前端资产迁移/发布包/…/Kards.Ui.OrcBridge/`）**已过时且由他方维护，不作为兼容目标**（保留为历史参考，不删除）。
+- 交付边界（已定，选项 b）：`Orc.Mcp` 增加**宿主集成面** + 一份《UI 侧接入指南》+ 一个**可运行参考宿主** `samples/Orc.Mcp.HostSample`（无 Godot 依赖，演示 attach 沙盒局、投影、段喂入与双输入仲裁的完整接线）。不改对方维护的 Godot 仓库。
+- 待决（U 系列）：桥接仲裁（U3）、段消费唯一者（U4）、门禁统一（U5）、沙盒局 UI 可见性细节（U6）、双输入的具体交互语义（U7）。
+
+#### R9a: 沙盒局必须装配 UI 插件包（否则 UI 无法投影）
+- Status: Confirmed（前提性）
+- Scenario/Trigger: 服务层创建沙盒对局时。
+- Behavior: 沙盒建局使用的资产快照须同时包含 `orc.builtin.core` 与 `orc.builtin.ui`（当前只含前者 ⇒ `Match.UiProjections` 无 provider，UI 无法投影）。pluginsRoot 可经选项覆盖。
+- Acceptance:
+  - [ ] 沙盒局建局后 `Match.UiProjections.HasProvider` 为真。
+  - [ ] 宿主可经选项指定 pluginsRoot（默认程序集输出目录下的 `package/plugins`）。
+- Terminology: [插件](../../CONTEXT.md)、[投影提供者](../../CONTEXT.md)。
+
+#### R9b: UI 作为活跃对局的视图接入
+- Status: Confirmed
+- Behavior: 服务层暴露**宿主集成面**——查询活跃 Match、对局创建/销毁事件、投影 provider 所需的句柄；**投影 provider 由 UI 自建**（美术路径与 matchId 语义只在 UI 侧有意义）。对局的创建与销毁仍归服务层（`sandbox.create` / `sandbox.dispose`）。
+- Acceptance:
+  - [ ] UI 侧可从服务层取得当前活跃 Match 并 `CreateProvider(...)`。
+  - [ ] 服务层创建/销毁对局时，UI 侧能收到明确事件并据此启停投影。
+  - [ ] UI 不持有对局的销毁权（只能经服务层）。
+
+#### R9c: 三处仲裁全部收敛到服务层
+- Status: Confirmed
+- Behavior:
+  - **桥接**：服务层持有**唯一** `ITargeterBridge`，并新增**待决选择请求订阅面**；UI 订阅 pending（渲染候选）后回调服务层提交选取，**UI 不再实现 `ITargeterBridge`**。agent 与 UI **双向可接管**；同一请求**先到先服务**，已被应答的请求拒绝接管。
+  - **段消费**：**服务层作唯一 `TakeSegments()` 消费者**（`SegmentCache` 已有），UI 从服务层订阅/拉取段（理由：更好支持无头服务器运行形态）；宿主**显式声明**是否担任（默认：服务层负责）。
+  - **门禁**：**服务层作唯一驱动面与唯一门禁**——UI 的对局动作也经服务层（强类型 C# API），不再直调 `Match`/`PlayManager`/`CommandManager`；强类型 API 与 MCP 工具**共用同一执行器、门禁与 pending 状态机**。
+- Acceptance:
+  - [ ] 同一进程内 `ITargeterBridge` 只被注入一次。
+  - [ ] 任一时刻只有一个段取用者；UI 经服务层取得段。
+  - [ ] UI 侧的每个对局动作都经过服务层执行器（不直接调用引擎管理器）。
+- Terminology: [Targeter](../../CONTEXT.md)、[事件流段](../../CONTEXT.md)、[对局执行器](./requirements.md)。
+
+#### R9d: 座位与模式（沙盒全知 / 玩家等同）
+- Status: Confirmed
+- Behavior: 由服务层模式决定 agent 的座位语义——**沙盒模式：agent 不占座位、全知视图（不隐藏信息）、调试工具可用**；**player 模式：agent 占座位，且其操作能力与真人玩家**完全等同（不得触达调试类或越权入口），视图按座位隐藏信息。
+- Acceptance:
+  - [ ] 沙盒模式：调试工具可用、观察面不隐藏信息。
+  - [ ] player 模式：工具面不含调试类入口，且每个入口在玩家语义下均为合法操作（无越权）。
+  - [ ] player 模式：观察面按座位过滤隐藏信息。
+- Terminology: [沙盒模式]（待记入 CONTEXT）、[投影](../../CONTEXT.md)。
+
 ## Terminology
 
 沿用 [`CONTEXT.md`](../../CONTEXT.md)：引擎内核、游戏层、插件、卡包、包管理器、资产名、冷加载/热加载、判定器、资产服务、观察面、接入点、扩展点、事件流段、动作作用域、Targeter、投影、卡牌数据体、词条效果库、csx 动态效果、读宽写窄、事件卡属性过滤。

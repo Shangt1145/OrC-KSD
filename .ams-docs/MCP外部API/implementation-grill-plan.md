@@ -70,6 +70,69 @@
 
 ---
 
-## 实现 grill 已退出
+## 实现 grill 已退出（第一批：MCP 服务层）
 
 全部实现分支（I1~I9）已对齐并落地；交付记录、偏离与验收对照见 `implementation.md`。
+
+---
+
+## 第二批：UI 宿主集成（形态 A2）—— 需求/实现混合 grill
+
+> 本批为**需求变更**（新增 UI 集成能力域），故先在需求层对齐 U1/U2（已完成），再逐项对齐三处仲裁与交付细节。
+> 已锁定的技术前提：沙盒建局当前只装配 `orc.builtin.core`（`BuiltInPluginPackage.CreateSnapshot()`，`BuiltInPluginPackage.cs:95`），
+> 而投影提供者由 `orc.builtin.ui` 在 `match/preCommand` 相注册（`UiPluginPackage.cs:92-102`）⇒ **不补装 UI 包，UI 看不到沙盒局**。
+
+### U1: 编辑者对局的归属与输入权 【Completed】
+- 决策（选项 **A2**）：**服务层建局（沙盒局），UI 与 agent 都能输入**（人机同局）；代价是必须新增三处仲裁（U3/U4/U5）。
+
+### U2: 交付边界 【Completed】
+- 决策（选项 b）：`Orc.Mcp` 增宿主集成面 + 《UI 侧接入指南》+ 可运行参考宿主 `samples/Orc.Mcp.HostSample`；**不**改对方维护的 Godot 仓库。
+
+### U3: 桥接仲裁（选靶归谁应答） 【Completed】
+- 硬约束：`Match` 构造只接受**一个** `ITargeterBridge`（`Match.cs:88`）。沙盒局当前注入服务层的 `TargeterBridgeAdapter`；A2 下 UI 也需要参与选靶。
+- 候选：
+  - **B-a**：服务层持有唯一桥，新增**待决请求订阅面**（UI 订阅 pending → 渲染候选 → 回调服务层 `SubmitTarget`）；UI **不再实现** `ITargeterBridge`。仲裁＝服务层内优先级策略。
+  - **B-b**：新增**仲裁桥**（实现 `ITargeterBridge`，内部分派给 UI 桥与 MCP 适配器）；UI 保留既有桥模型。
+  - **B-c**：**谁的动作谁应答**（agent 动作→agent 应答；UI 玩家动作→UI 应答），需"当前动作发起者"标记；归属不明时按显式优先级。
+- 子问 U3a：是否提供"接管"能力（人接手 agent 的待决请求 / agent 接管人的）。
+- 子问 U3b：归属不明时的默认优先级（UI 优先 / agent 优先 / 先到先服务）。
+
+### U3-决策细节 【Completed】
+- 主问（选项 **B-a**）：服务层持有唯一桥 + 新增**待决请求订阅面**；UI 订阅 pending 后回调服务层提交，**UI 不再实现 `ITargeterBridge`**。
+- U3a（选项 a）：**双向可接管**（人可接手 agent 的待决请求；agent 亦可接管人的）。
+- U3b（选项 c）：**先到先服务**；已被应答的请求拒绝接管。
+
+### U4: 段消费唯一者 【Completed】
+- 决策（选项 **C-a** + U4a=a）：**服务层作唯一 `TakeSegments()` 消费者**（`SegmentCache` 复用已有），UI 从服务层订阅/拉取段——理由＝**更好支持无头服务器运行形态**；宿主**显式声明**是否担任（默认服务层负责）。
+
+### U5: 门禁统一 【Completed】
+- 决策（选项 **D-a** + 子问 b）：**服务层作唯一驱动面与唯一门禁**——UI 的对局动作也经服务层（**强类型 C# API**），不再直调 `Match`/`PlayManager`/`CommandManager`；强类型 API 与 MCP 工具**共用同一执行器、门禁与 pending 状态机**。
+- 连带工作量（已暴露）：服务层动作面须从"编辑者闭环子集"扩展到 **UI 所需的玩家入口**（见 U5b）。
+
+### U5b: 服务层动作面扩充清单 【Completed】
+- 决策（选项 a + a）：**UI 可玩集**——`match.end_turn`/`match.concede`、`mulligan.begin/done`、`play.unit_pre/unit/join/command_pre/command/counter`、`command.begin/move/attack/leave`、`command.availability`、`play.can_play`（+ `target.claim`）；两模式共有，调试类仍 `sandboxOnly`。
+- 验收（选项 a）：以玩家白名单与 `GameEntryPoints` 对齐，双向比对（多＝越权、少＝能力缺失）⇒ 落地为 `ToolWhitelistTests` 三组断言。
+
+### V1: 宿主集成面与强类型动作面 【Completed】
+- 决策（选项 a）：`IMcpHost`（集成面）+ `IMcpActions`（强类型动作面），由 `McpService` 实现；MCP 工具为其薄封装（同一执行器/门禁/状态机）。
+
+### V2: 动作面扩充与两模式白名单 【Completed】
+- 决策（选项 a）：新增 16 个玩家入口（两模式共有）；白名单护栏测试。
+
+### V3: 参考宿主与接入指南 【Completed】
+- 决策（选项 a）：`samples/Orc.Mcp.HostSample` + `docs/mcp-ui-integration.md` + 内嵌 `engine/host-integration.md`。
+
+### 实现期修正（详见 `implementation.md`）
+- `MatchChanged(Created)` 时序（改为"对局就绪后广播"）；桥回调内同步提交不可用（参考宿主改为帧内提交 + `out reason`）；3 处工具漏标 `sandboxOnly`；`observe.view` 按模式分流 + `AgentSeat`。
+
+---
+
+## 实现 grill 已退出（第二批）
+
+UI 集成的全部实现分支（V1~V3）已对齐并落地；交付记录、偏离与验证证据见 `implementation.md`「第二批」。
+
+### U6: 沙盒局 UI 可见性 【Completed】
+- 决策：服务层暴露**宿主集成面**（查询活跃 Match、对局创建/销毁事件）；**投影 provider 由 UI 自建**（`CreateProvider`）；UI 不持有对局销毁权。
+
+### U7: 座位与人机分工 【Completed】
+- 决策（选项 **F-c** + U7a=a）：由服务层模式决定——**沙盒模式：agent 不占座位、全知视图（不隐藏信息）、调试工具可用**；**player 模式：agent 占座位，操作能力与真人玩家完全等同**（无调试/越权入口），视图按座位隐藏信息。

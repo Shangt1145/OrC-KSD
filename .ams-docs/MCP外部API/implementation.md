@@ -95,3 +95,52 @@
 - [沙盒模式](./requirements.md)（服务层运行模式）
 - [对局执行器](./requirements.md)（单写者串行化 + 动作生命周期门禁）
 - 既有术语见 [`CONTEXT.md`](../../CONTEXT.md)
+
+---
+
+# 第二批：UI 宿主集成（形态 A2 —— 人机同局）
+
+> 状态：**已完成**。需求对齐见 `requirements.md` 的 R9a~R9d；实现分支 V1~V3 见 `implementation-grill-plan.md`。
+> 交付证据：全解决方案 `0 错误 0 警告`；全量测试 **1535 通过 / 0 失败**（新增 12 个 UI 集成/白名单测试）；参考宿主实跑通过。
+
+## V0: 沙盒局补装 UI 插件包 【Done】
+- Target: `src/Orc.Mcp/Tools/SandboxTools.cs`
+- Approach: 建局快照由"仅 `orc.builtin.core`"改为 `AssetCatalogSnapshot.FromPackages([BuiltInPluginPackage.Load(pluginsRoot), UiPluginPackage.Load(pluginsRoot)])`——否则 `Match.UiProjections` 无 provider，UI 无法投影。
+- Acceptance: ✅ 沙盒局 `UiProjections.HasProvider` 为真（测试 `SandboxMatch_ExposesUiProjectionProvider` 断言）；✅ pluginsRoot 可经选项覆盖。
+
+## V1: 宿主集成面与强类型动作面 【Done】
+- Target: `src/Orc.Mcp/Hosting/HostingContracts.cs`（`IMcpHost`/`IMcpActions`/`MatchLifecycleEventArgs`/`SegmentConsumer`）、`src/Orc.Mcp/McpService.Hosting.cs`、`src/Orc.Mcp/Match/{CardResolver.cs,EngineResultMapper.cs}`
+- Approach:
+  - `IMcpHost`：`ActiveMatch`/`TryGetActiveMatch`、`MatchChanged`（Created 在**对局就绪后**广播）、`SubscribeTargetingRequests`（UI 订阅待决）、`TrySubmitTargeting(..., out reason)`、`TryClaimTargeting`（双向接管）、`SegmentConsumer`/`SetSegmentConsumer`/`PullSegments`/`IngestSegments`。
+  - `IMcpActions`：16 个强类型动作（换牌/出牌/指挥/查询），全部经 `MatchExecutor`（与 MCP 工具**共用同一门禁与 pending 状态机**）。
+  - 三态结果统一映射：`Success`→completed、`Cancelled`→**cancelled（成功语义）**、`Failed`→failed + 引擎原因（`EngineResultMapper`）。
+- Acceptance: ✅ 工具与强类型入口同实现（`ToolAndActionFaces_StayInSync`）；✅ 取消按成功（`TargetingCancel_IsReportedAsCancelledSuccess`）。
+
+## V2: 玩家动作面扩充与两模式白名单 【Done】
+- Target: `src/Orc.Mcp/Tools/{PlayerActionTools.cs,MatchTools.cs,TargetTools.cs,CardTools.cs,SandboxTools.cs,ObserveTools.cs}`
+- Approach: 新增 16 个玩家入口工具（`mulligan.*`2 + `play.*`7 + `command.*`5），**两模式共有**；调试类工具统一 `sandboxOnly`；`target.claim` 提供接管；`observe.view` 按模式分流（沙盒＝全知摘要；player＝按座位过滤的投影视图，需 `AgentSeat`）。
+- Acceptance: ✅ `ToolWhitelistTests`：player 模式工具清单**恰好**等于玩家白名单；authoring 与 player 的差集**恰好**等于调试工具清单（防"新工具忘了标 sandboxOnly"）；✅ 实测修正 3 处漏标（`card.list`/`pack.info`/`sandbox.state`）。
+
+## V3: 参考宿主与接入指南 【Done】
+- Target: `samples/Orc.Mcp.HostSample/{Orc.Mcp.HostSample.csproj,Program.cs}`、`docs/mcp-ui-integration.md`、`src/Orc.Mcp/Docs/engine/host-integration.md`
+- Approach: 控制台"伪 UI"参考宿主，完整演示 6 条接线：会话/门控、`MatchChanged`→投影 provider、每帧 `Project`、待决请求订阅 + 认领 + 帧内提交、段消费（Host 声明 + 喂回服务层）、强类型动作面；接入指南面向 UI 团队，内嵌文档面向 agent。
+- Acceptance: ✅ 实跑输出验证：`投影 provider 就绪（hasProvider=True）` → agent 预打出 `status=targeting` → `玩家点选 → 提交成功` → 每帧投影 → `取段 2 条 → 喂给服务层` → `EndTurnAsync → status=completed`。
+
+## 第二批的偏离与修正（实现期发现，均已修）
+
+1. **`MatchChanged(Created)` 的时序缺陷**：最初在 `Executor.Attach` 时广播，此时对局尚未 `Initialize`、UI 包激活相未跑 ⇒ UI 建 provider 拿到 null（参考宿主实测 `hasProvider=False`）。**修**：装配与广播分离——`AttachMatch` 只装配，`NotifyMatchReady()` 在 Initialize 完成后广播。
+2. **桥回调内同步提交不可用**：在 `SubscribeTargetingRequests` 回调里同步 `TrySubmitTargeting`（Hang 在内层锁等待上）会失败。**修**：参考宿主改为"回调只渲染+认领，提交发生在帧循环"（也是真实 UI 的形态）；并为 `TrySubmitTargeting` 增加 `out reason` 便于诊断。
+3. **3 处工具漏标 `sandboxOnly`**（`card.list`/`pack.info`/`sandbox.state`）：由白名单护栏测试与实跑发现并修正。
+4. **`player` 模式观察面**：`observe.view` 改为两模式共有并按模式分流（沙盒全知 / player 按 `AgentSeat` 过滤投影）；`AgentSeat` 未配置时返回 `mode-denied` 并说明原因。
+
+## 第二批交付物
+
+| 交付物 | 位置 | 说明 |
+|---|---|---|
+| 宿主集成面 | `src/Orc.Mcp/Hosting/HostingContracts.cs` | `IMcpHost` + `IMcpActions` |
+| 集成实现 | `src/Orc.Mcp/McpService.Hosting.cs` | 事件/订阅/接管/段消费/强类型动作 |
+| 玩家动作工具 | `src/Orc.Mcp/Tools/PlayerActionTools.cs` | 16 个入口（两模式共有） |
+| 参考宿主 | `samples/Orc.Mcp.HostSample` | `dotnet run --project samples/Orc.Mcp.HostSample` |
+| 接入开发手册 | `docs/mcp-ui-integration.md` | **自包含**：7 步开发流程（每步带验收点）＋ 完整 API 签名参考（10 节）＋ 故障排查表（11 节）＋ 反模式清单（12 节）＋ DoD 自检清单（9.2） |
+| agent 说明 | `src/Orc.Mcp/Docs/engine/host-integration.md` | 内嵌；经 `docs.read` 读取 |
+| 集成测试 | `tests/Orc.Mcp.Tests/{HostIntegrationTests.cs,ToolWhitelistTests.cs}` | 仲裁链路 + 白名单护栏 |
