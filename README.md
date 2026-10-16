@@ -32,6 +32,9 @@
 | `tests/Orc.Script.Tests` | `Orc.Script.Tests` | 脚本层单元测试 |
 | `tests/Orc.Packages.Tests` | `Orc.Packages.Tests` | 包模型与端到端测试 |
 | `samples/Orc.Game.Sample` | `Orc.Game.Sample` | 可运行示例（入口程序 ＋ 目标选择桥接示例） |
+| `src/Orc.Mcp` | `Orc.Mcp` | 面向 MCP 的协议无关服务层（工具目录、对局执行器、沙盒模式、资产管线、调试与文档读取） |
+| `tests/Orc.Mcp.Tests` | `Orc.Mcp.Tests` | 服务层契约断言与端到端闭环测试 |
+| `samples/Orc.Mcp.Stdio` | `Orc.Mcp.Stdio` | MCP stdio 适配示例（手写最小 JSON-RPC；零第三方依赖） |
 
 全部工程目标框架 `net8.0`、语言版本 C# 12。
 
@@ -50,12 +53,25 @@ dotnet test  OrcEngine.slnx
 dotnet run --project samples/Orc.Game.Sample/Orc.Game.Sample.csproj
 ```
 
+## 通过 MCP 使用引擎（卡牌编辑者 / 沙盒模式）
+
+```bash
+dotnet run --project samples/Orc.Mcp.Stdio -- --mode authoring --sandbox ./.orc-sandbox
+```
+
+一条命令即可启动 stdio MCP 服务：外部 agent 可建沙盒对局、写卡（原文 JSON + 校验）、逐卡注册进当前对局、构造验证场景、读取观察面与事件流段、读引擎文档，全过程**不需要阅读源码**。
+
+- `src/Orc.Mcp` 是**协议无关**服务层（零 MCP SDK 依赖）；`samples/Orc.Mcp.Stdio` 是薄 stdio 适配示例（同样零第三方依赖）。
+- 门控：沙盒专属工具只在 `--mode authoring` 下存在；写入只允许落在 `--sandbox` 根内；产物提升（`--promote`）与 csx 编辑（`--csx`）默认关闭。
+- 服务层限制与工具清单可用 `service.info` / `service.tools` 查询；创作文档经 `docs.list` / `docs.read` 读取。
+- 客户端接入片段见 [`samples/Orc.Mcp.Stdio/README.md`](samples/Orc.Mcp.Stdio/README.md)。
+
 ## 目录结构
 
 ```
-src/               引擎与游戏层源码（7 个工程）
-tests/             xUnit 测试（4 个工程）
-samples/           可运行示例
+src/               引擎与游戏层源码（8 个工程）
+tests/             xUnit 测试（5 个工程）
+samples/           可运行示例（含 MCP stdio 适配示例）
 docs/              设计与研究报告（含初始设计基线）
 .ams/context/      术语与上下文文档（入口 CONTEXT-MAP.md）
 .ams-docs/         需求／实现过程文档
@@ -123,6 +139,9 @@ Solutions `OrcEngine.slnx` / `OrcEngine.sln` (both contain the same projects):
 | `tests/Orc.Script.Tests` | `Orc.Script.Tests` | Script-layer unit tests |
 | `tests/Orc.Packages.Tests` | `Orc.Packages.Tests` | Package model and end-to-end tests |
 | `samples/Orc.Game.Sample` | `Orc.Game.Sample` | Runnable sample (entry program plus a target-selection bridge example) |
+| `src/Orc.Mcp` | `Orc.Mcp` | Protocol-agnostic MCP-facing service layer (tool catalog, match executor, sandbox mode, asset pipeline, diagnostics and docs reading) |
+| `tests/Orc.Mcp.Tests` | `Orc.Mcp.Tests` | Service-layer contract assertions and an end-to-end loop test |
+| `samples/Orc.Mcp.Stdio` | `Orc.Mcp.Stdio` | MCP stdio adapter sample (hand-written minimal JSON-RPC; no third-party dependencies) |
 
 All projects target `net8.0` and C# 12.
 
@@ -141,12 +160,25 @@ dotnet test  OrcEngine.slnx
 dotnet run --project samples/Orc.Game.Sample/Orc.Game.Sample.csproj
 ```
 
+## Using the engine through MCP (card-authoring / sandbox mode)
+
+```bash
+dotnet run --project samples/Orc.Mcp.Stdio -- --mode authoring --sandbox ./.orc-sandbox
+```
+
+One command starts a stdio MCP server: an external agent can create a sandbox match, write cards (raw JSON plus validation), register them card by card into the running match, shape verification scenarios, read the observation surface and event segments, and read the engine docs — all without reading engine source.
+
+- `src/Orc.Mcp` is a **protocol-agnostic** service layer (zero MCP SDK dependencies); `samples/Orc.Mcp.Stdio` is a thin stdio adapter sample (also dependency-free).
+- Gating: sandbox-only tools exist only under `--mode authoring`; writes are confined to the `--sandbox` root; promotion (`--promote`) and csx editing (`--csx`) are off by default.
+- Query `service.info` / `service.tools` for limitations and the tool list; read authoring docs via `docs.list` / `docs.read`.
+- Client configuration snippet: see [`samples/Orc.Mcp.Stdio/README.md`](samples/Orc.Mcp.Stdio/README.md).
+
 ## Repository layout
 
 ```
-src/               Engine and game-layer sources (7 projects)
-tests/             xUnit tests (4 projects)
-samples/           Runnable sample
+src/               Engine and game-layer sources (8 projects)
+tests/             xUnit tests (5 projects)
+samples/           Runnable samples (including the MCP stdio adapter)
 docs/              Design and research documents (including the initial design baseline)
 .ams/context/      Terminology and context documents (entry point: CONTEXT-MAP.md)
 .ams-docs/         Requirements / implementation process documents
