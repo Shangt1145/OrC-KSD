@@ -34,3 +34,7 @@ TestResults/
 **/tmp-probe/
 **/_tmp/
 **/_probe/
+
+# MCP 服务层的沙盒根（默认值；agent 在沙盒里生成/改写的卡牌与效果产物不入库）
+/.orc-sandbox/
+**/.orc-sandbox/
