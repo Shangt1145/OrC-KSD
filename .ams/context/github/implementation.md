@@ -65,3 +65,43 @@
 - `.gitignore`：新增规则生效；未跟踪项 182 → 85；`.ams-docs` 未跟踪项非 md 归零
 - 已跟踪文件中过程物数量：0
 - 提交前校验：白名单越界 0、黑名单命中 0
+
+---
+
+## 追加轮次（2026-10-16）——三项收口
+
+用户指令：`1：a`、`2：同意`、`3：改`。
+
+### S6: `.sln` 补齐 MCP 三工程（1a）
+- Status: Done
+- Target: `OrcEngine.sln`
+- Approach: 为 `Orc.Mcp`、`Orc.Mcp.Tests`、`Orc.Mcp.Stdio` 生成 GUID，补 `Project`／`ProjectConfigurationPlatforms`／`NestedProjects` 三节。
+- Acceptance:
+  - [x] `.sln` 与 `.slnx` 工程数均为 15
+  - [x] `dotnet build OrcEngine.sln` 输出 `Orc.Mcp`／`Orc.Mcp.Stdio`／`Orc.Mcp.Tests` 三行
+- Rationale: 修掉「用 `.sln` 构建静默漏编 MCP」的陷阱。
+
+### S7: 忽略外发交付包（2）
+- Status: Done
+- Target: `.gitignore`
+- Approach: 追加 `/.ams-docs/**/发布包/`，**置于 `!/.ams-docs/**/*.md` 之后**（目录被排除后其中的 md 无法再放行）。
+- Acceptance:
+  - [x] `git check-ignore` 命中发布包内 md
+  - [x] 普通任务 `.md` 不受影响（`check-ignore` 无输出）
+  - [x] `.ams-docs` 未跟踪残留为 0
+- Rationale: 发布包是交付前端（Godot）侧的外发物，非本仓库成果；此前每轮靠手工排除。
+
+### S8: 修正 SOP ③b 的 `quotepath` 缺陷（3）
+- Status: Done
+- Target: `.ams/context/github/交接说明.md`（§六 ③b、§七 排障表、§十一 代价记录）
+- Approach: ③b 补 `-c core.quotepath=false` 并 `Trim('"')`；黑名单模式增 `发布包`／`orc-sandbox`；排障表与代价记录各增对应条目。
+- Acceptance:
+  - [x] ③b 命令行含 `core.quotepath=false`
+  - [x] 第十一节新增「校验静默失效」一例（含 D1 项险入库的经过）
+- Rationale: 未加该开关时，模式里的中文（`官方卡牌`／`发布包`）**永不匹配**，校验形同虚设——2026-10-16 实测漏报。
+
+### 追加轮次验证结果（2026-10-16）
+- `.sln`／`.slnx` 工程数：15 / 15；`dotnet build OrcEngine.slnx` 与 `.sln` 均 0 错误
+- 测试（`.slnx`）：1523 通过 / 0 失败
+- 发布包：`git ls-files` 为空；`.ams-docs` 未跟踪残留 0
+
