@@ -19,5 +19,6 @@
   <Folder Name="/samples/">
     <Project Path="samples/Orc.Game.Sample/Orc.Game.Sample.csproj" />
     <Project Path="samples/Orc.Mcp.Stdio/Orc.Mcp.Stdio.csproj" />
+    <Project Path="samples/Orc.Mcp.HostSample/Orc.Mcp.HostSample.csproj" />
   </Folder>
 </Solution>
