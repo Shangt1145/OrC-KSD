@@ -15,7 +15,7 @@ namespace Orc.Mcp;
 /// **不实现任何传输协议**（stdio/JSON-RPC 由宿主适配层负责；本工程零 MCP SDK 依赖）。
 /// </para>
 /// </summary>
-public sealed class McpService
+public sealed partial class McpService
 {
     private sealed record Entry(
         McpToolDescriptor Descriptor,

@@ -62,6 +62,7 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
     private TaskCompletionSource<bool> _change = NewSignal();
     private TaskCompletionSource<SelectorEvent>? _submit;
     private IReadOnlyList<Ref<Entity>> _currentCandidates = Array.Empty<Ref<Entity>>();
+    private readonly Dictionary<string, string> _claimants = new(StringComparer.Ordinal);
     private bool _sessionCompleted;
     private bool _timedOut;
     private Exception? _fault;
@@ -71,6 +72,17 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
         _timeout = timeout;
         _keyOf = keyOf;
     }
+
+    /// <summary>
+    /// 待决请求已发布（供宿主/UI 订阅渲染候选）。**在锁外同步触发**，订阅者不得阻塞。
+    /// </summary>
+    public event Action<PendingSelection>? PendingPublished;
+
+    /// <summary>会话标识常量：服务层（agent / MCP 工具）应答者。</summary>
+    public const string ClaimantService = "service";
+
+    /// <summary>会话标识常量：宿主（UI）应答者。</summary>
+    public const string ClaimantHost = "host";
 
     /// <summary>当前会话 id（无会话＝null）。</summary>
     public string? SessionId
@@ -166,10 +178,40 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
             _pending = null;
             _submit = null;
             _currentCandidates = Array.Empty<Ref<Entity>>();
+            _claimants.Clear();
             _sessionCompleted = false;
             _timedOut = false;
             _fault = null;
             _change = NewSignal();
+        }
+    }
+
+    /// <summary>
+    /// 接管当前待决请求（先到先服务：已被应答的请求拒绝接管）。语义＝把该会话的应答权交给 <paramref name="claimant"/>。
+    /// </summary>
+    /// <returns>接管成功＝true；失败＝false 并给出 <paramref name="reason"/>。</returns>
+    public bool TryClaim(string sessionId, string claimant, out string? reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimant);
+
+        lock (_sync)
+        {
+            if (!string.Equals(_sessionId, sessionId, StringComparison.Ordinal) || _pending is null)
+            {
+                reason = "会话不存在或已无待决请求（可能已被应答或已按超时取消）。";
+                return false;
+            }
+
+            if (_submit is null)
+            {
+                reason = "该待决请求已被应答（先到先服务：拒绝接管）。";
+                return false;
+            }
+
+            _claimants[sessionId] = claimant;
+            reason = null;
+            return true;
         }
     }
 
@@ -198,7 +240,7 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
     /// 应答当前待决请求（由 <c>target.submit</c> / <c>target.cancel</c> 调用）。
     /// </summary>
     /// <returns>受理＝true；无待决请求或会话不符＝false。</returns>
-    public bool Submit(string sessionId, IReadOnlyList<int> picks, bool cancel)
+    public bool Submit(string sessionId, IReadOnlyList<int> picks, bool cancel, string? claimant = null)
     {
         TaskCompletionSource<SelectorEvent>? tcs;
         IReadOnlyList<Ref<Entity>> candidates;
@@ -206,6 +248,14 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
         lock (_sync)
         {
             if (_pending is null || _submit is null || !string.Equals(_sessionId, sessionId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            // 先到先服务：会话已被一方认领时，另一方（claimant 不同）不得应答。
+            if (claimant is not null
+                && _claimants.TryGetValue(sessionId, out var owner)
+                && !string.Equals(owner, claimant, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -264,6 +314,7 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
                 }
 
                 SignalChange(); // 唤醒执行器：动作已进入待决
+                PendingPublished?.Invoke(pending); // 通知订阅者（UI 渲染候选；不得阻塞）
 
                 var timedOut = await Task.WhenAny(submitTcs.Task, Task.Delay(_timeout)).ConfigureAwait(false) != submitTcs.Task;
 

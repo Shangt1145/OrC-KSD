@@ -23,11 +23,15 @@ public sealed record ActionOutcome(
 {
     public const string StatusCompleted = "completed";
     public const string StatusTargeting = "targeting";
+    public const string StatusCancelled = "cancelled";
     public const string StatusNotReady = "not-ready";
     public const string StatusBusy = "busy";
     public const string StatusFailed = "failed";
 
     public bool IsTargeting => Status == StatusTargeting;
+
+    /// <summary>引擎三态中的**取消**（合法结局，按成功结果处理；与失败区分）。</summary>
+    public static ActionOutcome Cancelled(JsonNode? payload = null) => new(StatusCancelled, payload);
 
     public static ActionOutcome Completed(JsonNode? payload = null) => new(StatusCompleted, payload);
 
@@ -43,7 +47,8 @@ public sealed record ActionOutcome(
     public static ActionOutcome NoPending()
         => new(StatusFailed, FailureCode: McpCodes.InvalidArguments, FailureMessage: "当前没有待决的选择请求。");
 
-    public static ActionOutcome Failed(string code, string message) => new(StatusFailed, FailureCode: code, FailureMessage: message);
+    public static ActionOutcome Failed(string code, string message, JsonNode? payload = null)
+        => new(StatusFailed, payload, FailureCode: code, FailureMessage: message);
 }
 
 /// <summary>
@@ -147,7 +152,12 @@ public sealed class MatchExecutor
     }
 
     /// <summary>应答当前待决请求并推进动作（取锁、驱动会话、等到"完成或再次待决"）。</summary>
-    public async Task<ActionOutcome> SubmitAsync(string sessionId, IReadOnlyList<int> picks, bool cancel, CancellationToken ct)
+    public async Task<ActionOutcome> SubmitAsync(
+        string sessionId,
+        IReadOnlyList<int> picks,
+        bool cancel,
+        CancellationToken ct,
+        string? claimant = null)
     {
         if (_active is null || _active.IsCompleted)
         {
@@ -163,9 +173,11 @@ public sealed class MatchExecutor
                 return ActionOutcome.NoPending();
             }
 
-            if (!Bridge.Submit(sessionId, picks, cancel))
+            if (!Bridge.Submit(sessionId, picks, cancel, claimant))
             {
-                return ActionOutcome.Failed(McpCodes.InvalidArguments, "会话标识不符或已无待决请求（可能已超时按取消处理）。");
+                return ActionOutcome.Failed(
+                    McpCodes.InvalidArguments,
+                    "会话标识不符、已无待决请求，或该请求已被另一方认领（先到先服务）。");
             }
 
             var outcome = await WaitAsync(active).ConfigureAwait(false);

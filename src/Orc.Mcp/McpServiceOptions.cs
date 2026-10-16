@@ -62,4 +62,10 @@ public sealed class McpServiceOptions
 
     /// <summary>随机种子（缺省＝null＝引擎自动生成；沙盒可指定以复现）。</summary>
     public int? Seed { get; init; }
+
+    /// <summary>
+    /// agent 的座位（player 模式语义，R9d）：player 模式下 agent 占一个座位、视图按座位过滤隐藏信息。
+    /// 缺省＝null＝未指定（player 模式下的观察面将拒绝并提示需配置座位）。
+    /// </summary>
+    public int? AgentSeat { get; init; }
 }
