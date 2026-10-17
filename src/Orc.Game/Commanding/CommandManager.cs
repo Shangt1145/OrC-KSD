@@ -1493,6 +1493,7 @@ public sealed class CommandManager
         var state = unit.GetData<UnitStateData>();
         if (state.IsDestroyed) return;
 
+        // 效果层「取消消灭」：引擎暂无死亡链替换口，这是唯一拦截点（消灭确认前、卸载前）。
         if (await KeywordProgramRuntime.BeforeDestroy(unit,killer,ct)) return;
         state.Position?.Clear();
         state.IsDestroyed = true;

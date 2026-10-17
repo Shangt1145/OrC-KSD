@@ -144,6 +144,9 @@ public sealed class ProgramKeywordComponent : KeywordComponent
                     case "unlink":_linked=null;break;
                     case "attack":if(_host is UnitCard attacker)await KeywordProgramRuntime.MatchFor(_host.Engine).CommandManager.AttackByEffectAsync(attacker,target,ct,a.BypassRange);break;
                     case "retreat":
+                        // 遗留（S1b）：引擎尚无「效果发起位移」的门户（CommandManager 只有两阶段的
+                        // BeginMoveAsync），此处直接操作槽位并补发位置变更信号。待引擎提供
+                        // MoveByEffectAsync（同 AttackByEffectAsync 的形态）后改为调用该门户。
                         if(target is UnitCard retreat&&retreat.Owner is { } retreatOwner&&retreat.GetData<UnitStateData>().Position is { } oldPosition)
                         {
                             var retreatMatch=KeywordProgramRuntime.MatchFor(_host.Engine);var support=retreatMatch.Battlefield.GetSupportLine(retreatOwner);
