@@ -167,7 +167,7 @@ public sealed class KeywordProgramTests
     public async Task TemporaryCopyHasNoSourceKeywordAndOnlyItsHandInstanceExpires()
     {
         var (m,u,k)=await Create(new(){Handlers=[new(){Actions=[new(){Op="copy.hand",Temporary=true}]}]});
-        await m.PlayManager.PlayUnitAsync(u,m.Battlefield.PlayerASupportLine[1]);var copy=Assert.Single(m.Players[0].Hand.OfType<CardBase>().Where(c=>c.Definition==u.Definition));
+        await m.PlayManager.PlayUnitAsync(u,m.Battlefield.PlayerASupportLine[1]);var copy=Assert.Single(m.Players[0].Hand.OfType<CardBase>(),c=>c.Definition==u.Definition);
         Assert.False(copy.Keywords.Has(k));await m.EndTurn();Assert.DoesNotContain(copy,m.Players[0].Hand);Assert.False(u.GetData<UnitStateData>().IsDestroyed);
     }
     [Fact]
@@ -250,7 +250,7 @@ public sealed class KeywordProgramTests
         static void Walk(Orc.Core.EventStream s,List<string> acc){foreach(var e in s.Entries)if(e.Level>=LogLevel.Error)acc.Add($"{e.Source}:{e.Message}");foreach(var c in s.Children)Walk(c,acc);}
         var errors=new List<string>();Walk(m.Engine.RootStream,errors);
         Assert.True(copies.Count==2,$"手牌实例数={copies.Count}（含复员={copies.Count(x=>x.Keywords.Has(k))}）；流错误：{string.Join(" | ",errors)}");
-        var copy=Assert.Single(copies.Where(x=>!x.Keywords.Has(k)));var returned=Assert.Single(copies.Where(x=>x.Keywords.Has(k)));
+        var copy=Assert.Single(copies,x=>!x.Keywords.Has(k));var returned=Assert.Single(copies,x=>x.Keywords.Has(k));
         Assert.Equal(u.Definition.DeployCost+2,copy.Modifiers.GetEffectiveValue(CardStatFields.DeployCost));
         Assert.Equal(u.Definition.DeployCost,returned.Modifiers.GetEffectiveValue(CardStatFields.DeployCost));
     }
