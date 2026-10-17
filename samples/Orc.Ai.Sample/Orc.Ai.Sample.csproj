@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Orc.Ai.Sample</AssemblyName>
+    <RootNamespace>Orc.Ai.Sample</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Orc.Ai\Orc.Ai.csproj" />
+    <ProjectReference Include="..\..\src\Orc.Mcp\Orc.Mcp.csproj" />
+  </ItemGroup>
+
+</Project>

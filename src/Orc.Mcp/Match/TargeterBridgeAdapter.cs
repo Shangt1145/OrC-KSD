@@ -59,6 +59,7 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
     private ITargeterSession? _session;
     private string? _sessionId;
     private PendingSelection? _pending;
+    private string? _expectedClaimant;
     private TaskCompletionSource<bool> _change = NewSignal();
     private TaskCompletionSource<SelectorEvent>? _submit;
     private IReadOnlyList<Ref<Entity>> _currentCandidates = Array.Empty<Ref<Entity>>();
@@ -168,7 +169,20 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
         }
     }
 
-    /// <summary>清除上一轮会话状态（每次启动新动作前调用）。</summary>
+    /// <summary>
+    /// 声明**预期应答者**：该动作链内发布的待决请求在发布时即预占给该应答者——
+    /// 其他方（如人类宿主）<see cref="TryClaim"/>／<see cref="Submit"/> 会被先到先服务规则拒绝。
+    /// <para>null＝不预占（恢复默认的"谁先认领谁应答"）。由动作发起方（AI）在发起前声明。</para>
+    /// </summary>
+    public void ExpectClaimant(string? claimant)
+    {
+        lock (_sync)
+        {
+            _expectedClaimant = string.IsNullOrWhiteSpace(claimant) ? null : claimant;
+        }
+    }
+
+    /// <summary>清除上一轮会话状态（每次启动新动作前调用）。**不清**预期应答者（由动作生命周期管理）。</summary>
     public void Reset()
     {
         lock (_sync)
@@ -206,6 +220,13 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
             if (_submit is null)
             {
                 reason = "该待决请求已被应答（先到先服务：拒绝接管）。";
+                return false;
+            }
+
+            if (_claimants.TryGetValue(sessionId, out var reserved)
+                && !string.Equals(reserved, claimant, StringComparison.Ordinal))
+            {
+                reason = $"该待决请求已预留给 '{reserved}'（发起方应答）。";
                 return false;
             }
 
@@ -311,6 +332,13 @@ public sealed class TargeterBridgeAdapter : ITargeterBridge
                     _currentCandidates = presentation.Candidates;
                     _pending = pending;
                     _submit = submitTcs;
+
+                    // 预期应答者预占（AI 发起的动作链）：发布即占，其他方认领/应答被拒。
+                    _claimants.Clear();
+                    if (_expectedClaimant is { } expected)
+                    {
+                        _claimants[sessionId] = expected;
+                    }
                 }
 
                 SignalChange(); // 唤醒执行器：动作已进入待决

@@ -107,8 +107,15 @@ public sealed class MatchExecutor
         _match = null;
         _active = null;
         Bridge.Reset();
+        Bridge.ExpectClaimant(null);
         return match;
     }
+
+    /// <summary>
+    /// 声明**预期应答者**（AI 发起动作前调用）：该动作链内的待决请求在发布时即预占给该应答者。
+    /// 动作链结束后（非 targeting 结局）自动清除。
+    /// </summary>
+    public void ExpectClaimant(string? claimant) => Bridge.ExpectClaimant(claimant);
 
     /// <summary>运行一次对局动作（取锁、启动、等到"完成或待决"）。</summary>
     public async Task<ActionOutcome> RunAsync(Func<Orc.Game.Match, Task<ActionOutcome>> action, CancellationToken ct)
@@ -143,7 +150,13 @@ public sealed class MatchExecutor
             var task = Guard(action, match, ct);
             _active = task;
 
-            return await WaitAsync(task).ConfigureAwait(false);
+            var outcome = await WaitAsync(task).ConfigureAwait(false);
+            if (!outcome.IsTargeting)
+            {
+                Bridge.ExpectClaimant(null);
+            }
+
+            return outcome;
         }
         finally
         {
@@ -181,7 +194,13 @@ public sealed class MatchExecutor
             }
 
             var outcome = await WaitAsync(active).ConfigureAwait(false);
-            return outcome.IsTargeting ? outcome : outcome with { TimedOut = Bridge.LastSubmissionTimedOut };
+            if (!outcome.IsTargeting)
+            {
+                Bridge.ExpectClaimant(null);
+                return outcome with { TimedOut = Bridge.LastSubmissionTimedOut };
+            }
+
+            return outcome;
         }
         finally
         {

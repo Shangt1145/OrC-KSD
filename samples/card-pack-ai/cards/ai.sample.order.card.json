@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ai.sample.order",
+  "name": "AI 样例指令",
+  "components": [
+    { "component": "typeCategory", "type": ["order"] },
+    { "component": "factionCost", "faction": "Germany", "kredits": 1 },
+    { "component": "battleStats", "operationCost": 0, "attack": 0, "defense": 0 },
+    { "component": "tagData", "rarity": "Standard" }
+  ]
+}

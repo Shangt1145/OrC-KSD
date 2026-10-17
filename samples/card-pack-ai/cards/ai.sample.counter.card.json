@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ai.sample.counter",
+  "name": "AI 样例反制",
+  "components": [
+    { "component": "typeCategory", "type": ["countermeasure"] },
+    { "component": "factionCost", "faction": "Germany", "kredits": 1 },
+    { "component": "battleStats", "operationCost": 0, "attack": 0, "defense": 0 },
+    { "component": "tagData", "rarity": "Standard" }
+  ]
+}

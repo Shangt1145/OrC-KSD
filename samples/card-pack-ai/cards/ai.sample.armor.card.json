@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ai.sample.armor",
+  "name": "AI 样例装甲",
+  "components": [
+    { "component": "typeCategory", "type": ["tank"] },
+    { "component": "factionCost", "faction": "Germany", "kredits": 2 },
+    { "component": "battleStats", "operationCost": 1, "attack": 4, "defense": 4 },
+    { "component": "tagData", "rarity": "Standard" }
+  ]
+}

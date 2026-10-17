@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "ai.sample.artillery",
+  "name": "AI 样例火炮",
+  "components": [
+    { "component": "typeCategory", "type": ["artillery"] },
+    { "component": "factionCost", "faction": "Germany", "kredits": 2 },
+    { "component": "battleStats", "operationCost": 1, "attack": 2, "defense": 2 },
+    { "component": "tagData", "rarity": "Standard" }
+  ]
+}
