@@ -8,6 +8,7 @@
     <Project Path="src/Orc.Plugins.BuiltIn/Orc.Plugins.BuiltIn.csproj" />
     <Project Path="src/Orc.UI/Orc.UI.csproj" />
     <Project Path="src/Orc.Mcp/Orc.Mcp.csproj" />
+    <Project Path="src/Orc.Ai/Orc.Ai.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Orc.Tests/Orc.Tests.csproj" />
@@ -15,10 +16,12 @@
     <Project Path="tests/Orc.Script.Tests/Orc.Script.Tests.csproj" />
     <Project Path="tests/Orc.Packages.Tests/Orc.Packages.Tests.csproj" />
     <Project Path="tests/Orc.Mcp.Tests/Orc.Mcp.Tests.csproj" />
+    <Project Path="tests/Orc.Ai.Tests/Orc.Ai.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Orc.Game.Sample/Orc.Game.Sample.csproj" />
     <Project Path="samples/Orc.Mcp.Stdio/Orc.Mcp.Stdio.csproj" />
     <Project Path="samples/Orc.Mcp.HostSample/Orc.Mcp.HostSample.csproj" />
+    <Project Path="samples/Orc.Ai.Sample/Orc.Ai.Sample.csproj" />
   </Folder>
 </Solution>
