@@ -66,7 +66,7 @@ internal sealed class AttackRevalidationJudicator : ValidationJudicator
 
         // K3：leg 资格（共享条件源——原内联的 owner/destroyed/can/suppressed/cost 检查迁至 leg 条目；
         // 复验按 bool 语义消费：非 null＝Invalid；编排保持——leg 整体判定位于 refs/终局/subject 检查之后）。
-        if (_attackLegEligibility(attacker) is not null)
+        if (!KeywordProgramRuntime.IsEffectAttack(attacker)&&_attackLegEligibility(attacker) is not null)
         {
             return ValidationVerdict.Invalid();
         }

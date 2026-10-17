@@ -191,7 +191,7 @@ public class GameHooksTests
         var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
             .Select(c => c.Value).ToList();
 
-        Assert.Equal(31, signals.Count); // S1 受控适配（29 → 30）：新增 unit.upgraded（老兵升级）；S2 受控适配（30 → 31）：新增 unit.revealed（揭示）
+        Assert.Equal(32, signals.Count); // Includes the pre-unmount host death settlement phase.
         Assert.Equal(16, payloadKeys.Count);
         Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
@@ -237,6 +237,7 @@ public class GameHooksTests
             [GameHooks.CardDiscarded] = "EmitCardDiscarded",
             [GameHooks.CardBurned] = "EmitCardBurned",
             [GameHooks.CardDied] = "EmitCardDied",
+            [GameHooks.CardDying] = "EmitCardDying",
             [GameHooks.UnitJoined] = "EmitUnitJoined",
             [GameHooks.UnitDeployed] = "EmitUnitDeployed",
             [GameHooks.UnitPositionChanged] = "EmitUnitPositionChanged",
@@ -262,7 +263,7 @@ public class GameHooksTests
             GameHooks.TurnEndBefore, GameHooks.TurnEnd,
         };
 
-        Assert.Equal(26, helpers.Count); // S1 受控适配（24 → 25）：新增 unit.upgraded（EmitUnitUpgraded）；S2 受控适配（25 → 26）：新增 unit.revealed（EmitUnitRevealed）
+        Assert.Equal(27, helpers.Count);
         foreach (var (signal, method) in helpers)
         {
             Assert.Contains(signal, GameHooks.Signals);

@@ -72,7 +72,18 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
         {
             foreach (var slot in line)
             {
-                if (slot.Occupant is not UnitCard unit
+                if (slot.Occupant is Hq hq && selector.Zone == "hq"
+                    && (selector.Side is null or "both" or "any"
+                        || viewerOwner is null
+                        || (selector.Side == "friendly" && hq.Owner.Index == viewerOwner.Index)
+                        || (selector.Side == "enemy" && hq.Owner.Index != viewerOwner.Index))
+                    && selector.UnitType is null && selector.Threshold is null
+                    && (string.IsNullOrWhiteSpace(selector.Keyword) || hq.Keywords.Has(selector.Keyword)))
+                {
+                    candidates.Add(hq);
+                    continue;
+                }
+                if (selector.Zone == "hq" || slot.Occupant is not UnitCard unit
                     || !MatchesSide(unit, selector.Side, viewerOwner)
                     || !MatchesUnitType(unit, selector.UnitType)
                     || !MatchesKeyword(unit, selector.Keyword)
@@ -112,7 +123,7 @@ public sealed class EffectTargetResolveJudicator : Judicator<EffectTargetResolve
 
     private static IEnumerable<BattleLine> SelectLines(Battlefield battlefield, string? zone)
     {
-        if (zone is null or "support")
+        if (zone is null or "support" or "hq")
         {
             yield return battlefield.PlayerASupportLine;
             yield return battlefield.PlayerBSupportLine;

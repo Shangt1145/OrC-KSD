@@ -79,6 +79,12 @@ internal static class CardAttributeMap
             declaration = new KeywordDeclaration(keywordId);
             return true;
         }
+        const string customPrefix="Keyword:";
+        if(attribute.StartsWith(customPrefix,StringComparison.Ordinal)&&KeywordRegistry.IsDefined(attribute[customPrefix.Length..]))
+        {declaration=new KeywordDeclaration(attribute[customPrefix.Length..]);return true;}
+        if(attribute.StartsWith(customPrefix,StringComparison.Ordinal)&&attribute.LastIndexOf(':') is var split&&split>customPrefix.Length
+            &&KeywordRegistry.IsDefined(attribute[customPrefix.Length..split])&&int.TryParse(attribute[(split+1)..],out var customValue))
+        {declaration=new KeywordDeclaration(attribute[customPrefix.Length..split],customValue);return true;}
 
         foreach (var (prefix, keyword) in Valued)
         {
@@ -151,6 +157,8 @@ internal static class CardAttributeMap
             attribute = found;
             return true;
         }
+        if(KeywordRegistry.IsDefined(keywordId)&&!KeywordIds.All.Contains(keywordId,StringComparer.Ordinal))
+        {attribute="Keyword:"+keywordId;return true;}
 
         return false;
     }
@@ -169,6 +177,8 @@ internal static class CardAttributeMap
     public static bool TryGetValuedAttribute(string keywordId, int value, out string attribute)
     {
         attribute = string.Empty;
+        if(KeywordRegistry.IsDefined(keywordId)&&!KeywordIds.All.Contains(keywordId,StringComparer.Ordinal))
+        {attribute="Keyword:"+keywordId+":"+value.ToString(System.Globalization.CultureInfo.InvariantCulture);return true;}
         if (value <= 0 || string.IsNullOrWhiteSpace(keywordId))
         {
             return false;

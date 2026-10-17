@@ -232,7 +232,7 @@ public class CommandCombatTests
         Assert.Equal(
             new[]
             {
-                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDying, GameUpdates.CardDied, GameUpdates.CardDamaged,
                 GameUpdates.UnitDamageDealt, // E1-47：来源侧（攻击者造成）
                 GameUpdates.CardStatChanged, GameUpdates.CardDamaged, // E1-33：受伤害（先数值、后伤害信号）
                 GameUpdates.UnitDamageDealt, // E1-47：来源侧（被攻击者反击造成）
@@ -241,7 +241,7 @@ public class CommandCombatTests
                 GameUpdates.UnitActed,    // E1-33：攻击者行动后（存活）
             },
             recorder.Types);
-        var diedPayload = recorder.Updates[1].Payload!;
+        var diedPayload = recorder.Updates.Single(u => u.Type == GameUpdates.CardDied).Payload!;
         Assert.Same(target, diedPayload[GameUpdates.PayloadCard]);
         Assert.DoesNotContain(GameUpdates.UnitPositionChanged, recorder.Types);
         // 攻击者收尾照常（未死）：扣费＋清位。
@@ -326,7 +326,7 @@ public class CommandCombatTests
         Assert.Equal(2, attacker.GetData<UnitStateData>().Defense); // 无 HP 扣减（直接死亡结果）
         Assert.Equal(6, ambusher.GetData<UnitStateData>().Defense); // 目标不受伤
         Assert.Equal(
-            new[] { GameUpdates.CardDied, GameUpdates.UnitCombatSurvived, GameUpdates.PointChanged }, // E1-39：被攻击者存活；末条＝收尾扣行动费
+            new[] { GameUpdates.CardDying, GameUpdates.CardDied, GameUpdates.UnitCombatSurvived, GameUpdates.PointChanged }, // E1-39：被攻击者存活；末条＝收尾扣行动费
             recorder.Types);
         Assert.Equal(0, playerA.Points); // 攻击者死亡不豁免收尾
     }

@@ -103,6 +103,9 @@ public static class GameUpdates
     /// </summary>
     public const string CardDied = "card.died";
 
+    /// <summary>死亡已确认、效果卸载前的宿主结算阶段；载荷同 CardDied。</summary>
+    public const string CardDying = "card.dying";
+
     // ---------- 第二批 hooks：单位系列 ----------
 
     /// <summary>单位加入（"unit.joined"；载荷＝{ Unit, Position }——Unit＝单位卡牌实例、Position＝槽位引用）：加入途径（非部署）入场。2B 加入路径调用点已接线（单位化完成后发射、恰一次）。</summary>
@@ -470,6 +473,18 @@ public static class GameUpdates
                 [PayloadPlayer] = player,
             },
             ct);
+    }
+
+    /// <summary>死亡已确认、卸载前结算宿主效果；载荷同完成死亡事件。</summary>
+    public static Task EmitCardDying(LogicEngine engine, Card card, Card? killer = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        return engine.Emit(CardDying, new Dictionary<string, object?>
+        {
+            [PayloadCard] = card,
+            [PayloadKiller] = killer,
+        }, ct);
     }
 
     /// <summary>发射 card.died（载荷＝{ 卡牌实例, Killer? }；2C 起调用点＝战斗死亡流程——清理就绪后、恰一次）。</summary>

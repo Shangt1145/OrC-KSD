@@ -119,8 +119,8 @@ public sealed class PlayManager
         }
 
         // Engine-owned insertion gaps: before, between and after all units and HQ.
-        var candidates = _battlefield.GetSupportLine(owner).GetInsertionGaps();
-        if (candidates.Count == 0)
+        var candidates = DeploymentLines(card).SelectMany(line=>line.GetInsertionGaps()).ToArray();
+        if (candidates.Length == 0)
         {
             return PlayResult.Failure(PlayFailureReason.PrePlayNoAvailableSlots);
         }
@@ -218,6 +218,7 @@ public sealed class PlayManager
         // 动作作用域（UI 消费桥接）：本动作产生的事件聚合为一段。
         await using var _actionScope = _engine.BeginAction();
 
+        if(!await KeywordProgramRuntime.PreparePlayAsync(card,ct))return PlayResult.Cancelled();
         var stream = await card.PlayTrigger.InvokeAsync(
             _engine,
             new Dictionary<string, object?>
@@ -243,9 +244,10 @@ public sealed class PlayManager
         var owner = RequireOwner(card);
         if (CheckAdmission(card, true) is { } admission) return PlayResult.Failure(admission);
         if (card.TryGetData<UnitStateData>(out _)) return PlayResult.Failure(PlayFailureReason.UnitAlreadyUnitized);
-        if (!ReferenceEquals(gap.Line, _battlefield.GetSupportLine(owner)) || !gap.IsCurrent)
+        if (!DeploymentLines(card).Any(line=>ReferenceEquals(gap.Line,line)) || !gap.IsCurrent)
             return PlayResult.Failure(PlayFailureReason.FormationGapUnavailable);
         await using var scope = _engine.BeginAction();
+        if(!await KeywordProgramRuntime.PreparePlayAsync(card,ct))return PlayResult.Cancelled();
         var stream = await card.PlayTrigger.InvokeAsync(_engine, new Dictionary<string, object?>
         {
             [GameUpdates.PayloadCard] = card, [GameUpdates.PayloadPlayer] = owner,
@@ -268,7 +270,7 @@ public sealed class PlayManager
         {
             UnitCard unit => !unit.TryGetData<UnitStateData>(out _)
                 && unit.PrePlayTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid
-                && _battlefield.GetSupportLine(unit.Owner!).GetInsertionGaps().Count > 0,
+                && DeploymentLines(unit).Any(line=>line.GetInsertionGaps().Count>0),
             CommandCard command => command.PrePlayTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid,
             CounterCard counter => counter.UseCounterTrigger.EvaluateValidation(Array.Empty<Ref<Entity>>()).IsValid,
             _ => false,
@@ -276,7 +278,13 @@ public sealed class PlayManager
     }
 
     public IReadOnlyList<FormationGap> GetDeploymentGaps(UnitCard card) => CanPlay(card)
-        ? _battlefield.GetSupportLine(card.Owner!).GetInsertionGaps() : Array.Empty<FormationGap>();
+        ? DeploymentLines(card).SelectMany(line=>line.GetInsertionGaps()).ToArray() : Array.Empty<FormationGap>();
+
+    private IEnumerable<BattleLine> DeploymentLines(UnitCard card)
+    {
+        yield return _battlefield.GetSupportLine(card.Owner!);
+        if(KeywordProgramRuntime.Resolve(card,"deploy.frontline",0)!=0 && !_battlefield.FrontLine.Any(slot=>slot.Occupant is UnitCard enemy && !ReferenceEquals(enemy.Owner,card.Owner)))yield return _battlefield.FrontLine;
+    }
 
     private PlayFailureReason? CheckAdmission(CardBase card, bool requireHand)
     {
@@ -432,6 +440,7 @@ public sealed class PlayManager
         if (CheckAdmission(card, true) is { } commitAdmission) return PlayResult.Failure(commitAdmission);
 
         // ② 打出段：复验＋宣告＋主动 handler 集＋收尾；捕获结果自动移交为 object? 参数。
+        if(!await KeywordProgramRuntime.PreparePlayAsync(card,ct))return PlayResult.Cancelled();
         var playStream = await card.PlayTrigger.InvokeAsync(
             _engine,
             new Dictionary<string, object?>

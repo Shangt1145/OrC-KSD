@@ -260,3 +260,6 @@
 | 文本编译管线 | 无（OrC 卡牌为代码定义，无 JSON 载入） | 需新增（见报告 3 缺口） |
 | `chooser` / `KG.ask` | `TargeterManager.RunAsync` + `ITargeterBridge`（会话 / 选择器 / 语义事件） | 语义接近，结构不同 |
 | `Net.hooks` / `fxPops` | `Orc/Output/*`（段轮询 `TakeSegments`） | 观察模型不同（推 vs 拉） |
+
+2026-10-17 本地集成补充：新增 `card.dying`（GameUpdates/GameHooks 导出名为 CardDying），在死亡确认、槽位清空后以及效果卸载前发射，载荷为 Card/Killer。宿主自己的亡计在此阶段结算；旁观者的“单位被消灭”继续使用清理完成后的 card.died。重复死亡入口不重复结算。原生效果选靶增加显式 hq 区域，按 friendly/enemy/both 枚举总部；单位区域仍只返回单位。EffectRuntime.BuffAsync 对总部的 defense 增量写入 HqHealth 修饰面。
+

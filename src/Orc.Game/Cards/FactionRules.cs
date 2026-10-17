@@ -22,7 +22,7 @@ public static class FactionRules
 
     /// <summary>是否五大主国（主国值域判定——对局创建期校验消费）。</summary>
     public static bool IsMajorFaction(string faction)
-        => faction is not null && MajorFactions.Contains(faction, StringComparer.Ordinal);
+        => faction is not null && (MajorFactions.Contains(faction, StringComparer.Ordinal)||Faction.IsCustomMajor(faction));
 
     /// <summary>
     /// 盟国值域判定：已定义标识 ∧ 非 Neutral（Neutral 不得作为盟国）∧ 非主国自身

@@ -11,6 +11,15 @@ namespace Orc.Game.Cards;
 /// </summary>
 public static class Faction
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string,bool> Custom=new(StringComparer.Ordinal);
+    /// <summary>Registers a namespaced content faction without changing the built-in constants.</summary>
+    public static void RegisterCustom(string id,bool major=true)
+    {
+        if(string.IsNullOrWhiteSpace(id)||id!=id.ToLowerInvariant()||!id.All(c=>char.IsAsciiLetterOrDigit(c)||c is '.' or '_' or '-')||All.Contains(id))
+            throw new ArgumentException("Custom faction requires a distinct canonical id.",nameof(id));
+        Custom[id]=major;
+    }
+    public static bool IsCustomMajor(string id)=>Custom.TryGetValue(id,out var major)&&major;
     /// <summary>德国。</summary>
     public const string Germany = "germany";
 
@@ -52,7 +61,7 @@ public static class Faction
 
     /// <summary>是否为已定义阵营标识（null/空白＝false、不抛错）。</summary>
     public static bool IsDefined(string? value)
-        => value is not null && All.Contains(value, StringComparer.Ordinal);
+        => value is not null && (All.Contains(value, StringComparer.Ordinal)||Custom.ContainsKey(value));
 
     /// <summary>
     /// 归一到规范阵营标识（大小写不敏感——官方语料用 PascalCase 如 <c>Germany</c>，规范 id 为小写
@@ -67,7 +76,7 @@ public static class Faction
         }
 
         var lowered = value.Trim().ToLowerInvariant();
-        if (!All.Contains(lowered, StringComparer.Ordinal))
+        if (!IsDefined(lowered))
         {
             return false;
         }

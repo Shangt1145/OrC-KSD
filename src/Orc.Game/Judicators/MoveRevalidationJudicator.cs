@@ -91,13 +91,13 @@ internal sealed class MoveRevalidationJudicator : ValidationJudicator
         }
 
         // 仅推进：目标须为前线空槽（move 上下文——调用点单源保留）。
-        if (!_battlefield.FrontLine.Contains(newSlot) || !newSlot.IsEmpty)
+        if (!CommandMovementRules.Destinations(_battlefield, unit, oldSlot).Contains(newSlot) || !newSlot.IsEmpty)
         {
             return ValidationVerdict.Invalid(); // 目标须为前线空槽
         }
 
         // K3：推进前置（经 move.frontline-enemy 条目——与可用性侧单源；owner 非 null 由 leg 资格保证）。
-        if (_moveFrontlineEnemy(unit.Owner!))
+        if (!CommandMovementRules.IsRetreat(_battlefield, unit, oldSlot) && _moveFrontlineEnemy(unit.Owner!))
         {
             return ValidationVerdict.Invalid(); // 推进前置复验（后置项 C；防御性双保险）：前线存在存活敌方单位＝拒绝
         }

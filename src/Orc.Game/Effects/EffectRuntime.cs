@@ -176,6 +176,15 @@ public sealed partial class EffectRuntime
         EffectDuration duration = EffectDuration.Permanent, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(target);
+        if (target is Hq hq && attack == 0)
+        {
+            if (defense == 0) return false;
+            await hq.Modifiers.AddModifiersAsync(new[]
+            {
+                new AddModifier(CardStatFields.HqHealth, defense, this, ExpiryFor(duration, target))
+            }, ct).ConfigureAwait(false);
+            return true;
+        }
         if (target is not CardBase cardBase)
         {
             return false;
@@ -374,6 +383,24 @@ public sealed partial class EffectRuntime
         await cardBase.Modifiers
             .AddModifierAsync(
                 new AddModifier(CardStatFields.OperateCost, delta, this, ExpiryFor(duration, target)), ct)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// 部署费用修饰（+N 花费）：手牌卡亦可——部署费基准＝定义值（装载即就绪，无需单位化）。
+    /// 供「复制入手且费用 +X」类效果（复员等）使用；行动花费走 <see cref="CostModAsync"/>。
+    /// </summary>
+    public async Task<bool> DeployCostModAsync(Card target, int delta, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        if (target is not CardBase cardBase || delta == 0)
+        {
+            return false;
+        }
+
+        await cardBase.Modifiers
+            .AddModifierAsync(new AddModifier(CardStatFields.DeployCost, delta, this), ct)
             .ConfigureAwait(false);
         return true;
     }

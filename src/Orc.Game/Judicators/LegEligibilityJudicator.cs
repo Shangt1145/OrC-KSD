@@ -2,6 +2,7 @@ using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
 using Orc.Game.Players;
+using Orc.Game.Commanding;
 
 namespace Orc.Game.Judicators;
 
@@ -116,7 +117,7 @@ internal sealed class LegEligibilityJudicator : Judicator<LegEligibilityJudicato
         }
 
         var canAction = _isMove ? command.CanMove : command.CanAttack;
-        if (!canAction)
+        if (!canAction || KeywordProgramRuntime.Resolve(unit,_isMove ? "move.allowed" : "attack.allowed",1)==0)
         {
             return LegEligibilityFailure.FlagFalse;
         }
@@ -131,7 +132,7 @@ internal sealed class LegEligibilityJudicator : Judicator<LegEligibilityJudicato
             return LegEligibilityFailure.PointShortage; // W2b：行动费读「有效值」（K4：经 OperateCosts 统一取值入口——判定/扣费同源、防旁路直读）
         }
 
-        if (_isMove && (position is null || !_battlefield!.GetSupportLine(owner).Contains(position)))
+        if (_isMove && !CommandMovementRules.CanStart(_battlefield!, unit, position))
         {
             return LegEligibilityFailure.PositionNotInSupportLine; // 仅推进：源位置须为支援线
         }

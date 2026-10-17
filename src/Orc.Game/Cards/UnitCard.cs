@@ -127,8 +127,12 @@ public class UnitCard : CardBase
     /// <summary>
     /// 触发部署词条效果（S6 单源入口）：部署链与「部署重放」共用；载荷＝{ Card, Player?, Position }。
     /// </summary>
-    internal Task<EventStream> InvokeDeployKeywordAsync(Player? player, Slot slot, CancellationToken ct)
-        => DeployKeywordTrigger.InvokeAsync(_chainEngine, BuildUnitData(this, player, slot), ct);
+    internal async Task<EventStream> InvokeDeployKeywordAsync(Player? player, Slot slot, CancellationToken ct)
+    {
+        var result=await DeployKeywordTrigger.InvokeAsync(_chainEngine, BuildUnitData(this, player, slot), ct);
+        if(result.Outcome==ExecutionOutcome.Normal)await KeywordProgramRuntime.ReplayDeployment(this,ct);
+        return result;
+    }
 
     /// <summary>
     /// 手牌起始指向槽位声明（S2：由单位卡自行声明——基类不持 targeter）：单位＝手牌打出时指向空槽
@@ -602,6 +606,16 @@ public class UnitCard : CardBase
     /// （G17 完整语义后续批次；本单＝动作面＋模拟验证。）
     /// </summary>
     /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（明确拒绝）。</exception>
+    /// <summary>Set remaining defense through the modifier pipeline, including lethal overkill recovery.</summary>
+    public async Task SetRemainingDefenseAsync(int amount,CancellationToken ct=default)
+    {
+        if(amount<1)throw new ArgumentOutOfRangeException(nameof(amount));
+        var state=RequireUnitState();if(state.IsDestroyed)throw new InvalidOperationException("单位已消灭");
+        var previous=state.DefenseLoss;
+        try{state.DefenseLoss=0;var maximum=Modifiers.ComputeEffectiveValue(CardStatFields.Defense);state.DefenseLoss=Math.Max(0,maximum-amount);}
+        catch{state.DefenseLoss=previous;throw;}
+        await Modifiers.RequestRerunAsync(ct);
+    }
     public async Task RepairDefenseAsync(CancellationToken ct = default)
     {
         var state = RequireUnitState();

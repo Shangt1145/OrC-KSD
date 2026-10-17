@@ -1,3 +1,4 @@
+using Orc.Cards;
 using Orc.Core;
 using Orc.Game.Board;
 using Orc.Game.Cards;
@@ -347,6 +348,7 @@ public sealed class CommandManager
                 $"单位 '{unit.Name}' 当前不在场（离场动作被拒绝——前置契约不符）。");
         }
 
+        await _engine.Emit("card.leaving",new Dictionary<string,object?>{{GameUpdates.PayloadCard,unit},{"Reason","leave"}},ct);
         // ① 槽位释放（变空槽）→ ② 不再在场（Position 置空——「有位置」判据失效）
         slot.Clear();
         state.Position = null;
@@ -652,14 +654,14 @@ public sealed class CommandManager
 
         // 推进前置（后置项 C；K3：经 move.frontline-enemy 条目——与复验同源）：前线不存在存活敌方单位方可推进
         //（空前线或己方已占；敌方清空后实时恢复）
-        if (_moveFrontlineEnemy(owner))
+        if (!CommandMovementRules.IsRetreat(_battlefield, unit, unit.GetData<UnitStateData>().Position) && _moveFrontlineEnemy(owner))
         {
             return CommandActionAvailability.Blocked(CommandBlockReason.NoCandidates);
         }
 
         // 移动候选＝前线任意空槽（不被邻位动态规则约束；无后撤/横移候选）
         var candidates = new List<Ref<Entity>>();
-        foreach (var slot in _battlefield.FrontLine)
+        foreach (var slot in CommandMovementRules.Destinations(_battlefield, unit, unit.GetData<UnitStateData>().Position))
         {
             if (slot.IsEmpty)
             {
@@ -1121,7 +1123,8 @@ public sealed class CommandManager
         var command = unit.GetData<CommandData>();
 
         await OperateCosts.DeductAsync(unit, ct);
-        command.CanAttack = KeywordRules.ResolveCanAttackAfterAttack(unit);
+        command.CanAttack = KeywordRules.ResolveCanAttackAfterAttack(unit)
+            || KeywordProgramRuntime.Components(unit).Any(c=>c.Attacks<KeywordProgramRuntime.Resolve(unit,"attack.limit",1));
         if (!HasUnitType(unit, UnitType.Tank))
         {
             command.CanMove = false;
@@ -1161,6 +1164,10 @@ public sealed class CommandManager
         }
 
         var targetEntity = targetRef.Value;
+        var combatCompleted=false;
+        try
+        {
+        await KeywordProgramRuntime.AttackEvent(attacker,targetEntity as Card,true,ct);
 
         // S2（隐蔽机制·揭示触发点）：攻击执行段入口（复验后、伤害结算前——E2-Q3a 裁定）——
         // 参与攻击的隐蔽单位各自揭示：先攻击者（动作发起方）、后被攻击者（受动作方——单位目标）；
@@ -1209,6 +1216,17 @@ public sealed class CommandManager
             return;
         }
 
+        combatCompleted=true;
+        }
+        finally
+        {
+            try
+            {
+                if(combatCompleted)await KeywordProgramRuntime.AttackEvent(attacker,targetEntity as Card,false,ct);
+                else foreach(var component in KeywordProgramRuntime.Components(attacker))await component.ClearTemporary(ct);
+            }
+            finally { if(KeywordProgramRuntime.TakeTemporary(attacker))await _engine.Emit("keyword.attack.finished",new Dictionary<string,object?>{{"Card",attacker}},CancellationToken.None); }
+        }
         // 执行段记账（词条侧）：奋战——本轮已攻次数 +1（先执行（含记账）→ 后更新）
         KeywordRules.RecordAttack(attacker);
 
@@ -1378,6 +1396,21 @@ public sealed class CommandManager
         await ProcessDeathAsync(unit, ct, killer).ConfigureAwait(false);
     }
 
+    /// <summary>Effect-origin combat: no turn/action/point payment, but normal target legality and combat resolution.</summary>
+    internal async Task<bool> AttackByEffectAsync(UnitCard unit,Orc.Cards.Card target,CancellationToken ct,bool bypassRange=false)
+    {
+        if(_lifecycle?.IsActionAllowed==false||!unit.TryGetData<UnitStateData>(out var state)||state.IsDestroyed||state.Position is null)return false;
+        if(KeywordRules.HasKeyword(unit,KeywordIds.Suppressed))return false;
+        using var origin=KeywordProgramRuntime.BeginEffectAttack(unit,bypassRange);
+        if(!IsAttackTargetLegal(unit,target.Ref))return false;
+        await using var scope=_engine.BeginAction();
+        var result=await UnitAttackTrigger.InvokeAsync(_engine,new Dictionary<string,object?>
+        {
+            [CommandDataKeys.Attacker]=unit.Ref,[CommandDataKeys.Target]=target.Ref,[CommandDataKeys.TriggerCard]=unit.Ref
+        },ct);
+        return result.Outcome==ExecutionOutcome.Normal;
+    }
+
     /// <summary>
     /// 无头伤害（效果运行期受控入口；经 <c>Orc.Game.Effects.EffectRuntime.DamageAsync</c> 在有**来源**时调用，E1-50）：
     /// 在**伤害来源游标**作用下执行单位伤害门户（⇒ 致死时死亡衔接拿到击杀者）→ 发射 <c>unit.damage.dealt</c>。
@@ -1458,9 +1491,15 @@ public sealed class CommandManager
     private async Task ProcessDeathAsync(UnitCard unit, CancellationToken ct, UnitCard? killer = null)
     {
         var state = unit.GetData<UnitStateData>();
+        if (state.IsDestroyed) return;
 
+        if (await KeywordProgramRuntime.BeforeDestroy(unit,killer,ct)) return;
         state.Position?.Clear();
         state.IsDestroyed = true;
+
+        // Host-bound death effects must settle while their registrations still exist.
+        // The completed-death observation remains after cleanup in card.died.
+        await GameUpdates.EmitCardDying(_engine, unit, killer, ct);
 
         // A4：亡计结算（新增步——置毁之后、词条死亡注销之前；清理前结算）。
         // 经再触发服务统一执行面（单源＋重入防护）；独立构造（无服务）＝直调执行面降级（无重入防护）。

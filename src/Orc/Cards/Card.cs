@@ -28,8 +28,8 @@ public class Card : Entity
         engine.RegisterCard(this); // S5 卡牌登记：创建即注册（全量快照数据源；销毁清理响应时移除）
     }
 
-    /// <summary>所属引擎（构造期绑定；内部使用）。</summary>
-    internal LogicEngine Engine { get; }
+    /// <summary>所属引擎（构造期绑定，只读；供扩展组件实例化原生效果）。</summary>
+    public LogicEngine Engine { get; }
 
     /// <summary>
     /// 放置初始化标记：经 card.placed 放置处理置位（先于该处理内效果装载步骤）。

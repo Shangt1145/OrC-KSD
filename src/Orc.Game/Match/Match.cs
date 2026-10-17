@@ -689,6 +689,8 @@ public sealed class Match
         // 资产化 P11（甲）：词条效果生产装配**不再硬编码**——由内置插件声明、在 postCommand 相经绑定面执行
         // （见上「包激活（后）」段）；时点不变（管理器群装配收尾、卡牌加载之前）。
 
+        KeywordProgramRuntime.Configure(this);
+
         // 双方卡组洗切（初始化内自动；W4-1 G14 收尾：经统一「洗切动作」面——每副各发恰一条 deck.shuffled 信号〔就地打乱之后〕；
         // 固定顺序＝玩家索引升序，保证可复现；G8：随机源＝对局随机服务——洗切与效果取样共用同一流〔单流〕）
         await ShuffleDeckAsync(_playerManager.Players[0], ct);

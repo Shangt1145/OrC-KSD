@@ -133,6 +133,7 @@ public static class GameHooks
 
     /// <summary>游戏层死亡（<c>card.died</c>）。</summary>
     public const string CardDied = GameUpdates.CardDied;
+    public const string CardDying = GameUpdates.CardDying;
 
     /// <summary>单位加入（<c>unit.joined</c>）。</summary>
     public const string UnitJoined = GameUpdates.UnitJoined;
@@ -194,7 +195,7 @@ public static class GameHooks
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
         CardPlayed, CardDrawn, CardStatChanged,
         CardLoad, CardHandAdd, CardDiscarded, CardBurned,
-        CardDied, UnitJoined, UnitDeployed, UnitPositionChanged, UnitUpgraded, UnitRevealed,
+        CardDied, CardDying, UnitJoined, UnitDeployed, UnitPositionChanged, UnitUpgraded, UnitRevealed,
         DeckShuffled, UnitTypesChanged,
         SlotGained, SlotLost, SlotChanged,
         PointGained, PointLost, PointChanged,

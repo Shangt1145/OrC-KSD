@@ -116,7 +116,7 @@ public class CommandUpdateTests
         Assert.Equal(
             new[]
             {
-                GameUpdates.CardStatChanged, GameUpdates.CardDied, GameUpdates.CardDamaged,
+                GameUpdates.CardStatChanged, GameUpdates.CardDying, GameUpdates.CardDied, GameUpdates.CardDamaged,
                 GameUpdates.UnitDamageDealt, // E1-47：来源侧（攻击者造成）
                 GameUpdates.CardStatChanged, GameUpdates.CardDamaged, // E1-33：受伤害（先数值、后伤害信号）
                 GameUpdates.UnitDamageDealt, // E1-47：来源侧（被攻击者反击造成）

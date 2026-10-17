@@ -1,4 +1,5 @@
 using Orc.Core;
+using Orc.Game.Cards;
 
 namespace Orc.Game.Judicators;
 
@@ -14,7 +15,12 @@ internal static class CombatJudicatorInvoker
 {
     /// <summary>经注册表条目句柄调用并解包 bool（对局路径；每次调用经统一解析点取栈顶——moding 动态生效）。</summary>
     public static bool InvokeBool(JudicatorRegistration registration, params object[] args)
-        => UnpackBool(registration.Invoke(args), registration.Name);
+    {
+        var baseline=UnpackBool(registration.Invoke(args), registration.Name);
+        if(registration.Name==JudicatorNames.CombatRange&&args.FirstOrDefault() is UnitCard unit&&KeywordProgramRuntime.BypassesRange(unit))baseline=true;
+        return args.FirstOrDefault() is Orc.Cards.Card actor && KeywordProgram.RuleNames.Contains(registration.Name)
+            ? KeywordProgramRuntime.Resolve(actor,registration.Name,baseline?1:0)!=0 : baseline;
+    }
 
     /// <summary>经内置实例主方法调用并解包 bool（独立构造路径；无注册表、无改写通道）。</summary>
     public static bool InvokeBool(Judicator judicator, params object[] args)

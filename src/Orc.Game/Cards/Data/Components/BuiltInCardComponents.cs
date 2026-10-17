@@ -496,7 +496,7 @@ public sealed class KeywordsDefinition : ICardDataComponentDefinition
             }
 
             var value = keyword.Value.Value;
-            if (CardAttributeMap.IsValuedKeyword(keyword.Id))
+            if (CardAttributeMap.IsValuedKeyword(keyword.Id)||KeywordRegistry.IsDefined(keyword.Id)&&!KeywordIds.All.Contains(keyword.Id,StringComparer.Ordinal))
             {
                 if (CardAttributeMap.TryGetValuedAttribute(keyword.Id, value, out var valued))
                 {
