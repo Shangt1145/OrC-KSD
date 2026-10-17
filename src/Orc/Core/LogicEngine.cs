@@ -20,6 +20,7 @@ public sealed class LogicEngine
     private readonly List<Card> _cards = new();
     private readonly List<CallbackSubscription> _subscriptions = new();
     private readonly List<ImmediateSubscription> _immediateSubscriptions = new();
+    private readonly List<SegmentCompletedSubscription> _segmentCompletedSubscriptions = new();
     private readonly Queue<EventSegment> _segmentQueue = new();
     private static readonly AsyncLocal<ActionScope?> CurrentActionScope = new();
     private long _segmentSequence;
@@ -301,6 +302,26 @@ public sealed class LogicEngine
 
         var segment = new EventSegment(++_segmentSequence, entries, children);
         _segmentQueue.Enqueue(segment);
+        NotifySegmentCompleted(segment);
+    }
+
+    /// <summary>
+    /// 段完成同步通知（S9）：订阅者可在段产出点立即冻结历史值（前后态）；
+    /// 同步、非阻塞、异常隔离——回调异常被记录为错误日志，不影响动作作用域释放与段入队。
+    /// </summary>
+    private void NotifySegmentCompleted(EventSegment segment)
+    {
+        foreach (var subscription in _segmentCompletedSubscriptions.ToArray())
+        {
+            try
+            {
+                subscription.Callback(segment);
+            }
+            catch (Exception ex)
+            {
+                WriteObserverError(RootStream, "segment.completed", ex);
+            }
+        }
     }
 
     /// <summary>
@@ -349,6 +370,51 @@ public sealed class LogicEngine
 
     private void RemoveImmediateSubscription(ImmediateSubscription subscription)
         => _immediateSubscriptions.Remove(subscription);
+
+    /// <summary>
+    /// 注册段完成监听（S9）：<b>同步</b> handler——段入队后立即调用，供消费方在段产出点冻结历史值；
+    /// handler 须轻量、只读引擎（投影查询允许、写入口禁止）；异常被隔离（记录、不破坏动作作用域）。
+    /// 返回取消句柄：Dispose 后不再被调用（幂等）。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">callback 为 null。</exception>
+    public IDisposable OnSegmentCompleted(Action<EventSegment> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+
+        var subscription = new SegmentCompletedSubscription(this, callback);
+        _segmentCompletedSubscriptions.Add(subscription);
+        return subscription;
+    }
+
+    private void RemoveSegmentCompletedSubscription(SegmentCompletedSubscription subscription)
+        => _segmentCompletedSubscriptions.Remove(subscription);
+
+    /// <summary>段完成订阅记录（S9；Dispose＝取消注册（幂等））。</summary>
+    private sealed class SegmentCompletedSubscription : IDisposable
+    {
+        private readonly LogicEngine _engine;
+        private bool _disposed;
+
+        internal SegmentCompletedSubscription(LogicEngine engine, Action<EventSegment> callback)
+        {
+            _engine = engine;
+            Callback = callback;
+        }
+
+        /// <summary>回调（注册序调用；同步——引擎调用栈内执行；异常隔离由引擎分发方处理）。</summary>
+        internal Action<EventSegment> Callback { get; }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return; // 幂等：重复取消＝无操作
+            }
+
+            _disposed = true;
+            _engine.RemoveSegmentCompletedSubscription(this);
+        }
+    }
 
     // ---------- 内部机制 ----------
 
