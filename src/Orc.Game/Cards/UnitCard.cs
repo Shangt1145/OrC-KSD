@@ -606,16 +606,6 @@ public class UnitCard : CardBase
     /// （G17 完整语义后续批次；本单＝动作面＋模拟验证。）
     /// </summary>
     /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（明确拒绝）。</exception>
-    /// <summary>Set remaining defense through the modifier pipeline, including lethal overkill recovery.</summary>
-    public async Task SetRemainingDefenseAsync(int amount,CancellationToken ct=default)
-    {
-        if(amount<1)throw new ArgumentOutOfRangeException(nameof(amount));
-        var state=RequireUnitState();if(state.IsDestroyed)throw new InvalidOperationException("单位已消灭");
-        var previous=state.DefenseLoss;
-        try{state.DefenseLoss=0;var maximum=Modifiers.ComputeEffectiveValue(CardStatFields.Defense);state.DefenseLoss=Math.Max(0,maximum-amount);}
-        catch{state.DefenseLoss=previous;throw;}
-        await Modifiers.RequestRerunAsync(ct);
-    }
     public async Task RepairDefenseAsync(CancellationToken ct = default)
     {
         var state = RequireUnitState();
@@ -626,6 +616,71 @@ public class UnitCard : CardBase
         }
 
         state.DefenseLoss = 0;
+        await Modifiers.RequestRerunAsync(ct);
+    }
+
+    /// <summary>
+    /// 门户：定量修复（受控变更——损伤量减少 <paramref name="amount"/>，下限 0）：跑链 → 有变更才发。
+    /// 仅对存活单位有效；<paramref name="amount"/>＝0 或满血＝幂等无变化（零发射）。
+    /// </summary>
+    /// <param name="amount">修复量（非负；超出当前损伤量时按清零处理）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">amount 为负。</exception>
+    /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（明确拒绝）。</exception>
+    public async Task RepairDefenseAsync(int amount, CancellationToken ct = default)
+    {
+        if (amount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), amount, "修复量不能为负。");
+        }
+
+        var state = RequireUnitState();
+        if (state.IsDestroyed)
+        {
+            throw new InvalidOperationException(
+                $"单位 '{Name}' 已死亡/已毁，不能修复（仅对存活单位有效——明确拒绝）。");
+        }
+
+        if (amount == 0 || state.DefenseLoss == 0)
+        {
+            return;
+        }
+
+        state.DefenseLoss = Math.Max(0, state.DefenseLoss - amount);
+        await Modifiers.RequestRerunAsync(ct);
+    }
+
+    /// <summary>
+    /// 门户：设定剩余防御（受控变更——按有效上限折算损伤量；含致死超额回复）：跑链 → 有变更才发。
+    /// </summary>
+    /// <param name="amount">目标剩余防御（须 ≥ 1）。</param>
+    /// <exception cref="ArgumentOutOfRangeException">amount 小于 1。</exception>
+    /// <exception cref="InvalidOperationException">未单位化；或已死亡/已毁（明确拒绝）。</exception>
+    public async Task SetRemainingDefenseAsync(int amount, CancellationToken ct = default)
+    {
+        if (amount < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), amount, "剩余防御须至少为 1。");
+        }
+
+        var state = RequireUnitState();
+        if (state.IsDestroyed)
+        {
+            throw new InvalidOperationException($"单位 '{Name}' 已死亡/已毁，不能设定防御。");
+        }
+
+        var previous = state.DefenseLoss;
+        try
+        {
+            state.DefenseLoss = 0;
+            var maximum = Modifiers.ComputeEffectiveValue(CardStatFields.Defense);
+            state.DefenseLoss = Math.Max(0, maximum - amount);
+        }
+        catch
+        {
+            state.DefenseLoss = previous;
+            throw;
+        }
+
         await Modifiers.RequestRerunAsync(ct);
     }
 

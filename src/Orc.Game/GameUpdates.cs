@@ -106,6 +106,12 @@ public static class GameUpdates
     /// <summary>死亡已确认、效果卸载前的宿主结算阶段；载荷同 CardDied。</summary>
     public const string CardDying = "card.dying";
 
+    /// <summary>单位即将离开战场（槽位释放之前）；载荷＝{ Card, Reason }。</summary>
+    public const string CardLeaving = "card.leaving";
+
+    /// <summary>词条临时增益到期相位（攻击收尾后）；载荷＝{ Card }。</summary>
+    public const string KeywordAttackFinished = "keyword.attack.finished";
+
     // ---------- 第二批 hooks：单位系列 ----------
 
     /// <summary>单位加入（"unit.joined"；载荷＝{ Unit, Position }——Unit＝单位卡牌实例、Position＝槽位引用）：加入途径（非部署）入场。2B 加入路径调用点已接线（单位化完成后发射、恰一次）。</summary>
@@ -249,6 +255,9 @@ public static class GameUpdates
 
     /// <summary>载荷键：单位（值＝单位卡牌实例引用；unit.* 系列携带）。</summary>
     public const string PayloadUnit = "Unit";
+
+    /// <summary>载荷键：词条标识（值＝string；keyword.* 系列携带）。</summary>
+    public const string PayloadKeyword = "Keyword";
 
     /// <summary>载荷键：位置（值＝<see cref="Slot"/> 引用；unit.joined / unit.deployed 携带）。</summary>
     public const string PayloadPosition = "Position";
@@ -484,6 +493,29 @@ public static class GameUpdates
         {
             [PayloadCard] = card,
             [PayloadKiller] = killer,
+        }, ct);
+    }
+
+    /// <summary>发射 card.leaving（载荷＝{ Card, Reason }；槽位释放之前，恰一次）。</summary>
+    public static Task EmitCardLeaving(LogicEngine engine, Card card, string reason, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        return engine.Emit(CardLeaving, new Dictionary<string, object?>
+        {
+            [PayloadCard] = card,
+            ["Reason"] = reason,
+        }, ct);
+    }
+
+    /// <summary>发射 keyword.attack.finished（载荷＝{ Card }；词条临时增益的到期相位）。</summary>
+    public static Task EmitKeywordAttackFinished(LogicEngine engine, Card card, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        ArgumentNullException.ThrowIfNull(card);
+        return engine.Emit(KeywordAttackFinished, new Dictionary<string, object?>
+        {
+            [PayloadCard] = card,
         }, ct);
     }
 

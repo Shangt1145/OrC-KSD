@@ -28,7 +28,11 @@ public class Card : Entity
         engine.RegisterCard(this); // S5 卡牌登记：创建即注册（全量快照数据源；销毁清理响应时移除）
     }
 
-    /// <summary>所属引擎（构造期绑定，只读；供扩展组件实例化原生效果）。</summary>
+    /// <summary>
+    /// 所属引擎（构造期绑定）。**仅游戏层内部使用**：内核未对 Orc.Game 开放 internal
+    /// （开放会让游戏层大量 protected internal override 触发 CS0507），故此处保持可读；
+    /// 外部程序集不得依赖本属性，扩展组件应经 <c>EffectRuntime.ResolveFor(card)</c> 取服务。
+    /// </summary>
     public LogicEngine Engine { get; }
 
     /// <summary>

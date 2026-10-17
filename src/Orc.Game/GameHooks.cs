@@ -133,7 +133,12 @@ public static class GameHooks
 
     /// <summary>游戏层死亡（<c>card.died</c>）。</summary>
     public const string CardDied = GameUpdates.CardDied;
+
+    /// <summary>死亡已确认、效果卸载前（<c>card.dying</c>）。</summary>
     public const string CardDying = GameUpdates.CardDying;
+
+    /// <summary>单位即将离开战场（<c>card.leaving</c>）。</summary>
+    public const string CardLeaving = GameUpdates.CardLeaving;
 
     /// <summary>单位加入（<c>unit.joined</c>）。</summary>
     public const string UnitJoined = GameUpdates.UnitJoined;
@@ -189,20 +194,24 @@ public static class GameHooks
     /// <summary>反制触发（<c>counter.triggered</c>；E1-53）。</summary>
     public const string CounterTriggered = GameUpdates.CounterTriggered;
 
-    /// <summary>对外信号全量（31 条；稳定序＝定义序）。</summary>
+    /// <summary>词条临时增益到期相位（<c>keyword.attack.finished</c>）。</summary>
+    public const string KeywordAttackFinished = GameUpdates.KeywordAttackFinished;
+
+    /// <summary>对外信号全量（34 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> Signals { get; } = new[]
     {
         TurnStartBefore, TurnStart, TurnStartAfter, TurnEndBefore, TurnEnd,
         CardPlayed, CardDrawn, CardStatChanged,
         CardLoad, CardHandAdd, CardDiscarded, CardBurned,
-        CardDied, CardDying, UnitJoined, UnitDeployed, UnitPositionChanged, UnitUpgraded, UnitRevealed,
+        CardDied, CardDying, CardLeaving, UnitJoined, UnitDeployed, UnitPositionChanged, UnitUpgraded, UnitRevealed,
         DeckShuffled, UnitTypesChanged,
         SlotGained, SlotLost, SlotChanged,
         PointGained, PointLost, PointChanged,
         CardDamaged, UnitActed, UnitCombatSurvived, UnitDamageDealt, CounterTriggered,
+        KeywordAttackFinished,
     };
 
-    // ---------- 载荷键（16 条；转发引用 GameUpdates） ----------
+    // ---------- 载荷键（17 条；转发引用 GameUpdates） ----------
 
     /// <summary>载荷键：玩家。</summary>
     public const string PayloadPlayer = GameUpdates.PayloadPlayer;
@@ -215,6 +224,9 @@ public static class GameHooks
 
     /// <summary>载荷键：单位。</summary>
     public const string PayloadUnit = GameUpdates.PayloadUnit;
+
+    /// <summary>载荷键：词条标识。</summary>
+    public const string PayloadKeyword = GameUpdates.PayloadKeyword;
 
     /// <summary>载荷键：位置。</summary>
     public const string PayloadPosition = GameUpdates.PayloadPosition;
@@ -252,10 +264,11 @@ public static class GameHooks
     /// <summary>载荷键：击杀者（E1-47）。</summary>
     public const string PayloadKiller = GameUpdates.PayloadKiller;
 
-    /// <summary>载荷键全量（16 条；稳定序＝定义序）。</summary>
+    /// <summary>载荷键全量（17 条；稳定序＝定义序）。</summary>
     public static IReadOnlyList<string> PayloadKeys { get; } = new[]
     {
         PayloadPlayer, PayloadTurnNumber, PayloadCard, PayloadUnit, PayloadPosition,
+        PayloadKeyword,
         PayloadOldPosition, PayloadNewPosition, PayloadChangedFields, PayloadDeck, PayloadAddedType,
         PayloadAmount, PayloadOldSlots, PayloadNewSlots, PayloadOldPoints, PayloadNewPoints,
         PayloadKiller,

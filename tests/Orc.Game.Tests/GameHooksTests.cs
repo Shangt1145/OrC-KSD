@@ -191,8 +191,10 @@ public class GameHooksTests
         var payloadKeys = constants.Where(c => c.Name.StartsWith("Payload", StringComparison.Ordinal))
             .Select(c => c.Value).ToList();
 
-        Assert.Equal(32, signals.Count); // Includes the pre-unmount host death settlement phase.
-        Assert.Equal(16, payloadKeys.Count);
+        // 34 = 原 31 + card.dying（卸载前宿主结算）+ card.leaving（离场前）+ keyword.attack.finished（临时增益到期）。
+        Assert.Equal(34, signals.Count);
+        // 17 = 原 16 + Keyword（keyword.* 载荷）。
+        Assert.Equal(17, payloadKeys.Count);
         Assert.Equal(signals.OrderBy(v => v, StringComparer.Ordinal),
             GameHooks.Signals.OrderBy(v => v, StringComparer.Ordinal));
         Assert.Equal(payloadKeys.OrderBy(v => v, StringComparer.Ordinal),
@@ -238,6 +240,8 @@ public class GameHooksTests
             [GameHooks.CardBurned] = "EmitCardBurned",
             [GameHooks.CardDied] = "EmitCardDied",
             [GameHooks.CardDying] = "EmitCardDying",
+            [GameHooks.CardLeaving] = "EmitCardLeaving",
+            [GameHooks.KeywordAttackFinished] = "EmitKeywordAttackFinished",
             [GameHooks.UnitJoined] = "EmitUnitJoined",
             [GameHooks.UnitDeployed] = "EmitUnitDeployed",
             [GameHooks.UnitPositionChanged] = "EmitUnitPositionChanged",
@@ -263,7 +267,8 @@ public class GameHooksTests
             GameHooks.TurnEndBefore, GameHooks.TurnEnd,
         };
 
-        Assert.Equal(27, helpers.Count);
+        // 29 = 原 27 + card.leaving + keyword.attack.finished。
+        Assert.Equal(29, helpers.Count);
         foreach (var (signal, method) in helpers)
         {
             Assert.Contains(signal, GameHooks.Signals);

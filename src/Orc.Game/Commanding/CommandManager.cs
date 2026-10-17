@@ -348,7 +348,7 @@ public sealed class CommandManager
                 $"单位 '{unit.Name}' 当前不在场（离场动作被拒绝——前置契约不符）。");
         }
 
-        await _engine.Emit("card.leaving",new Dictionary<string,object?>{{GameUpdates.PayloadCard,unit},{"Reason","leave"}},ct);
+        await GameUpdates.EmitCardLeaving(_engine,unit,"leave",ct);
         // ① 槽位释放（变空槽）→ ② 不再在场（Position 置空——「有位置」判据失效）
         slot.Clear();
         state.Position = null;
@@ -1225,7 +1225,7 @@ public sealed class CommandManager
                 if(combatCompleted)await KeywordProgramRuntime.AttackEvent(attacker,targetEntity as Card,false,ct);
                 else foreach(var component in KeywordProgramRuntime.Components(attacker))await component.ClearTemporary(ct);
             }
-            finally { if(KeywordProgramRuntime.TakeTemporary(attacker))await _engine.Emit("keyword.attack.finished",new Dictionary<string,object?>{{"Card",attacker}},CancellationToken.None); }
+            finally { if(KeywordProgramRuntime.TakeTemporary(attacker))await GameUpdates.EmitKeywordAttackFinished(_engine,attacker,CancellationToken.None); }
         }
         // 执行段记账（词条侧）：奋战——本轮已攻次数 +1（先执行（含记账）→ 后更新）
         KeywordRules.RecordAttack(attacker);

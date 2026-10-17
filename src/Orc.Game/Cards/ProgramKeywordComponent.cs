@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Orc.Cards;
 using Orc.Core;
 using Orc.Game.Board;
@@ -73,7 +72,7 @@ public sealed class ProgramKeywordComponent : KeywordComponent
         if(kind=="card.placed"&&ReferenceEquals(actor,_host))_entries++;
         if(kind=="turn.start"&&ReferenceEquals(player,Owner))_attacks=0;
         if(!OnBoard&&(!ReferenceEquals(actor,_host)||kind is not("card.played" or "card.placed" or "unit.deployed" or "unit.joined" or "card.dying" or "card.leaving")))return;
-        if(kind.StartsWith("keyword.",StringComparison.Ordinal)&&payload?.GetValueOrDefault("Keyword") as string!=Keyword)return;
+        if(kind.StartsWith("keyword.",StringComparison.Ordinal)&&payload?.GetValueOrDefault(GameUpdates.PayloadKeyword) as string!=Keyword)return;
         await Dispatch(kind,actor,player,null,ct);
         if(kind is "card.dying" or "card.leaving"&&(ReferenceEquals(actor,_host)||ReferenceEquals(actor,_linked)))_linked=null;
     }
@@ -126,7 +125,7 @@ public sealed class ProgramKeywordComponent : KeywordComponent
             if(a.Op=="state.set"){_state[a.Key]=n;continue;}
             if(a.Op=="state.add"){_state[a.Key]=Math.Clamp(checked(_state[a.Key]+n),-1_000_000,1_000_000);continue;}
             if(a.Op=="death.cancel"){if(frame is null)throw new InvalidOperationException("取消消灭只能用于消灭前事件");frame.Cancelled=true;continue;}
-            if(a.Op=="emit"){await _host.Engine.Emit(a.Key,new Dictionary<string,object?>{{GameUpdates.PayloadCard,_host},{"Keyword",Keyword}},ct);continue;}
+            if(a.Op=="emit"){await _host.Engine.Emit(a.Key,new Dictionary<string,object?>{{GameUpdates.PayloadCard,_host},{GameUpdates.PayloadKeyword,Keyword}},ct);continue;}
             foreach(var target in a.Target=="attack.target"?(frame?.AttackTarget is { } attackTarget?new[]{attackTarget}:Array.Empty<Card>()):await Targets(a.Target,actor,ct))
             {
                 n=NumberFor(a.Value,target,actor);second=NumberFor(a.Second,target,actor);
@@ -170,11 +169,15 @@ public sealed class ProgramKeywordComponent : KeywordComponent
                     case "health.set":
                         if(target is UnitCard healthCard)await healthCard.SetRemainingDefenseAsync(Math.Max(1,n),ct);break;
                     case "heal":
-                        if(target.TryGetData<UnitStateData>(out var healed)&&target is CardBase healedCard){healed.DefenseLoss=Math.Max(0,healed.DefenseLoss-Math.Max(0,n));await healedCard.Modifiers.RequestRerunAsync(ct);}break;
+                        if (target is UnitCard healTarget)
+                        {
+                            await healTarget.RepairDefenseAsync(Math.Max(0, n), ct);
+                        }
+                        break;
                     case "buff":
                         if(a.Temporary&&target is CardBase buffCard)
                         {
-                            var expiry=new ModifierExpiry("keyword.attack.finished",p=>ReferenceEquals(p?.GetValueOrDefault("Card"),_host));
+                            var expiry=new ModifierExpiry(GameUpdates.KeywordAttackFinished,p=>ReferenceEquals(p?.GetValueOrDefault(GameUpdates.PayloadCard),_host));
                             await buffCard.Modifiers.AddModifiersAsync([new AddModifier(CardStatFields.Attack,n,_temporarySource,expiry),new AddModifier(CardStatFields.Defense,second,_temporarySource,expiry)],ct);
                             KeywordProgramRuntime.TrackTemporary(_host);
                         }
@@ -224,7 +227,7 @@ public sealed class ProgramKeywordComponent : KeywordComponent
         IDisposable? lease=null;var engine=_host.Engine;
         lease=engine.Subscribe(async(kind,payload,ct)=>
         {
-            if(kind=="card.destroyed"&&ReferenceEquals(payload?.GetValueOrDefault("Card"),copy)){lease?.Dispose();return;}
+            if(kind=="card.destroyed"&&ReferenceEquals(payload?.GetValueOrDefault(GameUpdates.PayloadCard),copy)){lease?.Dispose();return;}
             if(kind!="turn.end")return;lease?.Dispose();
             if(owner.Hand.Contains(copy)){owner.Hand.Remove(copy);await engine.DestroyCard(copy);}
         });
@@ -271,7 +274,14 @@ public sealed class ProgramKeywordComponent : KeywordComponent
         {
             if (!Matches(handler.When, _host)) continue;
             var first = SelectionSteps(handler.Actions, _host).FirstOrDefault();
-            if (first is not null) return (true, first.Op == "develop" ? null : SelectionCandidates(first.Target).GetAwaiter().GetResult());
+            if (first is null) continue;
+            if (first.Op == "develop") return (true, null);
+
+            // 目标解析是纯查询（不同步等待任何外部选择），正常情况下同步完成。
+            // 若将来引入真异步查询，这里退化为"需要选择但候选未就绪"，由调用方重新查询，
+            // 绝不在调用线程上阻塞等待。
+            var candidates = SelectionCandidates(first.Target);
+            return (true, candidates.IsCompletedSuccessfully ? candidates.Result : null);
         }
         return (false, null);
     }
@@ -349,27 +359,102 @@ public static class KeywordProgramRuntime
     internal static IDisposable BeginEffectAttack(UnitCard card,bool bypassRange=false){var previous=EffectAttacker.Value;EffectAttacker.Value=new(card,bypassRange);return new EffectScope(previous);}
     internal static bool IsEffectAttack(UnitCard card)=>ReferenceEquals(EffectAttacker.Value?.Actor,card);
     internal static bool BypassesRange(UnitCard card)=>ReferenceEquals(EffectAttacker.Value?.Actor,card)&&EffectAttacker.Value!.BypassRange;
-    private sealed class Session {public Match? Match;public readonly AsyncLocal<int> Depth=new();public readonly List<ProgramKeywordComponent> Live=[];public readonly HashSet<Card> Temporary=[];}
-    private static readonly ConditionalWeakTable<LogicEngine,Session> Sessions=new();
-    public static void Configure(Match match)=>Sessions.GetOrCreateValue(match.Engine).Match=match;
-    internal static void Attach(LogicEngine engine,ProgramKeywordComponent component){var session=Sessions.GetOrCreateValue(engine);lock(session.Live){if(!session.Live.Contains(component))session.Live.Add(component);}}
-    internal static void Detach(LogicEngine engine,ProgramKeywordComponent component){var session=Sessions.GetOrCreateValue(engine);lock(session.Live)session.Live.Remove(component);}
-    internal static void TrackTemporary(Card card)=>Sessions.GetOrCreateValue(card.Engine).Temporary.Add(card);
-    internal static bool TakeTemporary(Card card)=>Sessions.GetOrCreateValue(card.Engine).Temporary.Remove(card);
-    internal static Match MatchFor(LogicEngine engine)=>Sessions.GetOrCreateValue(engine).Match??throw new InvalidOperationException("词条对局服务未装配");
-    private sealed class DepthScope(Session session):IDisposable{public void Dispose()=>session.Depth.Value--;}
+    private sealed class Session
+    {
+        public Match? Match;
+        public readonly AsyncLocal<int> Depth = new();
+        public readonly List<ProgramKeywordComponent> Live = [];
+        public readonly HashSet<Card> Temporary = [];
+    }
+
+    /// <summary>
+    /// 对局级词条程序服务的引用键：登记在引擎实例引用表（<see cref="LogicEngine.References"/>）上，
+    /// 随引擎实例丢弃而清空。不使用 ConditionalWeakTable——那会让 Session→Match→Engine 形成
+    /// value→key 强引用环，导致引擎实例无法回收。
+    /// </summary>
+    private const string SessionKey = "orc.game.keyword-program.session";
+
+    private static Session SessionFor(LogicEngine engine)
+    {
+        if (engine.References.TryResolve<Session>(SessionKey, out var existing) && existing is not null)
+        {
+            return existing;
+        }
+
+        var session = new Session();
+        engine.References.Register(SessionKey, session);
+        return session;
+    }
+
+    public static void Configure(Match match) => SessionFor(match.Engine).Match = match;
+
+    internal static void Attach(LogicEngine engine, ProgramKeywordComponent component)
+    {
+        var session = SessionFor(engine);
+        lock (session.Live)
+        {
+            if (!session.Live.Contains(component))
+            {
+                session.Live.Add(component);
+            }
+        }
+    }
+
+    internal static void Detach(LogicEngine engine, ProgramKeywordComponent component)
+    {
+        var session = SessionFor(engine);
+        lock (session.Live)
+        {
+            session.Live.Remove(component);
+        }
+    }
+
+    internal static void TrackTemporary(Card card) => SessionFor(card.Engine).Temporary.Add(card);
+
+    internal static bool TakeTemporary(Card card) => SessionFor(card.Engine).Temporary.Remove(card);
+
+    internal static Match MatchFor(LogicEngine engine)
+        => SessionFor(engine).Match ?? throw new InvalidOperationException("词条对局服务未装配");
+
+    private sealed class DepthScope(Session session) : IDisposable
+    {
+        public void Dispose() => session.Depth.Value--;
+    }
+
     internal static IDisposable Enter(LogicEngine engine)
-    {var s=Sessions.GetOrCreateValue(engine);if(s.Depth.Value>=32)throw new InvalidOperationException("词条触发超过 32 层，请检查循环");s.Depth.Value++;return new DepthScope(s);}
+    {
+        var session = SessionFor(engine);
+        if (session.Depth.Value >= 32)
+        {
+            throw new InvalidOperationException("词条触发超过 32 层，请检查循环");
+        }
+
+        session.Depth.Value++;
+        return new DepthScope(session);
+    }
     public static ProgramKeywordComponent[] Components(Card card)=>card is CardBase c?c.Keywords.Components.OfType<ProgramKeywordComponent>().ToArray():[];
     public static async Task<bool> PreparePlayAsync(Card card,CancellationToken ct)
     {foreach(var component in Components(card))if(!await component.PreparePlayAsync(ct))return false;return true;}
     internal static async Task ReplayDeployment(UnitCard card,CancellationToken ct)
     {foreach(var component in Components(card))await component.ReplayDeployment(ct);}
-    public static int Resolve(Card card,string rule,int fallback)
+    public static int Resolve(Card card, string rule, int fallback)
     {
-        var session=Sessions.GetOrCreateValue(card.Engine);ProgramKeywordComponent[] live;lock(session.Live)live=session.Live.ToArray();
-        var items=live.SelectMany(c=>c.Contributions(rule,card)).ToArray();if(items.Length==0)return fallback;
-        var priority=items.Max(x=>x.Rule.Priority);var top=items.Where(x=>x.Rule.Priority==priority).Select(x=>x.Value);return rule=="combat.interception"?top.Max():top.Min();
+        var session = SessionFor(card.Engine);
+        ProgramKeywordComponent[] live;
+        lock (session.Live)
+        {
+            live = session.Live.ToArray();
+        }
+
+        var items = live.SelectMany(c => c.Contributions(rule, card)).ToArray();
+        if (items.Length == 0)
+        {
+            return fallback;
+        }
+
+        var priority = items.Max(x => x.Rule.Priority);
+        var top = items.Where(x => x.Rule.Priority == priority).Select(x => x.Value);
+        return rule == "combat.interception" ? top.Max() : top.Min();
     }
     internal static async Task<bool> BeforeDestroy(UnitCard unit,Card? killer,CancellationToken ct)
     {
