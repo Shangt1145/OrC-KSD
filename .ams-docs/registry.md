@@ -120,3 +120,6 @@
 | 4388577f-872e-4fdd-a0db-19e8b14c94c5 | 卡组定向取卡（批 6）— 需求阐明记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\4388577f-872e-4fdd-a0db-19e8b14c94c5\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 93fc1f33-904b-42d9-80b5-7dd968eefde2 | 示例卡包（批 7）— 实现记录 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\93fc1f33-904b-42d9-80b5-7dd968eefde2\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
 | 13e3e6f1-c26e-4b5b-848e-4f7f4468befe | 未撰写 | .ams-docs\4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0\13e3e6f1-c26e-4b5b-848e-4f7f4468befe\需求文档.md | 4426baf5-ebb2-4ad3-9b08-d9eb0158b5e0 |
+
+| 启发式AI玩家 | Requirements — 启发式简单 AI 玩家（agent/人类之外的第三种驱动方） | .ams-docs\启发式AI玩家\requirements-grill-plan.md | - |
+| 启发式AI玩家 | Implementation — 启发式简单 AI 玩家（建局面＋Orc.Ai＋样例/测试） | .ams-docs\启发式AI玩家\implementation.md | - |
