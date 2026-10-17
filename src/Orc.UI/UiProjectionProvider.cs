@@ -109,6 +109,8 @@ public sealed class UiProjectionProvider : IUiProjectionProvider
             Phase = phase,
             ResultTitle = ResultTitle(match, viewer),
             ResultReason = ResultReasonOf(match),
+            Outcome = OutcomeOf(match, viewer),
+            ConcedingSide = ConcedingSideOf(match, viewer),
             FinalTurn = match.Winner is null ? null : TurnOf(match),
             ActivePlayerSide = ActiveSideOf(match, viewer, phase),
             SelfKredits = viewer.Points,
@@ -266,6 +268,38 @@ public sealed class UiProjectionProvider : IUiProjectionProvider
     {
         var winner = match.Winner;
         return winner is null ? null : ReferenceEquals(winner, viewer) ? "胜利" : "失败";
+    }
+
+    /// <summary>结构化结果：未终局＝None；终局＝按 Winner 与视角比较。</summary>
+    private static UiMatchOutcome OutcomeOf(Match match, Player viewer)
+        => match.Winner is null
+            ? UiMatchOutcome.None
+            : ReferenceEquals(match.Winner, viewer) ? UiMatchOutcome.Win : UiMatchOutcome.Lose;
+
+    /// <summary>认输方：仅当终局原因为认输时给出；非认输终局＝None。</summary>
+    private static UiConcedingSide ConcedingSideOf(Match match, Player viewer)
+    {
+        if (match.Winner is null)
+        {
+            return UiConcedingSide.None;
+        }
+
+        MatchEndReason? reason;
+        try
+        {
+            reason = match.EndReason;
+        }
+        catch (InvalidOperationException)
+        {
+            return UiConcedingSide.None;
+        }
+
+        if (reason != MatchEndReason.Concede)
+        {
+            return UiConcedingSide.None;
+        }
+
+        return ReferenceEquals(match.Winner, viewer) ? UiConcedingSide.Enemy : UiConcedingSide.Self;
     }
 
     private static string? ResultReasonOf(Match match)

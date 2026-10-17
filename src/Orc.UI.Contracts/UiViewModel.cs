@@ -12,6 +12,18 @@ public enum Visibility
     Full, Silhouette, Hidden
 }
 
+/// <summary>对局结果（封闭值域；引擎当前无平局路径，None＝未终局）。</summary>
+public enum UiMatchOutcome
+{
+    None, Win, Lose
+}
+
+/// <summary>认输方（仅终局原因为认输时非 None）。</summary>
+public enum UiConcedingSide
+{
+    None, Self, Enemy
+}
+
 /// <summary>DTO 类别判别（序列化/缓存用）。</summary>
 public enum DtoKind
 {
@@ -171,6 +183,10 @@ public sealed record UiMatchView
     public string? ResultTitle { get; init; }
     /// <summary>Why the match ended ("hq-zero" / "concede"), straight from the engine. Null while in play.</summary>
     public string? ResultReason { get; init; }
+    /// <summary>对局结果（结构化真值）：UI 据此选表现，不得用 ResultTitle 文本反推。</summary>
+    public UiMatchOutcome Outcome { get; init; }
+    /// <summary>认输方：仅终局原因为认输时非 None；其余终局＝None。</summary>
+    public UiConcedingSide ConcedingSide { get; init; }
     /// <summary>How many turns the match ran; null when the match is still live.</summary>
     public int? FinalTurn { get; init; }
     public string ActivePlayerSide { get; init; } = "self";
