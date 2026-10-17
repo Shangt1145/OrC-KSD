@@ -218,14 +218,14 @@ public sealed partial class EffectRuntime
     /// <param name="effect">效果实例引用（来自 <see cref="Card.Effects"/> 读面等）。</param>
     /// <returns>统一结果（成功＝效果名；失败＝类别＋原因）。</returns>
     /// <exception cref="ArgumentNullException">target 或 effect 为 null。</exception>
-    public async Task<EffectAttachResult> DetachEffectAsync(Card target, Effect effect, CancellationToken ct = default)
+    public Task<EffectAttachResult> DetachEffectAsync(Card target, Effect effect, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(effect);
 
         if (RequireDetachAvailable(target) is { } unavailable)
         {
-            return unavailable;
+            return Task.FromResult(unavailable);
         }
 
         var belongs = ContainsEffect(target, effect);
@@ -238,22 +238,22 @@ public sealed partial class EffectRuntime
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                return EffectAttachResult.Failed(
-                    EffectAttachStatus.NotFound, $"效果 '{effect.Name}' 卸载失败（按已失效处理）：{ex.Message}");
+                return Task.FromResult(EffectAttachResult.Failed(
+                    EffectAttachStatus.NotFound, $"效果 '{effect.Name}' 卸载失败（按已失效处理）：{ex.Message}"));
             }
 
-            return EffectAttachResult.Ok(null, effect.Name);
+            return Task.FromResult(EffectAttachResult.Ok(null, effect.Name));
         }
 
         if (host is not null)
         {
-            return EffectAttachResult.Failed(
+            return Task.FromResult(EffectAttachResult.Failed(
                 EffectAttachStatus.CrossCardOwnership,
-                $"效果 '{effect.Name}' 属于另一张卡牌（跨卡归属——不能经本卡卸载）。");
+                $"效果 '{effect.Name}' 属于另一张卡牌（跨卡归属——不能经本卡卸载）。"));
         }
 
-        return EffectAttachResult.Failed(
-            EffectAttachStatus.NotFound, $"效果 '{effect.Name}' 不在卡牌 '{target.Name}' 上（未命中或已失效）。");
+        return Task.FromResult(EffectAttachResult.Failed(
+            EffectAttachStatus.NotFound, $"效果 '{effect.Name}' 不在卡牌 '{target.Name}' 上（未命中或已失效）。"));
     }
 
     // ---------- 编译资产配置（显式覆盖入口） ----------
