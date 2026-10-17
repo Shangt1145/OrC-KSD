@@ -257,17 +257,27 @@ public sealed class DslCondition
     /// <summary>其它条件（占位）。</summary>
     public const string RawKind = "raw";
 
+    /// <summary>
+    /// 宿主方控制的指定单位类型数量（同步只读判定）：<see cref="UnitTypes"/> 声明类型集合，
+    /// <see cref="Comparison"/> 声明比较运算（<c>&gt;=</c> 等，受控白名单）。渲染为真实 csx 守卫。
+    /// </summary>
+    public const string OwnerControlsType = "owner.controls.type";
+
     /// <summary>创建条件。</summary>
     /// <exception cref="ArgumentException">kind 空白。</exception>
-    public DslCondition(string kind, string? raw = null, IReadOnlyList<DslCondition>? all = null)
+    public DslCondition(string kind, string? raw = null, IReadOnlyList<DslCondition>? all = null,
+        IReadOnlyList<string>? unitTypes = null, string? comparison = null, int? value = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         Kind = kind;
         Raw = raw;
         All = all;
+        UnitTypes = unitTypes;
+        Comparison = comparison;
+        Value = value;
     }
 
-    /// <summary>条件种类（<c>owner.same</c>｜<c>owner.different</c>｜<c>owner.same.player</c>｜<c>owner.different.player</c>｜<c>eventCard.keyword</c>｜<c>all</c>｜<c>raw</c>）。</summary>
+    /// <summary>条件种类（<c>owner.same</c>｜<c>owner.different</c>｜<c>owner.same.player</c>｜<c>owner.different.player</c>｜<c>eventCard.keyword</c>｜<c>all</c>｜<c>raw</c>｜<c>owner.controls.type</c>）。</summary>
     public string Kind { get; }
 
     /// <summary>原文（诊断/占位注释用）；<see cref="EventCardKeyword"/> 时承载**词条标识**。</summary>
@@ -275,6 +285,15 @@ public sealed class DslCondition
 
     /// <summary>合取子条件（仅 <see cref="AllKind"/>；空/null＝恒真）。</summary>
     public IReadOnlyList<DslCondition>? All { get; }
+
+    /// <summary>单位类型集合（仅 <see cref="OwnerControlsType"/>；空/null＝条件不成立）。</summary>
+    public IReadOnlyList<string>? UnitTypes { get; }
+
+    /// <summary>比较运算（仅 <see cref="OwnerControlsType"/>；<c>&gt;=</c>/<c>&gt;</c>/<c>&lt;=</c>/<c>&lt;</c>/<c>==</c> 之一）。</summary>
+    public string? Comparison { get; }
+
+    /// <summary>比较右值（仅 <see cref="OwnerControlsType"/>；null＝条件不成立）。</summary>
+    public int? Value { get; }
 }
 
 /// <summary>目标选择器（沿用 kards-diy 命名，MVP 启用子集字段）。</summary>

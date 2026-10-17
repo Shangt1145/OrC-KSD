@@ -137,6 +137,27 @@ public sealed class EffectCompiler
         return builder.ToString().TrimEnd('\r', '\n');
     }
 
+    /// <summary>受控比较运算（白名单——条件表达式直接拼进 csx，不允许任意文本）。</summary>
+    private static readonly HashSet<string> ComparisonOps =
+        new(StringComparer.Ordinal) { ">=", ">", "<=", "<", "==" };
+
+    /// <summary>
+    /// "宿主方控制 {types} 数量 {cmp}"：经 <c>orcRuntime.OwnerUnits</c> 的同步只读面统计。
+    /// 类型集合或比较运算非法＝条件恒假（不抛——表达式渲染期不该因单条条件打断整卡编译）。
+    /// </summary>
+    private static string OwnerControlsTypeExpression(DslCondition condition)
+    {
+        var types = condition.UnitTypes;
+        if (types is null || types.Count == 0 || condition.Comparison is not { } comparison
+            || !ComparisonOps.Contains(comparison) || condition.Value is not { } value)
+        {
+            return "false";
+        }
+
+        var list = string.Join(", ", types.Select(t => "\"" + t.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\""));
+        return $"orcRuntime.OwnerUnits(self).Count(u => u.Definition.UnitTypes.Any(t => new[] {{{list}}}.Contains(t.ToString()))) {comparison} {value}";
+    }
+
     private static string ConditionExpression(DslCondition condition) => condition.Kind switch
     {
         // 事件卡取值：card.* 载荷在 Card；unit.* 载荷在 Unit（E1-34——否则 unit.* 系守卫恒假）。
@@ -166,6 +187,8 @@ public sealed class EffectCompiler
             PayloadOwnerExpression(condition.Raw),
         DslCondition.PayloadOwnerDifferent =>
             "!(" + PayloadOwnerExpression(condition.Raw) + ")",
+        // S9：宿主方控制指定单位类型数量——同步只读面统计，不依赖交互选择器。
+        DslCondition.OwnerControlsType => OwnerControlsTypeExpression(condition),
         // E1-42：合取（`all`）——`(a && b && …)`；空＝恒真。
         // E1-57：**数值比较条件**（真实求值；`Raw` ＝ 规范串）——求值是纯函数 ⇒ 可参与 `&&` 合取。
         DslCondition.Compare => ComparisonSpec.IsValid(condition.Raw)

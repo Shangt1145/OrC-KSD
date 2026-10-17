@@ -578,7 +578,8 @@ public sealed class Match
             () => _judicators,
             () => _resourceManager,
             () => Engine,
-            () => _lifecycle.IsActionAllowed);
+            () => _lifecycle.IsActionAllowed,
+            battlefield: () => _battlefieldManager.Battlefield);
         foreach (var player in _playerManager.Players)
         {
             player.ConfigureEffectRuntime(_effectRuntime);

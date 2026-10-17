@@ -84,6 +84,7 @@ public sealed partial class EffectRuntime
     private readonly Func<PlayerManager?> _players;
     private readonly Func<JudicatorRegistry?> _judicators;
     private readonly Func<ResourceManager?> _resources;
+    private readonly Func<Orc.Game.Board.Battlefield?>? _battlefield;
 
     /// <summary>创建运行时门面（协作者以延迟读取注入——装配链时序无关）。</summary>
     /// <param name="commands">指挥管理器访问器。</param>
@@ -99,7 +100,8 @@ public sealed partial class EffectRuntime
         Func<JudicatorRegistry?> judicators,
         Func<ResourceManager?> resources,
         Func<LogicEngine?>? engine = null,
-        Func<bool>? isActionAllowed = null)
+        Func<bool>? isActionAllowed = null,
+        Func<Orc.Game.Board.Battlefield?>? battlefield = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(players);
@@ -111,6 +113,35 @@ public sealed partial class EffectRuntime
         _resources = resources;
         _engine = engine;
         _isActionAllowed = isActionAllowed;
+        _battlefield = battlefield;
+    }
+
+    /// <summary>
+    /// 宿主所在方在战场上的单位（**同步只读面**）：条件表达式要渲染成同步 csx 守卫，
+    /// 不能走 <see cref="SelectAsync"/>（那是交互选择器，需要 await）。未装配战场＝空集。
+    /// </summary>
+    /// <exception cref="ArgumentNullException">host 为 null。</exception>
+    public IReadOnlyList<Card> OwnerUnits(Orc.Game.Cards.CardBase host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        if (host.Owner is not { } owner || _battlefield?.Invoke() is not { } battlefield)
+        {
+            return Array.Empty<Card>();
+        }
+
+        var units = new List<Card>();
+        foreach (var line in new[] { battlefield.PlayerASupportLine, battlefield.PlayerBSupportLine, battlefield.FrontLine })
+        {
+            foreach (var slot in line)
+            {
+                if (slot.Occupant is Orc.Game.Cards.CardBase unit && ReferenceEquals(unit.Owner, owner))
+                {
+                    units.Add(unit);
+                }
+            }
+        }
+
+        return units;
     }
 
     /// <summary>卡 → 运行时解析（「卡 → 玩家 → 服务」收敛点；脱局/未注入＝null）。</summary>
